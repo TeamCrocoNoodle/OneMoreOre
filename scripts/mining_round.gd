@@ -9,12 +9,33 @@ const GEM_GOLD := [10, 50, 200, 1000, 5000, 25000]
 const GEM_LABELS := ["일반 보석", "특별 보석", "희귀 보석", "전설 보석", "신화 보석", "고대 보석"]
 
 var phase: Phase = Phase.READY
+var duration := DURATION
 var remaining := DURATION
+var gem_value_multiplier := 1.0
 var ordinary_stones := 0
 var gem_counts := PackedInt32Array([0, 0, 0, 0, 0, 0])
 var wallet_gold := 0
 var round_index := 1
 var last_report: Dictionary = {}
+
+func apply_stats(values: Dictionary) -> void:
+	# Purchase effects are configured between rounds, never halfway through
+	# a cargo valuation or a running deadline.
+	if phase != Phase.READY and phase != Phase.COMPLETE:
+		return
+	var next_duration := float(values.get("duration", DURATION))
+	var next_multiplier := float(values.get("gem_value_multiplier", 1.0))
+	duration = maxf(0.001, next_duration) if is_finite(next_duration) else DURATION
+	gem_value_multiplier = maxf(0.0, next_multiplier) if is_finite(next_multiplier) else 1.0
+	if phase == Phase.READY:
+		remaining = duration
+
+func recover(seconds: float) -> float:
+	if phase != Phase.MINING or not is_finite(seconds) or seconds <= 0.0:
+		return 0.0
+	var restored := minf(seconds, maxf(0.0, duration - remaining))
+	remaining += restored
+	return restored
 
 func start() -> bool:
 	if phase != Phase.READY:
@@ -53,9 +74,10 @@ func begin_settlement() -> Dictionary:
 	for tier in gem_counts.size():
 		if gem_counts[tier] <= 0:
 			continue
-		var value: int = gem_counts[tier] * GEM_GOLD[tier]
+		var unit_gold := roundi(float(GEM_GOLD[tier]) * gem_value_multiplier)
+		var value: int = gem_counts[tier] * unit_gold
 		total += value
-		rows.append({"kind": "gem", "tier": tier, "label": GEM_LABELS[tier], "count": gem_counts[tier], "unit_gold": GEM_GOLD[tier], "gold": value})
+		rows.append({"kind": "gem", "tier": tier, "label": GEM_LABELS[tier], "count": gem_counts[tier], "unit_gold": unit_gold, "gold": value})
 	last_report = {"rows": rows, "total": total, "wallet_before": wallet_gold, "wallet_after": wallet_gold + total,
 		"round_index": round_index, "ordinary_stones": ordinary_stones, "gem_counts": gem_counts.duplicate()}
 	phase = Phase.SETTLING
@@ -75,7 +97,7 @@ func new_round() -> bool:
 	if phase != Phase.COMPLETE:
 		return false
 	round_index += 1
-	remaining = DURATION
+	remaining = duration
 	ordinary_stones = 0
 	gem_counts.fill(0)
 	last_report.clear()

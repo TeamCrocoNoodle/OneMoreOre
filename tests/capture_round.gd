@@ -63,6 +63,11 @@ func _run() -> void:
 		return
 	report = {"seed": game.rock_seed, "radius": game.active_rock_radius, "initial_chunks": game.chunks.size(), "initial_gems": initial_gems, "mining_method": "Main._mine_at real physics rays through the normal buried starter", "clock_method": "Manual _advance_round; no cargo or report injection"}
 	await _save("round_ready")
+	await _window_size(Vector2i(1280, 720))
+	await _save("round_ready_wide")
+	await _window_size(Vector2i(360, 800))
+	await _save("round_ready_narrow")
+	await _portrait(false)
 	for i in targets.size():
 		var jewel: StaticBody3D = targets[i]
 		if not is_instance_valid(jewel) or jewel.collected:
@@ -104,8 +109,12 @@ func _run() -> void:
 		_fail("Animated settlement did not commit exactly the independently priced cargo")
 		return
 	await _save("round_settlement_final")
+	await _window_size(Vector2i(1280, 720))
+	await _save("round_settlement_wide")
 	await _portrait(true)
 	await _save("round_portrait_settlement")
+	await _window_size(Vector2i(360, 800))
+	await _save("round_settlement_narrow")
 	await _portrait(false)
 	# Drive the actual visible button, including its guarded signal and reset route.
 	game.hud._replay.pressed.emit()
@@ -128,10 +137,19 @@ func _run() -> void:
 	file.close()
 	finished = true
 	print("ROUND_CAPTURE_OK files=", files.size(), " hits=", game.hit_count, " stones=", expected_stones, " gems=", expected_counts, " gold=", expected_gold, " next_seed=", game.rock_seed)
+	_stop_audio(game)
+	await create_timer(0.12).timeout
 	game.queue_free()
 	await process_frame
 	await process_frame
 	quit()
+
+func _stop_audio(node: Node) -> void:
+	for child in node.get_children():
+		_stop_audio(child)
+	if node is AudioStreamPlayer:
+		node.stop()
+		node.stream = null
 
 func _excavate(jewel: StaticBody3D, capture_white: bool, capture_green: bool) -> bool:
 	var host: StaticBody3D = jewel.host_chunk.get_ref()
@@ -188,7 +206,10 @@ func _excavate(jewel: StaticBody3D, capture_white: bool, capture_green: bool) ->
 	return false
 
 func _portrait(enabled: bool) -> void:
-	root.size = Vector2i(600, 1000) if enabled else Vector2i(1152, 800)
+	await _window_size(Vector2i(600, 1000) if enabled else Vector2i(1152, 800))
+
+func _window_size(dimensions: Vector2i) -> void:
+	root.size = dimensions
 	# Preserve the real project's 1440x1000 canvas_items/expand stretch contract.
 	# The portrait viewport expands logically; changing its design size hides bugs.
 	await process_frame

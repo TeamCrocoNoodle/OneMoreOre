@@ -5,6 +5,7 @@ signal impacted
 signal swing_started
 
 var is_swinging: bool = false
+var speed_multiplier := 1.0
 
 const STRIKE_TIME := 0.12
 const SWING_DURATION := 0.34
@@ -91,6 +92,14 @@ func swing() -> void:
 	swing_started.emit()
 
 
+func cancel_swing() -> void:
+	is_swinging = false
+	_impact_sent = true
+	_elapsed = 0.0
+	if is_instance_valid(_trail):
+		_trail.hide()
+
+
 func _refresh_swing_poses() -> void:
 	# Rebuild around the live cursor, including wind-up and recoil. There is
 	# no screen-corner destination to travel from or return to between hits.
@@ -115,7 +124,7 @@ func _process(delta: float) -> void:
 	_refresh_rest()
 	if is_swinging:
 		_refresh_swing_poses()
-		_elapsed += delta
+		_elapsed += delta * speed_multiplier
 		if _elapsed < 0.065:
 			var t := smoothstep(0.0, 0.065, _elapsed)
 			position = _rest_position.lerp(_wind_position, t)

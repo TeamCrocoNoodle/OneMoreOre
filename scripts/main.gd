@@ -12,6 +12,9 @@ const RoundModel = preload("res://scripts/mining_round.gd")
 const MiningHud = preload("res://scripts/mining_hud.gd")
 const RewardAudio = preload("res://scripts/reward_audio.gd")
 const GemFlightOverlay = preload("res://scripts/gem_flight_overlay.gd")
+const SkillTreeModel = preload("res://scripts/skill_tree.gd")
+const SkillTreeUI = preload("res://scripts/skill_tree_ui.gd")
+const ModelGallery = preload("res://scripts/ui_model_gallery.gd")
 const ROCK_RADIUS := 2.6
 const LAYER_COUNT := 3
 const LAYER_COUNTS := [38, 24, 12]
@@ -90,6 +93,11 @@ var flight_overlay: Node
 var displayed_gems := PackedInt32Array([0, 0, 0, 0, 0, 0])
 var _last_warning_second := 6
 var _wait_for_mine_release := false
+var _wait_for_navigation_release := false
+var upgrades := SkillTreeModel.new()
+var upgrade_stats: Dictionary = upgrades.stats()
+var skill_ui: Node
+var model_gallery: Node
 
 func _ready() -> void:
 	capture_mode = "--capture-sequence" in OS.get_cmdline_user_args()
@@ -122,17 +130,30 @@ func _ready() -> void:
 	for device in Input.get_connected_joypads():
 		controller_id = device
 	if round_enabled:
+		model_gallery = ModelGallery.new()
+		add_child(model_gallery)
 		reward_audio = RewardAudio.new()
 		add_child(reward_audio)
 		hud = MiningHud.new()
+		hud.model_gallery = model_gallery
 		add_child(hud)
 		hud.next_round_requested.connect(_next_round)
 		hud.settlement_animation_finished.connect(_finish_settlement)
 		hud.cue.connect(reward_audio.play_cue)
+		hud.upgrades_requested.connect(_open_upgrades)
 		hud.begin_round(round_state.round_index, round_state.wallet_gold)
 		flight_overlay = GemFlightOverlay.new()
 		add_child(flight_overlay)
 		flight_overlay.setup(camera)
+		skill_ui = SkillTreeUI.new()
+		skill_ui.model_gallery = model_gallery
+		add_child(skill_ui)
+		skill_ui.setup(upgrades)
+		skill_ui.purchase_requested.connect(_purchase_upgrade)
+		skill_ui.closed.connect(_close_upgrades)
+		skill_ui.cue.connect(reward_audio.play_cue)
+		_apply_upgrade_stats()
+		hud.set_upgrades_available(true)
 	_warm_gem_renderer.call_deferred()
 
 func _warm_gem_renderer() -> void:
@@ -196,6 +217,18 @@ func _warm_gem_renderer() -> void:
 		warmup.queue_free()
 
 func _create_actions() -> void:
+	# Bind menu navigation explicitly, including script-driven launches where
+	# Godot's built-in UI actions may contain keyboard events only.
+	_bind_button("ui_accept", JOY_BUTTON_A)
+	_bind_button("ui_cancel", JOY_BUTTON_B)
+	_bind_button("ui_left", JOY_BUTTON_DPAD_LEFT)
+	_bind_button("ui_right", JOY_BUTTON_DPAD_RIGHT)
+	_bind_button("ui_up", JOY_BUTTON_DPAD_UP)
+	_bind_button("ui_down", JOY_BUTTON_DPAD_DOWN)
+	_bind_axis("ui_left", JOY_AXIS_LEFT_X, -1.0)
+	_bind_axis("ui_right", JOY_AXIS_LEFT_X, 1.0)
+	_bind_axis("ui_up", JOY_AXIS_LEFT_Y, -1.0)
+	_bind_axis("ui_down", JOY_AXIS_LEFT_Y, 1.0)
 	_bind_key("mine", KEY_SPACE)
 	_bind_button("mine", JOY_BUTTON_A)
 	_bind_button("mine", JOY_BUTTON_RIGHT_SHOULDER)
@@ -234,12 +267,14 @@ func _bind_key(action: String, key: Key) -> void:
 func _bind_button(action: String, button: JoyButton) -> void:
 	_action(action)
 	var event := InputEventJoypadButton.new()
+	event.device = -1
 	event.button_index = button
 	InputMap.action_add_event(action, event)
 
 func _bind_axis(action: String, axis: JoyAxis, value: float) -> void:
 	_action(action)
 	var event := InputEventJoypadMotion.new()
+	event.device = -1
 	event.axis = axis
 	event.axis_value = value
 	InputMap.action_add_event(action, event)
@@ -359,6 +394,11 @@ func _spawn_rock(seed_override: int = -1, showcase: bool = false) -> void:
 			chunk.set_meta("outward", data.direction)
 			chunks.append(chunk)
 	_place_gems(rock_seed)
+	if round_enabled and not showcase_mode and int(upgrade_stats.stone_health_reduction) > 0:
+		for chunk in chunks:
+			if not chunk.is_gem_cover:
+				chunk.max_health = maxf(1.0, chunk.max_health - float(upgrade_stats.stone_health_reduction))
+				chunk.health = chunk.max_health
 	ground_shadow.position = Vector3(0, -active_rock_radius * 1.092, -0.2)
 	ground_shadow.scale = Vector3.ONE * (active_rock_radius / SHOWCASE_RADIUS)
 	_resize()
@@ -381,8 +421,9 @@ func _place_gems(seed_value: int) -> void:
 	if showcase_mode:
 		grades.assign([Gem.COMMON, Gem.SPECIAL, Gem.RARE, Gem.LEGENDARY, Gem.MYTHIC, Gem.ANCIENT])
 	else:
-		for i in COMMON_GEM_COUNT + SPECIAL_GEM_COUNT:
-			grades.append(Gem.COMMON if i < COMMON_GEM_COUNT else Gem.SPECIAL)
+		var common_count := COMMON_GEM_COUNT + (int(upgrade_stats.extra_common_gems) if round_enabled else 0)
+		for i in common_count + SPECIAL_GEM_COUNT:
+			grades.append(Gem.COMMON if i < common_count else Gem.SPECIAL)
 			bands.append(1 + i % (LAYER_COUNT - 1))
 	for i in range(bands.size() - 1, 0, -1):
 		var j := layout_rng.randi_range(0, i)
@@ -485,6 +526,18 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F11:
 		var fullscreen := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if fullscreen else DisplayServer.WINDOW_MODE_FULLSCREEN)
+		return
+	var upgrade_shortcut: bool = (event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_U) or (event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_Y)
+	if upgrade_shortcut:
+		if _upgrade_window_open():
+			skill_ui.close_tree()
+		else:
+			_open_upgrades()
+		get_viewport().set_input_as_handled()
+		return
+	if _upgrade_window_open():
+		return
+	if event.is_action_pressed("ui_accept") and get_viewport().gui_get_focus_owner() is BaseButton:
 		return
 	if round_enabled:
 		if not _round_allows_mining():
@@ -596,7 +649,7 @@ func _request_swing() -> void:
 	else:
 		pickaxe.clear_contact_point()
 	pickaxe.swing()
-	swing_cooldown = 0.30
+	swing_cooldown = 0.30 / (float(upgrade_stats.attack_speed) if round_enabled else 1.0)
 	idle_time = 0.0
 
 func _on_pickaxe_impact() -> void:
@@ -616,10 +669,12 @@ func _process(delta: float) -> void:
 		touch_time += delta
 	if focused:
 		var orbit := Input.get_vector("orbit_left", "orbit_right", "orbit_up", "orbit_down")
-		if orbit.length() > 0.05:
+		var aim := Input.get_vector("aim_left", "aim_right", "aim_up", "aim_down")
+		if _wait_for_navigation_release and orbit.length() <= 0.05 and aim.length() <= 0.05:
+			_wait_for_navigation_release = false
+		if orbit.length() > 0.05 and not _wait_for_navigation_release:
 			_orbit(orbit * delta * 1.65)
-		if using_controller:
-			var aim := Input.get_vector("aim_left", "aim_right", "aim_up", "aim_down")
+		if using_controller and not _wait_for_navigation_release and not _upgrade_window_open():
 			aim_position += aim * get_viewport().get_visible_rect().size.y * delta * 0.65
 			aim_position = aim_position.clamp(Vector2.ONE * 30.0, get_viewport().get_visible_rect().size - Vector2.ONE * 30.0)
 		if mouse_down or Input.is_action_pressed("mine") or (touch_id >= 0 and touch_time >= 0.18 and not touch_rotating):
@@ -645,7 +700,8 @@ func _process(delta: float) -> void:
 		if completion_time > 2.4 and _round_allows_mining():
 			_spawn_rock()
 	if round_enabled and is_instance_valid(hud):
-		hud.set_timer(round_state.remaining, RoundModel.DURATION, round_state.phase != RoundModel.Phase.READY and focused)
+		hud.set_timer(round_state.remaining, round_state.duration, round_state.phase != RoundModel.Phase.READY and focused)
+		hud.set_upgrades_available(round_state.phase in [RoundModel.Phase.READY, RoundModel.Phase.COMPLETE] and not _upgrade_window_open())
 		if round_state.phase == RoundModel.Phase.DRAINING and collecting_gems.is_empty():
 			_begin_settlement()
 	if capture_mode:
@@ -702,13 +758,49 @@ func _mine_at(screen_position: Vector2) -> bool:
 	if not body.has_method("hit"):
 		return false
 	_start_round()
+	# Resolve all surface contacts before breaking anything. A wide strike must
+	# not drill through newly exposed layers or hit the same chunk twice.
+	var surrounding := _area_targets(screen_position, result)
+	_damage_chunk(result, screen_position)
+	for contact: Dictionary in surrounding:
+		_damage_chunk(contact.hit, contact.screen)
+	return true
+
+func _area_targets(screen_position: Vector2, primary: Dictionary) -> Array[Dictionary]:
+	var contacts: Array[Dictionary] = []
+	var radius := float(upgrade_stats.attack_radius) if round_enabled else 0.0
+	if radius <= 0.0 or primary.is_empty():
+		return contacts
+	var selected: Array = [primary.collider]
+	var screen_radius := radius * get_viewport().get_visible_rect().size.y / camera.size
+	for ring: float in [0.60, 0.96]:
+		for direction in 8:
+			var sample := screen_position + Vector2.from_angle(TAU * float(direction) / 8.0) * screen_radius * ring
+			if _aim_over_hud(sample):
+				continue
+			var hit := ray_at(sample)
+			if hit.is_empty() or selected.has(hit.collider) or not chunks.has(hit.collider):
+				continue
+			if Vector3(hit.position).distance_to(primary.position) > radius:
+				continue
+			selected.append(hit.collider)
+			contacts.append({"hit": hit, "screen": sample})
+			if contacts.size() == 2:
+				return contacts
+	return contacts
+
+func _damage_chunk(result: Dictionary, screen_position: Vector2) -> void:
+	var body: StaticBody3D = result.collider
+	if not is_instance_valid(body) or body.is_queued_for_deletion() or not chunks.has(body):
+		return
 	hit_count += 1
 	var point: Vector3 = result.position
 	var normal: Vector3 = result.normal
 	var layer: int = body.layer_index
 	var color: Color = body.get_meta("stone_color")
 	var placement: Transform3D = body.mesh_instance.global_transform
-	var broken: bool = body.hit(1.0, point)
+	var damage := float(upgrade_stats.damage) if round_enabled else 1.0
+	var broken: bool = body.hit(damage, point)
 	var auto_collected := false
 	if body.is_gem_cover and body.light_node != null:
 		var tier: int = body.light_node.current_tier
@@ -761,7 +853,6 @@ func _mine_at(screen_position: Vector2) -> bool:
 	wobble_velocity += Vector3(normal.y * 0.8, -normal.x * 0.7, -normal.x * 0.6) + Vector3(0.3, 0.1, -0.12)
 	if controller_id >= 0 and using_controller and not auto_collected:
 		Input.start_joy_vibration(controller_id, 0.28 if broken else 0.1, 0.52 if broken else 0.25, 0.10 if broken else 0.055)
-	return true
 
 func _collect_gem(jewel: StaticBody3D, discovery_position: Vector3 = Vector3.INF) -> bool:
 	if not _round_allows_mining() or not gems.has(jewel) or not jewel.begin_collection():
@@ -769,6 +860,9 @@ func _collect_gem(jewel: StaticBody3D, discovery_position: Vector3 = Vector3.INF
 	_start_round()
 	if round_enabled:
 		round_state.record_gem(jewel.grade)
+		var recovered := round_state.recover(float(upgrade_stats.recovery_per_gem))
+		if recovered > 0.0 and round_state.remaining > 5.0:
+			_last_warning_second = 6
 	var special: bool = jewel.grade >= Gem.SPECIAL
 	var location := jewel.global_position
 	gems.erase(jewel)
@@ -831,8 +925,70 @@ func _reset_rock() -> void:
 	if _round_allows_mining():
 		_spawn_rock()
 
+func _upgrade_window_open() -> bool:
+	return is_instance_valid(skill_ui) and bool(skill_ui.is_open)
+
+func _open_upgrades() -> void:
+	if not round_enabled or not focused or _upgrade_window_open() or not is_instance_valid(skill_ui):
+		return
+	if round_state.phase not in [RoundModel.Phase.READY, RoundModel.Phase.COMPLETE]:
+		return
+	_clear_upgrade_input()
+	pickaxe.hide()
+	marker.hide()
+	if is_instance_valid(hovered):
+		hovered.set_hovered(false)
+	hovered = null
+	hud.set_upgrades_available(false)
+	skill_ui.open_tree(round_state.wallet_gold)
+
+func _clear_upgrade_input() -> void:
+	mouse_down = false
+	dragging = false
+	touch_id = -1
+	touch_rotating = false
+	touch_time = 0.0
+	impact_pending = false
+	pending_rock_number = -1
+	_wait_for_mine_release = true
+	_wait_for_navigation_release = true
+	pickaxe.cancel_swing()
+
+func _close_upgrades() -> void:
+	_clear_upgrade_input()
+	if round_state.phase == RoundModel.Phase.READY:
+		pickaxe.show()
+	hud.set_wallet(round_state.wallet_gold)
+	hud.set_upgrades_available(round_state.phase in [RoundModel.Phase.READY, RoundModel.Phase.COMPLETE])
+	hud.restore_round_focus()
+
+func _purchase_upgrade(node_id: String) -> bool:
+	if not round_enabled or not _upgrade_window_open() or round_state.phase not in [RoundModel.Phase.READY, RoundModel.Phase.COMPLETE]:
+		return false
+	if skill_ui.selected_tab != "skills":
+		return false
+	var result: Dictionary = upgrades.purchase(node_id, round_state.wallet_gold)
+	if not bool(result.ok):
+		skill_ui.refresh(round_state.wallet_gold)
+		return false
+	round_state.wallet_gold = int(result.gold)
+	_apply_upgrade_stats()
+	if round_state.phase == RoundModel.Phase.READY and node_id in ["rich_ore", "soft_ore"]:
+		# This ore has not been touched yet. Apply its new composition now.
+		_spawn_rock(rock_seed)
+	hud.set_wallet(round_state.wallet_gold)
+	skill_ui.refresh(round_state.wallet_gold)
+	return true
+
+func _apply_upgrade_stats() -> void:
+	upgrade_stats = upgrades.stats()
+	round_state.apply_stats(upgrade_stats)
+	pickaxe.speed_multiplier = float(upgrade_stats.attack_speed)
+	if is_instance_valid(hud):
+		hud.set_timer(round_state.remaining, round_state.duration, round_state.phase != RoundModel.Phase.READY and focused)
+
 func _round_allows_mining() -> bool:
-	return not round_enabled or round_state.phase in [RoundModel.Phase.READY, RoundModel.Phase.MINING]
+	return not round_enabled or (not _upgrade_window_open() and round_state.phase in [RoundModel.Phase.READY, RoundModel.Phase.MINING])
 
 func _start_round() -> void:
 	if round_enabled:
@@ -922,6 +1078,7 @@ func _next_round() -> void:
 	_spawn_rock()
 	pickaxe.show()
 	hud.begin_round(round_state.round_index, round_state.wallet_gold)
+	hud.set_timer(round_state.remaining, round_state.duration, false)
 
 func _capture_tick(delta: float) -> void:
 	# Move between three parts of one cap while demonstrating all six colors.
