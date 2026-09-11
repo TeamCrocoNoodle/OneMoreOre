@@ -78,13 +78,11 @@ func _run() -> void:
 	# Deliberately find every gem before excavating the rest of the rock.
 	while not game.gems.is_empty() and steps < 150:
 		var target: StaticBody3D = game.gems[0]
-		if target.is_emerging:
-			await _until(func(): return not target.is_emerging)
 		if not await _break_visible(_gem_target_screen(target)):
 			break
 		steps += 1
-	_check(game.gems.is_empty() and game.gems_collected_this_rock == initial_gem_count, "Every randomly placed gem can be reached through ordinary mining rays")
-	_check(game.collected_count == collected_before + initial_gem_count, "Each exposed gem awards exactly one collection")
+	_check(game.gems.is_empty() and game.gems_collected_this_rock == initial_gem_count, "Breaking the six randomly placed owners automatically awards all six gems")
+	_check(game.collected_count == collected_before + initial_gem_count, "Each owner awards its gem once without an additional gem strike")
 	_check(owner_releases == initial_gem_count, "Excavation breaks exactly one fixed owner for each of the six gems")
 	_check(game.chunks.size() > 0, "Finding all gems leaves unrelated stone intact")
 	if not game.gems.is_empty() or game.chunks.is_empty():
@@ -168,7 +166,7 @@ func _validate_showcase() -> void:
 	await _clear_showcase_neighbors(final_cap, final_gem)
 	var departing: WeakRef = weakref(final_cap.light_node)
 	_check(await _break_visible(_gem_target_screen(final_gem), false), "A showcase owner breaks through the normal mining path")
-	_check(final_gem.is_emerging and final_gem.visible and final_gem.collision_layer == 0, "The newly freed gem begins its protected emergence animation")
+	_check(final_gem.collected and final_gem.is_emerging and final_gem.visible and final_gem.collision_layer == 0 and game.gems.size() == 5, "The first showcase owner immediately awards one gem while the other five remain buried")
 	_check(departing.get_ref() != null and departing.get_ref().get_parent() == game.effects, "The owner's final light flash survives stone detachment")
 	# Reset during emergence, while both the gem tween and detached light exist.
 	game._spawn_rock(TEST_SEED, false)
@@ -180,7 +178,7 @@ func _validate_showcase() -> void:
 	for previous in preview_gems:
 		all_gems_freed = all_gems_freed and previous.get_ref() == null
 	_check(all_lights_freed, "Reset clears both attached and detached lights from the previous rock")
-	_check(all_gems_freed and _count_gems(game) == game.gems.size(), "Reset during emergence frees the emerging gem and every old embedded gem")
+	_check(all_gems_freed and _count_gems(game) == game.gems.size() and game.collecting_gems.is_empty(), "Reset during automatic collection frees its emerging gem and every old embedded gem")
 	_check(game.effects.loose_chunks.is_empty() and game.effects.get("_fragment_pool").is_empty(), "Reset clears active fracture pieces and their reusable pool")
 	owner_releases = 0
 
@@ -375,26 +373,28 @@ func _break_visible(screen: Vector2, finish_emergence: bool = true) -> bool:
 		_check(false, "An excavation target must remain reachable by a physics ray")
 		return false
 	var body: StaticBody3D = ray.collider
-	var stone := game.chunks.has(body)
-	var gem := game.gems.has(body)
-	_check(stone or gem, "Only remaining stone or emerged gems can intercept mining rays")
-	if not stone and not gem:
+	_check(game.chunks.has(body), "Mining rays reach remaining stone without requiring a separate gem target")
+	if not game.chunks.has(body):
 		return false
 	var previous_stone := game.chunks.size()
 	var previous_collected := game.collected_count
+	var previous_per_rock := game.gems_collected_this_rock
+	var previous_special := game.special_collected_count
+	var previous_active_gems := game.gems.size()
+	var hits_before := game.hit_count
 	var prior_fragment_batches: Array[int] = []
-	if stone and not fracture_spawn_checked:
+	if not fracture_spawn_checked:
 		for fragment in game.effects.loose_chunks:
 			if not prior_fragment_batches.has(int(fragment.batch_id)):
 				prior_fragment_batches.append(int(fragment.batch_id))
-	var linked_gem: StaticBody3D = body.contained_gem.get_ref() as StaticBody3D if stone and body.contained_gem != null else null
-	var original_max_health: float = body.max_health if stone else 0.0
+	var linked_gem: StaticBody3D = body.contained_gem.get_ref() as StaticBody3D if body.contained_gem != null else null
+	var original_max_health: float = body.max_health
 	var embedded_before: Array[StaticBody3D] = []
 	for jewel in game.gems:
 		if jewel.is_embedded:
 			embedded_before.append(jewel)
 	var strikes := 0
-	if stone and not traversed_layers.has(body.layer_index):
+	if not traversed_layers.has(body.layer_index):
 		traversed_layers.append(body.layer_index)
 	while strikes < 32:
 		var pulses_before: int = body.light_node.pulse_count if is_instance_valid(linked_gem) else 0
@@ -402,57 +402,69 @@ func _break_visible(screen: Vector2, finish_emergence: bool = true) -> bool:
 			_check(false, "A reachable body's mining hits must be accepted")
 			return false
 		strikes += 1
-		if stone:
-			if is_instance_valid(linked_gem):
-				_check(body.max_health == 16.0 and body.contained_gem.get_ref() == linked_gem and body.cover_gem.get_ref() == linked_gem, "Every owner strike retains its original high health and unique gem")
-				_check(body.light_node.pulse_count == pulses_before + 1 and body.light_node.current_tier <= linked_gem.light_tier, "Each owner strike emits one light pulse bounded by its own gem tier")
-				if pulses_before == 0:
-					_check(body.get_revealed_tier() == 0, "The first real strike on a pristine owner begins with white light")
-				if not body.destroyed:
-					_check(linked_gem.is_embedded and not linked_gem.visible and linked_gem.collision_layer == 0, "A surviving owner retains its hidden, unselectable gem after each impact")
-			elif strikes == 1:
-				_check(not body.is_gem_cover and body.contained_gem == null and body.max_health == original_max_health and not is_instance_valid(body.light_node), "An unrelated struck stone stays ordinary without promotion or gem beams")
-		if not stone or body.destroyed:
+		if is_instance_valid(linked_gem):
+			_check(body.max_health == 16.0 and body.contained_gem.get_ref() == linked_gem and body.cover_gem.get_ref() == linked_gem, "Every owner strike retains its original high health and unique gem")
+			_check(body.light_node.pulse_count == pulses_before + 1 and body.light_node.current_tier <= linked_gem.light_tier, "Each owner strike emits one light pulse bounded by its own gem tier")
+			if pulses_before == 0:
+				_check(body.get_revealed_tier() == 0, "The first real strike on a pristine owner begins with white light")
+			if not body.destroyed:
+				_check(linked_gem.is_embedded and not linked_gem.collected and not linked_gem.visible and linked_gem.collision_layer == 0, "A surviving owner retains its hidden, uncollected gem after each impact")
+		elif strikes == 1:
+			_check(not body.is_gem_cover and body.contained_gem == null and body.max_health == original_max_health and not is_instance_valid(body.light_node), "An unrelated struck stone stays ordinary without promotion or gem beams")
+		if body.destroyed:
 			break
-	if stone:
-		_check(body.collision_layer == 0 and body.destroyed and game.chunks.size() == previous_stone - 1, "Breaking one chunk disables its collision and removes exactly that chunk")
-		if not fracture_spawn_checked:
-			var new_fragments := 0
-			var distinct_meshes: Array[Mesh] = []
-			var valid_fragments := true
-			for fragment in game.effects.loose_chunks:
-				if not prior_fragment_batches.has(int(fragment.batch_id)):
-					new_fragments += 1
-					var mesh: Mesh = fragment.node.mesh
-					valid_fragments = valid_fragments and mesh != body.mesh_instance.mesh and not distinct_meshes.has(mesh) and fragment.node.has_meta("fracture_fragment")
-					distinct_meshes.append(mesh)
-			_check(new_fragments >= 2 and new_fragments <= 18 and valid_fragments, "A real mining impact replaces its broken stone with multiple distinct crack-shaped meshes")
-			fracture_spawn_checked = true
-		var newly_released: Array[StaticBody3D] = []
-		for jewel in embedded_before:
-			if not jewel.is_embedded:
-				newly_released.append(jewel)
-		if is_instance_valid(linked_gem):
-			owner_releases += 1
-			_check(newly_released == [linked_gem], "A fatal owner hit releases exactly its own gem and no neighbor's")
-			_check(linked_gem.get_parent() == game.shell and linked_gem.host_chunk == null and linked_gem.visible and linked_gem.is_emerging and linked_gem.collision_layer == 0, "Released gem leaves its owner alive and visible with collection disabled during emergence")
-			_check(not game._collect_gem(linked_gem) and game.collected_count == previous_collected and game.gems.has(linked_gem), "Repeated collection attempts during emergence cannot collect or award the gem")
-		else:
-			_check(newly_released.is_empty(), "Destroying an ordinary chunk cannot release any embedded gem")
-		await _frames(1)
-		_check(not is_instance_valid(body), "A detached chunk's physics body is freed")
-		if is_instance_valid(linked_gem):
-			_check(is_instance_valid(linked_gem) and game.gems.has(linked_gem), "The released gem survives its destroyed owner's node deletion")
-			if finish_emergence:
-				_check(await _until(func(): return not linked_gem.is_emerging), "The released gem finishes its outward emergence animation")
-				_check(linked_gem.collision_layer == 2 and linked_gem.scale.is_equal_approx(Vector3.ONE) and not linked_gem.is_embedded, "Only the fully emerged, full-size gem becomes selectable")
-				_check(linked_gem.global_basis.z.normalized().dot(game.camera.global_basis.z.normalized()) > 0.8, "An emerged crystal presents its broad front face to the orthographic camera")
+	_check(body.collision_layer == 0 and body.destroyed and game.chunks.size() == previous_stone - 1, "Breaking one chunk disables its collision and removes exactly that chunk")
+	if not fracture_spawn_checked:
+		var new_fragments := 0
+		var distinct_meshes: Array[Mesh] = []
+		var valid_fragments := true
+		for fragment in game.effects.loose_chunks:
+			if not prior_fragment_batches.has(int(fragment.batch_id)):
+				new_fragments += 1
+				var mesh: Mesh = fragment.node.mesh
+				valid_fragments = valid_fragments and mesh != body.mesh_instance.mesh and not distinct_meshes.has(mesh) and fragment.node.has_meta("fracture_fragment")
+				distinct_meshes.append(mesh)
+		_check(new_fragments >= 2 and new_fragments <= 18 and valid_fragments, "A real mining impact replaces its broken stone with multiple distinct crack-shaped meshes")
+		fracture_spawn_checked = true
+	var newly_released: Array[StaticBody3D] = []
+	for jewel in embedded_before:
+		if not jewel.is_embedded:
+			newly_released.append(jewel)
+	if is_instance_valid(linked_gem):
+		owner_releases += 1
+		# These assertions run in the same call stack, before any animation frame.
+		_check(newly_released == [linked_gem], "A fatal owner hit releases exactly its own gem and no neighbor's")
+		_check(linked_gem.collected and game.collected_count == previous_collected + 1 and game.gems_collected_this_rock == previous_per_rock + 1 and game.gems.size() == previous_active_gems - 1 and not game.gems.has(linked_gem), "The fatal mining call awards and removes its gem before returning, without a further gem strike")
+		_check(game.special_collected_count == previous_special + (1 if linked_gem.grade == Gem.SPECIAL else 0), "Immediate collection preserves the common versus special award count")
+		_check(linked_gem.get_parent() == game and linked_gem.host_chunk == null and linked_gem.visible and linked_gem.is_emerging and linked_gem.collision_layer == 0 and _has_collection(linked_gem), "The awarded gem is safely reparented into its tracked visual collection with collision disabled")
+		_check(not game._collect_gem(linked_gem) and game.collected_count == previous_collected + 1, "Repeated collection during emergence cannot award the gem twice")
+		var remaining_hidden := true
+		for other in embedded_before:
+			if other != linked_gem:
+				remaining_hidden = remaining_hidden and game.gems.has(other) and other.is_embedded and not other.collected and not other.visible and other.collision_layer == 0
+		_check(remaining_hidden, "Automatically collecting one gem leaves every other owner's gem hidden and uncollected")
 	else:
-		_check(game.chunks.size() == previous_stone, "Collecting a gem preserves every remaining stone chunk")
-		_check(body.collision_layer == 0 and not game.gems.has(body) and game.collected_count == previous_collected + 1, "Collected gem is removed from selection and awarded exactly once")
-		_check(not game._collect_gem(body) and game.collected_count == previous_collected + 1, "Repeated collection cannot award the same gem again")
-		await _frames(1)
+		_check(newly_released.is_empty() and game.collected_count == previous_collected, "Destroying an ordinary chunk cannot release or award any embedded gem")
+	var hits_at_break := game.hit_count
+	if is_instance_valid(linked_gem):
+		_check(hits_at_break == hits_before + strikes, "Awarding the gem uses exactly its owner's necessary stone strikes")
+	await _frames(1)
+	_check(not is_instance_valid(body), "A detached chunk's physics body is freed")
+	if is_instance_valid(linked_gem):
+		_check(_has_collection(linked_gem) and linked_gem.collected, "The automatically awarded gem survives its former owner's node deletion")
+		if finish_emergence:
+			_check(await _until(func(): return not linked_gem.is_emerging), "Immediate collection preserves the complete outward emergence animation")
+			_check(linked_gem.collected and linked_gem.collision_layer == 0 and linked_gem.visible and not linked_gem.is_embedded, "The emerged reward remains nonselectable while its collection animation continues")
+			_check(game.hit_count == hits_at_break and game.collected_count == previous_collected + 1, "The reward emerges and stays awarded with zero additional mining hits")
+			_check(linked_gem.global_basis.z.normalized().dot(game.camera.global_basis.z.normalized()) > 0.8, "An emerging reward presents its broad front face to the orthographic camera")
 	return true
+
+
+func _has_collection(jewel: StaticBody3D) -> bool:
+	for entry in game.collecting_gems:
+		if entry.node == jewel:
+			return true
+	return false
 
 
 func _validate_inputs() -> void:

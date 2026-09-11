@@ -220,16 +220,22 @@ func _validate_lifecycle() -> void:
 	_check(jewel.release_from_chunk(fixture, Vector3(0.0, 7.0, 2.0)), "Destroying the owner permits outward emergence")
 	_check(jewel.global_transform.is_equal_approx(before), "Beginning emergence preserves the fitted model's exact world placement")
 	jewel.set_hovered(true)
-	_check(jewel.is_emerging and jewel.visible and jewel.collision_layer == 0 and is_zero_approx(_hover(jewel)) and not jewel.begin_collection(), "Emerging crystal remains unselectable, uncollectible and without hover highlight")
+	_check(jewel.is_emerging and jewel.visible and jewel.collision_layer == 0 and is_zero_approx(_hover(jewel)), "Emerging crystal remains unselectable and without hover highlight")
+	var active_tween: Tween = jewel.get("_reveal_tween")
+	_check(jewel.begin_collection() and jewel.collected and jewel.is_emerging and jewel.get("_reveal_tween") == active_tween, "The gem is awarded immediately while its existing emergence tween continues")
+	_check(not jewel.begin_collection() and jewel.collision_layer == 0, "A second collection request during emergence cannot award or reactivate the gem")
 	host.queue_free()
 	await _frames(2)
-	_check(is_instance_valid(jewel) and jewel.get_parent() == fixture and jewel.is_emerging, "The emerging model survives deletion of its former owning stone")
+	_check(is_instance_valid(jewel) and jewel.get_parent() == fixture and jewel.is_emerging and jewel.collected, "The already awarded emerging model survives deletion of its former owning stone")
 	await create_timer(0.48).timeout
 	await _frames(2)
-	_check(not jewel.is_emerging and not jewel.is_embedded and jewel.scale.is_equal_approx(Vector3.ONE) and jewel.collision_layer == 2, "Emergence restores full model size and enables selection only after the animation")
-	_validate_model(jewel, "emerged special")
+	_check(not jewel.is_emerging and not jewel.is_embedded and jewel.scale.is_equal_approx(Vector3.ONE) and jewel.position.distance_to(Vector3(0.0, 7.0, 2.0)) < 0.0001, "Immediate collection allows the emergence tween to reach its full-size endpoint")
+	var disabled_colliders := true
+	for collider in jewel.get("_colliders"):
+		disabled_colliders = disabled_colliders and collider.disabled
+	_check(jewel.collected and jewel.collision_layer == 0 and disabled_colliders, "Completing emergence never re-enables collision for an already awarded gem")
 	jewel.set_hovered(true)
-	_check(jewel.begin_collection() and not jewel.begin_collection() and jewel.collected and jewel.collision_layer == 0 and is_zero_approx(_hover(jewel)), "Collection succeeds once, removes selection and clears the new material's hover state")
+	_check(not jewel.begin_collection() and is_zero_approx(_hover(jewel)), "A completed reward cannot be highlighted or collected again")
 	jewel.queue_free()
 	await _frames(2)
 

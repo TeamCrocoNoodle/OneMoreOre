@@ -530,6 +530,7 @@ func _mine_at(screen_position: Vector2) -> bool:
 	var color: Color = body.get_meta("stone_color")
 	var placement: Transform3D = body.mesh_instance.global_transform
 	var broken: bool = body.hit(1.0, point)
+	var auto_collected := false
 	if body.is_gem_cover and body.light_node != null:
 		var tier: int = body.light_node.current_tier
 		light_pulse_history.append(tier)
@@ -539,6 +540,9 @@ func _mine_at(screen_position: Vector2) -> bool:
 	effects.impact(point, normal, broken, color, body.is_gem_cover)
 	audio.play_hit(1.15 if broken else 0.9, layer)
 	if broken:
+		# The dead owner must not clear its detached final light pulse after its
+		# gem becomes collected during this same physics impact.
+		body.set_process(false)
 		if body.is_gem_cover and body.light_node != null:
 			var departing_light: Node3D = body.light_node
 			departing_light.reparent(effects)
@@ -550,7 +554,8 @@ func _mine_at(screen_position: Vector2) -> bool:
 			if is_instance_valid(contained_gem) and contained_gem.is_embedded:
 				# Emerge through the freshly struck opening, including side/back hits.
 				var exit_point: Vector3 = point - camera.project_ray_normal(screen_position) * (contained_gem.bound_radius + 0.16)
-				contained_gem.release_from_chunk(shell, shell.to_local(exit_point))
+				if contained_gem.release_from_chunk(self, to_local(exit_point)):
+					auto_collected = _collect_gem(contained_gem, exit_point)
 		audio.play_break(layer)
 		var fracture_started := Time.get_ticks_usec() if capture_mode else 0
 		var fragments: Array[Dictionary] = body.build_fracture_fragments()
@@ -568,15 +573,15 @@ func _mine_at(screen_position: Vector2) -> bool:
 		body.queue_free()
 		broken_count += 1
 		_check_exhausted()
-	camera_shake = 0.075 if broken else 0.035
+	camera_shake = maxf(camera_shake, 0.075 if broken else 0.035)
 	hit_stop = 0.055 if broken else 0.025
 	squash = 0.045 if broken else 0.022
 	wobble_velocity += Vector3(normal.y * 0.8, -normal.x * 0.7, -normal.x * 0.6) + Vector3(0.3, 0.1, -0.12)
-	if controller_id >= 0 and using_controller:
+	if controller_id >= 0 and using_controller and not auto_collected:
 		Input.start_joy_vibration(controller_id, 0.28 if broken else 0.1, 0.52 if broken else 0.25, 0.10 if broken else 0.055)
 	return true
 
-func _collect_gem(jewel: StaticBody3D) -> bool:
+func _collect_gem(jewel: StaticBody3D, discovery_position: Vector3 = Vector3.INF) -> bool:
 	if not gems.has(jewel) or not jewel.begin_collection():
 		return false
 	var special: bool = jewel.grade == Gem.SPECIAL
@@ -587,10 +592,11 @@ func _collect_gem(jewel: StaticBody3D) -> bool:
 	if special:
 		special_collected_count += 1
 	audio.play_discovery(special, jewel.variant)
-	effects.gem_burst(location, special, jewel.light_tier)
+	effects.gem_burst(discovery_position if discovery_position.is_finite() else location, special, jewel.light_tier)
 	camera_shake = 0.10 if special else 0.045
-	jewel.reparent(self)
-	collecting_gems.append({"node": jewel, "start": location, "age": 0.0, "life": 1.65 if special else 1.15, "special": special})
+	if jewel.get_parent() != self:
+		jewel.reparent(self)
+	collecting_gems.append({"node": jewel, "start": jewel.position, "age": 0.0, "life": 1.65 if special else 1.15, "special": special, "emerging": jewel.is_emerging})
 	hovered = null
 	if controller_id >= 0 and using_controller:
 		Input.start_joy_vibration(controller_id, 0.45 if special else 0.2, 0.65 if special else 0.35, 0.18 if special else 0.10)
@@ -600,8 +606,15 @@ func _collect_gem(jewel: StaticBody3D) -> bool:
 func _update_collections(delta: float) -> void:
 	for i in range(collecting_gems.size() - 1, -1, -1):
 		var extraction: Dictionary = collecting_gems[i]
-		extraction.age += delta
 		var jewel: StaticBody3D = extraction.node
+		# The award has already happened. Let the presentation finish before
+		# moving this non-interactive visual into its collection flight.
+		if jewel.is_emerging:
+			continue
+		if extraction.emerging:
+			extraction.emerging = false
+			extraction.start = jewel.position
+		extraction.age += delta
 		if extraction.age >= extraction.life:
 			jewel.queue_free()
 			collecting_gems.remove_at(i)
@@ -665,27 +678,22 @@ func _capture_tick(delta: float) -> void:
 		capture_clock = 0.0
 	elif capture_stage == 4 and capture_clock > 0.30:
 		_capture("lights_07_cap_break")
-		if capture_gem.is_embedded or capture_gem.get_parent() != shell or not capture_gem.visible:
-			push_error("Breaking the owning stone must release its contained gem")
+		if not capture_gem.collected or capture_gem.is_embedded or capture_gem.get_parent() != self or not capture_gem.visible or gems.has(capture_gem) or special_collected_count != 1:
+			push_error("Breaking the owning stone must immediately award its gem")
 			get_tree().quit(1)
 			return
 		capture_stage = 5
 		capture_clock = 0.0
-	elif capture_stage == 5 and capture_clock > 1.1:
-		if capture_gem.is_emerging or capture_gem.collision_layer != 2:
-			push_error("The emerged gem must become collectible")
+	elif capture_stage == 5 and capture_clock > 0.48:
+		if capture_gem.is_emerging or capture_gem.collision_layer != 0 or not capture_gem.collected:
+			push_error("The automatically acquired gem must remain non-interactive during its presentation")
 			get_tree().quit(1)
 			return
 		aim_position = camera.unproject_position(capture_gem.global_position)
-		_capture("lights_08_exposed_gem")
-		capture_stage = 6
-		capture_clock = 0.0
-	elif capture_stage == 6 and capture_clock > 0.35:
-		aim_position = camera.unproject_position(capture_gem.global_position)
-		_request_swing()
+		_capture("lights_08_auto_acquired")
 		capture_stage = 7
 		capture_clock = 0.0
-	elif capture_stage == 7 and capture_clock > 0.36:
+	elif capture_stage == 7 and capture_clock > 0.50:
 		_capture("lights_09_collection")
 		capture_stage = 8
 		capture_clock = 0.0

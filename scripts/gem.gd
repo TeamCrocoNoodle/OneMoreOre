@@ -62,9 +62,12 @@ func set_hovered(hovered: bool) -> void:
 
 
 func begin_collection() -> bool:
-	if collected or is_embedded or is_emerging:
+	if collected or is_embedded:
 		return false
-	_stop_emergence()
+	# Ownership is awarded immediately when the containing stone breaks. The
+	# already-started emergence is only a visual and may finish after the award.
+	if not is_emerging:
+		_stop_emergence()
 	collected = true
 	host_chunk = null
 	_set_mining_enabled(false)
@@ -135,7 +138,7 @@ func _presentation_rotation(parent: Node3D, travel: Vector3) -> Quaternion:
 
 
 func _animate_emergence(progress: float) -> void:
-	if not is_emerging or collected or is_embedded:
+	if not is_emerging or is_embedded:
 		return
 	var travel := 1.0 - pow(1.0 - progress, 3.0)
 	position = _emergence_start_position.lerp(_emergence_target_position, travel)
@@ -146,13 +149,13 @@ func _animate_emergence(progress: float) -> void:
 
 func _finish_emergence() -> void:
 	_reveal_tween = null
-	if not is_emerging or collected or is_embedded:
+	if not is_emerging or is_embedded:
 		return
 	position = _emergence_target_position
 	quaternion = _emergence_target_rotation
 	scale = Vector3.ONE
 	is_emerging = false
-	_set_mining_enabled(true)
+	_set_mining_enabled(not collected)
 	emerged.emit()
 
 
