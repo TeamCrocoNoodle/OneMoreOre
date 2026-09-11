@@ -39,8 +39,11 @@ func _build(segments: Array[Dictionary], normal: Vector3) -> Array[PackedVector3
 		var side_b: Vector3 = segment.get("side_b", side)
 		if not side_a.is_finite() or not side_b.is_finite():
 			continue
+		# Surface wrapping clips a ribbon into convex facet polygons. Keep those
+		# exact banks; a reconstructed symmetric quad would spill across edges.
+		var points: PackedVector3Array = segment.get("polygon", PackedVector3Array([a - side_a, a + side_a, b + side_b, b - side_b]))
 		var polygon := PackedVector2Array()
-		for point: Vector3 in [a - side_a, a + side_a, b + side_b, b - side_b]:
+		for point in points:
 			if point.x < plane_anchor.x or (point.x == plane_anchor.x and (point.y < plane_anchor.y or (point.y == plane_anchor.y and point.z < plane_anchor.z))):
 				plane_anchor = point
 			var projected := Vector2(point.dot(_u), point.dot(_v))

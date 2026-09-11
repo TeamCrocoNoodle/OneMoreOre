@@ -10,6 +10,8 @@ var fixture := Node3D.new()
 var checks := 0
 var failures: Array[String] = []
 var shape_data: Dictionary
+var light_failure_reason := ""
+var solid_offset_cache := {}
 
 
 func _initialize() -> void:
@@ -61,6 +63,12 @@ func _run() -> void:
 				cover.configure_gem_cover(jewel, tier)
 				_check(cover.health == remaining and light.pulse_count == 1, "Repeated cover designation cannot heal or restart its progression")
 				_check(_materials_use_depth_test(light), "Beam, source, fissure, halo, and mote materials retain scene depth testing")
+				if tier == 5:
+					var junction_count := 0
+					for segment in cover.get_surface_crack_segments():
+						if bool(segment.get("junction", false)) and not bool(segment.has_centerline):
+							junction_count += 1
+					_check(junction_count > 0 and _light_matches_cracks(cover) and _halo_follows_cracks(cover), "The first three-arm junction is filled by an attached core/glow hull without adding a light ray")
 			if strike == 15:
 				_check(current == tier and _is_color_tier(_light_color(light), tier), "Every gem's final color becomes visible before the cover breaks")
 			_check(broken == (strike == 16), "A 16 HP cover survives precisely 15 unit strikes")
@@ -140,17 +148,19 @@ func _validate_spatial_damage() -> void:
 	normal.hit(0.25, normal.mesh_instance.to_global(point_a))
 	var first: Array[Dictionary] = normal.get_visible_crack_segments().duplicate(true)
 	_check(normal.impact_count == 1 and normal.latest_impact_local.distance_to(point_a) < 0.001, "An ordinary stone records its first actual off-center impact")
-	_check(_crack_distance(point_a, first) < 0.001, "Visible ordinary-stone cracks begin at the actual first strike")
+	_check(_crack_distance(point_a, normal.get_surface_crack_segments()) < 0.001, "Visible ordinary-stone cracks begin at the actual first strike")
 	_check(_has_tapered_tip(first), "The first strike creates a visible fissure that narrows to a sharp free tip")
 	_check(_has_angular_bend(first), "The first strike creates a distinctly angled path instead of straight radial spokes")
 	normal.hit(0.25, normal.mesh_instance.to_global(point_b))
 	var second: Array[Dictionary] = normal.get_visible_crack_segments().duplicate(true)
 	_check(normal.impact_count == 2 and normal.latest_impact_local.distance_to(point_b) < 0.001, "A second ordinary-stone hit moves the latest crack origin")
-	_check(_crack_distance(point_b, second) < 0.001 and _old_cracks_remain(first, second), "A distant ordinary hit adds damage at its own point and preserves earlier cracks")
+	_check(_crack_distance(point_b, normal.get_surface_crack_segments()) < 0.001 and _old_cracks_remain(first, second), "A distant ordinary hit adds damage at its own point and preserves earlier cracks")
+	point_c = _uncovered_contact(normal)
+	_check(point_c.is_finite(), "The fatal ordinary fixture selects a genuinely uncovered point on the actual surface")
 	normal.hit(normal.health, normal.mesh_instance.to_global(point_c))
 	var fatal_normal := normal.get_visible_crack_segments()
 	_check(normal.destroyed and normal.impact_count == 3 and normal.latest_impact_local.distance_to(point_c) < 0.001, "The fatal ordinary-stone hit still records its actual impact")
-	_check(_crack_distance(point_c, fatal_normal) < 0.001 and _old_cracks_remain(second, fatal_normal), "Fatal ordinary damage updates geometry without erasing earlier cracks")
+	_check(_crack_distance(point_c, normal.get_surface_crack_segments()) < 0.001 and _old_cracks_remain(second, fatal_normal), "Fatal ordinary damage updates geometry without erasing earlier cracks")
 
 	var promoted := _make_chunk()
 	promoted.hit(0.25, promoted.mesh_instance.to_global(point_a))
@@ -185,7 +195,7 @@ func _validate_spatial_damage() -> void:
 	var after_move := cover.get_visible_crack_segments()
 	var rays_after: Array[Dictionary] = cover.light_node.get("_rays")
 	_check(cover.impact_count == 2 and cover.latest_impact_local.distance_to(point_b) < 0.001, "A moved cover strike updates its mesh-local origin during recoil")
-	_check(_crack_distance(point_b, after_move) < 0.001 and _old_cracks_remain(before_move, after_move), "Moved cover damage starts at the new impact while preserving the first network")
+	_check(_crack_distance(point_b, cover.get_surface_crack_segments()) < 0.001 and _old_cracks_remain(before_move, after_move), "Moved cover damage starts at the new impact while preserving the first network")
 	_check(_ray_field_changes(rays_before, rays_after, "origin", 0.015), "Moving the impact changes beam source positions")
 	_check(_ray_field_changes(rays_before, rays_after, "direction", 0.015), "Moving the impact changes the beams' fan directions")
 	_check(_rays_reference_impact(rays_after, point_b), "The new beam pulse includes geometry rooted at the latest impact")
@@ -209,18 +219,20 @@ func _validate_spatial_damage() -> void:
 	var repeated: Array[Dictionary] = cover.get_visible_crack_segments().duplicate(true)
 	var connection_stats := _contact_connection_stats(repeated)
 	_check(cover.impact_count == 130 and cover.latest_impact_local.distance_to(last_nearby) < 0.001, "Every repeated nearby strike updates the latest impact")
-	_check(_visible_crack_covers(last_nearby, repeated) and _old_cracks_remain(before_move, repeated), "Repeated nearby hits keep old damage and leave the current strike covered by an actual visible crack ribbon")
+	_check(_visible_crack_covers(last_nearby, cover.get_surface_crack_segments()) and _old_cracks_remain(before_move, repeated), "Repeated nearby hits keep old damage and leave the current strike covered by an actual visible crack ribbon")
 	_check(repeated.size() <= 32 and int(connection_stats.major_segments) <= 18 and _large_crack_groups(repeated) <= 2 and float(connection_stats.length) < 0.01, "Nearby hits keep two compact networks and less than one centimetre of extra contact connections")
 	_check(stable_connections, "Replaying all 35 nearby contact positions adds no further connections after their first complete cycle")
 	_check(_light_matches_cracks(cover), "Repeated pulses remain bounded and attached to the actual visible cracks")
 	_check(_projected_sheets_follow_source(cover), "Repeated hits preserve one coherent projection through all retained crack edges")
 	_check(_halo_follows_cracks(cover), "Repeated nearby damage keeps its halo centered on the accumulated visible crack traces")
 	var pulses_before_fatal: int = cover.light_node.pulse_count
+	point_c = _uncovered_contact(cover)
+	_check(point_c.is_finite(), "The fatal cover fixture selects a genuinely uncovered point on the actual surface")
 	cover.hit(cover.health, cover.mesh_instance.to_global(point_c))
 	var fatal_cover := cover.get_visible_crack_segments()
 	var fatal_rays: Array[Dictionary] = cover.light_node.get("_rays")
 	_check(cover.destroyed and cover.impact_count == 131 and cover.latest_impact_local.distance_to(point_c) < 0.001, "Fatal cover damage records the final moved strike before destruction")
-	_check(_crack_distance(point_c, fatal_cover) < 0.001 and _old_cracks_remain(before_move, fatal_cover), "The fatal cover hit adds its own origin while retaining previous damage")
+	_check(_crack_distance(point_c, cover.get_surface_crack_segments()) < 0.001 and _old_cracks_remain(before_move, fatal_cover), "The fatal cover hit adds its own origin while retaining previous damage")
 	_check(cover.light_node.pulse_count == pulses_before_fatal + 1 and _rays_reference_impact(fatal_rays, point_c), "The fatal pulse uses the final strike's new crack geometry")
 	_check(_light_matches_cracks(cover), "The final hit retains its spatial sources without uploading an invisible final flash")
 	_check(_light_has_no_visuals(cover.light_node), "The fatal hit leaves no halo, shaft or mote geometry to render")
@@ -246,9 +258,12 @@ func _validate_crack_density() -> void:
 		var current := cover.get_visible_crack_segments()
 		maximum_segments = maxi(maximum_segments, current.size())
 		maximum_networks = maxi(maximum_networks, _large_crack_groups(current))
-		contacts_covered = contacts_covered and _visible_crack_covers(point, current)
+		contacts_covered = contacts_covered and _visible_crack_covers(point, cover.get_surface_crack_segments())
 		history_preserved = history_preserved and (prior.is_empty() or _old_cracks_remain(prior, current))
-		all_segments_lit = all_segments_lit and _light_matches_cracks(cover)
+		var matches := _light_matches_cracks(cover)
+		if not matches:
+			print("DENSITY_LIGHT_DIAG strike=", strike + 1, " reason=", light_failure_reason)
+		all_segments_lit = all_segments_lit and matches
 		prior = current.duplicate(true)
 	_check(maximum_segments <= 32 and maximum_networks <= 2, "Sixteen separated strikes keep at most two major crack networks and a bounded set of contact connections")
 	_check(contacts_covered, "Every scattered strike remains covered by its actual visible crack ribbon")
@@ -261,10 +276,12 @@ func _validate_miter_contacts() -> void:
 	cover.configure_gem_cover(_make_gem(5), 5)
 	var first_point: Vector3 = cover.face_center.lerp(cover.face_points[0], 0.50)
 	cover.hit(0.25, cover.mesh_instance.to_global(first_point))
-	var cracks := cover.get_visible_crack_segments()
+	var cracks := cover.get_surface_crack_segments()
 	var miter_point := Vector3.ZERO
 	var found_miter := false
 	for segment in cracks:
+		if not bool(segment.has_centerline):
+			continue
 		var travel := Vector3(segment.b) - Vector3(segment.a)
 		for end_key: String in ["a", "b"]:
 			var endpoint: Vector3 = segment[end_key]
@@ -272,7 +289,7 @@ func _validate_miter_contacts() -> void:
 			for sign_value: float in [-1.0, 1.0]:
 				var candidate := endpoint + Vector3(segment["side_" + end_key]) * sign_value * 0.85 + (other - endpoint) * 0.01
 				var t := (candidate - Vector3(segment.a)).dot(travel) / travel.length_squared()
-				if (t < -0.0001 or t > 1.0001) and _actual_ribbon_covers(candidate, cracks, cover.direction):
+				if (t < -0.0001 or t > 1.0001) and _visible_crack_covers(candidate, cracks):
 					miter_point = candidate
 					found_miter = true
 					break
@@ -282,32 +299,38 @@ func _validate_miter_contacts() -> void:
 			break
 	_check(found_miter, "The contact fixture samples a real miter overhang beyond a segment's finite centerline range")
 	if found_miter:
-		var before := int(_contact_connection_stats(cracks).count)
+		var before := int(_contact_connection_stats(cover.get_visible_crack_segments()).count)
 		cover.hit(0.01, cover.mesh_instance.to_global(miter_point))
-		cracks = cover.get_visible_crack_segments()
-		_check(int(_contact_connection_stats(cracks).count) == before and cover.latest_impact_local.distance_to(miter_point) < 0.0001, "Striking an already rendered miter records the contact without adding a redundant connection")
+		cracks = cover.get_surface_crack_segments()
+		_check(int(_contact_connection_stats(cover.get_visible_crack_segments()).count) == before and cover.latest_impact_local.distance_to(miter_point) < 0.0001, "Striking an already rendered miter records the contact without adding a redundant connection")
 	var outside_point := Vector3.ZERO
 	var found_outside := false
 	for segment in cracks:
-		if float(segment.width_b) < 0.00001:
+		if bool(segment.has_centerline) and float(segment.width_b) < 0.00001:
 			var candidate := Vector3(segment.b) + (Vector3(segment.b) - Vector3(segment.a)).normalized() * 0.01
-			if not _actual_ribbon_covers(candidate, cracks, cover.direction):
+			if _convex_contains(candidate, segment.triangle, segment.normal) and not _visible_crack_covers(candidate, cracks):
 				outside_point = candidate
 				found_outside = true
 				break
 	_check(found_outside, "The contact fixture also samples uncovered stone just beyond a tapering crack tip")
 	if found_outside:
-		var before := int(_contact_connection_stats(cracks).count)
+		var before := int(_contact_connection_stats(cover.get_visible_crack_segments()).count)
 		cover.hit(0.01, cover.mesh_instance.to_global(outside_point))
-		cracks = cover.get_visible_crack_segments()
-		_check(int(_contact_connection_stats(cracks).count) > before and _crack_distance(outside_point, cracks) < 0.0001 and _visible_crack_covers(outside_point, cracks), "Striking genuinely uncovered stone adds a connection at that actual contact instead of ignoring it")
+		cracks = cover.get_surface_crack_segments()
+		_check(int(_contact_connection_stats(cover.get_visible_crack_segments()).count) > before and _crack_distance(outside_point, cracks) < 0.0001 and _visible_crack_covers(outside_point, cracks), "Striking genuinely uncovered stone adds a connection at that actual contact instead of ignoring it")
 	_check(_light_matches_cracks(cover), "Miter and uncovered-tip contacts retain exact one-to-one crack light geometry")
 
 
 func _light_matches_cracks(cover: Chunk) -> bool:
-	var segments := cover.get_visible_crack_segments()
+	light_failure_reason = ""
+	var segments := cover.get_surface_crack_segments()
 	var rays: Array[Dictionary] = cover.light_node.get("_rays")
-	if segments.is_empty() or rays.size() != segments.size():
+	var source_count := 0
+	for segment in segments:
+		if bool(segment.get("has_centerline", true)) and Vector3(segment.a).distance_squared_to(segment.b) > 0.00000001 and float(segment.width) > 0.0:
+			source_count += 1
+	if segments.is_empty() or rays.size() != source_count:
+		light_failure_reason = "ray count %d expected %d" % [rays.size(), source_count]
 		return false
 	var shafts := cover.light_node.get_node_or_null("LightShafts") as MeshInstance3D
 	var beam_vertices := PackedVector3Array()
@@ -320,7 +343,6 @@ func _light_matches_cracks(cover: Chunk) -> bool:
 		beam_vertices = shafts.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
 		if beam_vertices.size() != rays.size() * 6:
 			return false
-	var normal := cover.direction.normalized()
 	var illuminated_sources: Dictionary = {}
 	for ray_index in range(rays.size()):
 		var ray := rays[ray_index]
@@ -329,16 +351,21 @@ func _light_matches_cracks(cover: Chunk) -> bool:
 			return false
 		illuminated_sources[source_index] = true
 		var source: Dictionary = segments[source_index]
+		var normal: Vector3 = source.get("normal", cover.direction)
+		var offset_a: Vector3 = source.get("offset_a", normal)
+		var offset_b: Vector3 = source.get("offset_b", normal)
+		if not bool(source.get("has_centerline", true)):
+			return false
 		if Vector3(ray.source_a).distance_to(source.a) > 0.001 or Vector3(ray.source_b).distance_to(source.b) > 0.001:
 			return false
-		var planar_origin: Vector3 = ray.origin - normal * Light.RAY_OFFSET
+		var planar_origin: Vector3 = ray.origin - (offset_a + offset_b) * 0.5 * Light.RAY_OFFSET
 		if _point_segment_distance(planar_origin, source.a, source.b) > 0.001:
 			return false
-		if absf(normal.dot(Vector3(source.a) - cover.face_center)) > 0.001 or absf(normal.dot(Vector3(source.b) - cover.face_center)) > 0.001:
+		if absf(normal.dot(Vector3(source.b) - Vector3(source.a))) > 0.001:
 			return false
 		var world_origin: Vector3 = cover.light_node.to_global(ray.origin)
-		var world_a := cover.mesh_instance.to_global(Vector3(source.a) + normal * Light.RAY_OFFSET)
-		var world_b := cover.mesh_instance.to_global(Vector3(source.b) + normal * Light.RAY_OFFSET)
+		var world_a := cover.mesh_instance.to_global(Vector3(source.a) + offset_a * Light.RAY_OFFSET)
+		var world_b := cover.mesh_instance.to_global(Vector3(source.b) + offset_b * Light.RAY_OFFSET)
 		if _point_segment_distance(world_origin, world_a, world_b) > 0.002:
 			return false
 		# Measure the rendered root edge, not just its provenance metadata: the
@@ -362,23 +389,7 @@ func _light_matches_cracks(cover: Chunk) -> bool:
 			return false
 	if cover.destroyed:
 		return true
-	var fissures: MeshInstance3D = cover.light_node.get_node("LitFissures")
-	if fissures.mesh == null or fissures.mesh.get_surface_count() == 0:
-		return false
-	var vertices: PackedVector3Array = fissures.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
-	if vertices.size() != segments.size() * 6:
-		return false
-	for i in range(segments.size()):
-		# Measure the actual two-triangle ribbon, including its placement transform.
-		var local_a := (vertices[i * 6] + vertices[i * 6 + 1]) * 0.5
-		var local_b := (vertices[i * 6 + 2] + vertices[i * 6 + 5]) * 0.5
-		var expected_a := cover.mesh_instance.to_global(Vector3(segments[i].a) + normal * Light.CRACK_OFFSET)
-		var expected_b := cover.mesh_instance.to_global(Vector3(segments[i].b) + normal * Light.CRACK_OFFSET)
-		if fissures.to_global(local_a).distance_to(expected_a) > 0.002 or fissures.to_global(local_b).distance_to(expected_b) > 0.002:
-			return false
-		if not _ribbon_matches_sides(cover, fissures, vertices, i, segments[i], Light.CRACK_CORE_RATIO, Light.CRACK_OFFSET):
-			return false
-	return true
+	return _surface_light_attached(cover, "LitFissures", Light.CRACK_OFFSET)
 
 
 func _light_has_no_visuals(light: Node3D) -> bool:
@@ -470,71 +481,232 @@ func _projected_sheets_follow_source(cover: Chunk) -> bool:
 
 
 func _halo_follows_cracks(cover: Chunk) -> bool:
-	var halo := cover.light_node.get_node_or_null("FissureGlow") as MeshInstance3D
-	var core := cover.light_node.get_node_or_null("LitFissures") as MeshInstance3D
-	if halo == null or core == null or halo.mesh == null or core.mesh == null:
-		return false
-	if halo.mesh.get_surface_count() != 1 or core.mesh.get_surface_count() != 1:
-		return false
-	var segments := cover.get_visible_crack_segments()
-	var glow_vertices: PackedVector3Array = halo.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
-	var core_vertices: PackedVector3Array = core.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
-	if glow_vertices.size() != segments.size() * 6 or core_vertices.size() != glow_vertices.size():
-		return false
-	var normal := cover.direction.normalized()
 	if Light.CRACK_CORE_RATIO <= 0.0 or Light.CRACK_CORE_RATIO >= 1.0 or Light.CRACK_GLOW_RATIO <= 1.0:
 		return false
-	for i in range(segments.size()):
-		var first := i * 6
-		# Measure rendered geometry in the stone mesh's coordinates so a changed
-		# parent transform or recoil cannot accidentally pass a local-only check.
-		var a := cover.mesh_instance.to_local(halo.to_global((glow_vertices[first] + glow_vertices[first + 1]) * 0.5))
-		var b := cover.mesh_instance.to_local(halo.to_global((glow_vertices[first + 2] + glow_vertices[first + 5]) * 0.5))
-		var delta_a: Vector3 = a - Vector3(segments[i].a)
-		var delta_b: Vector3 = b - Vector3(segments[i].b)
-		if (delta_a - normal * delta_a.dot(normal)).length() > 0.001 or (delta_b - normal * delta_b.dot(normal)).length() > 0.001:
-			return false
-		# A small common depth offset is allowed to avoid fighting the stone;
-		# an independently placed, tilted, or floating glow is not.
-		if absf(delta_a.dot(normal) - delta_b.dot(normal)) > 0.001 or absf(delta_a.dot(normal)) > 0.05:
-			return false
-		# At a bend the true endpoint offset is a miter, not perpendicular to
-		# either adjacent tangent. Compare both rendered edges to that actual
-		# offset, including the zero-width tip, instead of assuming rectangles.
-		if not _ribbon_matches_sides(cover, halo, glow_vertices, i, segments[i], Light.CRACK_GLOW_RATIO, Light.GLOW_OFFSET):
-			return false
-		if not _ribbon_matches_sides(cover, core, core_vertices, i, segments[i], Light.CRACK_CORE_RATIO, Light.CRACK_OFFSET):
-			return false
-	return not segments.is_empty()
+	return _surface_light_attached(cover, "FissureGlow", Light.GLOW_OFFSET) and _surface_light_attached(cover, "LitFissures", Light.CRACK_OFFSET)
 
 
-func _ribbon_matches_sides(cover: Chunk, node: MeshInstance3D, vertices: PackedVector3Array, index: int, segment: Dictionary, multiplier: float, depth: float) -> bool:
-	if not segment.has_all(["width_a", "width_b", "side_a", "side_b"]):
+func _surface_light_attached(cover: Chunk, node_name: String, depth: float) -> bool:
+	var node := cover.light_node.get_node_or_null(node_name) as MeshInstance3D
+	if node == null or node.mesh == null or node.mesh.get_surface_count() != 1:
 		return false
-	var normal := cover.direction.normalized()
-	var perpendicular := normal.cross(Vector3(segment.b) - Vector3(segment.a)).normalized()
-	var side_a: Vector3 = segment.side_a
-	var side_b: Vector3 = segment.side_b
-	var width_a := float(segment.width_a)
-	var width_b := float(segment.width_b)
-	if width_a < 0.0 or width_b < 0.0 or absf(float(segment.width) - maxf(width_a, width_b)) > 0.00001:
+	var ratio := Light.CRACK_CORE_RATIO if node_name == "LitFissures" else Light.CRACK_GLOW_RATIO
+	var segments := cover.get_surface_crack_segments()
+	var solid := _solid_offset_geometry(cover)
+	var expected: Array[Dictionary] = []
+	var junction_probes: Array[Dictionary] = []
+	for segment in segments:
+		if not segment.has_all(["ribbon", "triangle", "polygon", "normal"]):
+			return false
+		var ribbon: PackedVector3Array = segment.ribbon
+		var scaled := PackedVector3Array()
+		var junction := bool(segment.get("junction", false))
+		var center: Vector3 = segment.get("junction_center", Vector3.ZERO)
+		var radius := 0.00001
+		for i in ribbon.size():
+			var axis: Vector3 = center if junction else (segment.ribbon_a if i < 2 else segment.ribbon_b)
+			scaled.append(axis + (ribbon[i] - axis) * ratio)
+			radius = maxf(radius, ribbon[i].distance_to(center))
+		# Independent convex intersection oracle: contained original corners
+		# and pairwise edge intersections, rather than production clip order.
+		var corners := _intersection_corners(scaled, segment.triangle, segment.normal)
+		for point in corners:
+			expected.append({"point": point + _physical_surface_offset(point, segment.normal, solid) * depth, "base": point, "ribbon": scaled, "junction": junction, "center": center, "normal": segment.normal, "radius": radius, "ratio": ratio})
+		if junction and corners.size() >= 3:
+			var centroid := Vector3.ZERO
+			for point in corners:
+				centroid += point
+			centroid /= float(corners.size())
+			junction_probes.append({"point": centroid, "normal": segment.normal})
+			for i in corners.size():
+				junction_probes.append({"point": centroid.lerp(corners[i].lerp(corners[(i + 1) % corners.size()], 0.5), 0.7), "normal": segment.normal})
+	var arrays := node.mesh.surface_get_arrays(0)
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	if vertices.is_empty() or vertices.size() % 3 != 0 or vertices.size() != uvs.size():
 		return false
-	for pair: Array in [[side_a, width_a], [side_b, width_b]]:
-		var side: Vector3 = pair[0]
-		# A limited miter can shorten the perpendicular component at a sharp
-		# corner. The actual offset remains the authoritative rendered edge.
-		if not side.is_finite() or absf(side.dot(normal)) > 0.00001 or side.dot(perpendicular) < -0.00001:
+	var bases := PackedVector3Array()
+	for i in vertices.size():
+		var actual := cover.mesh_instance.to_local(node.to_global(vertices[i]))
+		if not actual.is_finite() or not uvs[i].is_finite() or uvs[i].x < -0.0001 or uvs[i].x > 1.0001 or uvs[i].y < -0.0001 or uvs[i].y > 1.0001:
 			return false
-		if float(pair[1]) <= 0.000001 and side.length() > 0.00001:
+		var found := false
+		var closest_error := INF
+		var closest_base := Vector3.ZERO
+		for corner in expected:
+			var error := actual.distance_to(corner.point)
+			if error <= 0.0003 and error < closest_error and _surface_uv_matches(uvs[i], corner):
+				closest_error = error
+				closest_base = corner.base
+				found = true
+		if not found:
+			light_failure_reason = "%s unmatched vertex %s uv=%s" % [node_name, actual, uvs[i]]
 			return false
-	var a := Vector3(segment.a) + normal * depth
-	var b := Vector3(segment.b) + normal * depth
-	var expected: Array[Vector3] = [a - side_a * multiplier, a + side_a * multiplier, b + side_b * multiplier, a - side_a * multiplier, b + side_b * multiplier, b - side_b * multiplier]
-	for corner in 6:
-		var actual := cover.mesh_instance.to_local(node.to_global(vertices[index * 6 + corner]))
-		if actual.distance_to(expected[corner]) > 0.00005:
+		bases.append(closest_base)
+	# A central hull must fill the small gaps between root banks. Checking
+	# just each branch centerline would miss an unchanged three-arm pinhole.
+	for probe in junction_probes:
+		if not _uploaded_surface_covers(probe.point, probe.normal, bases):
+			light_failure_reason = "%s uncovered junction interior %s" % [node_name, probe.point]
 			return false
+	# The actual uploaded triangles must cover each source line after clipping.
+	# This catches missing facets despite their surviving provenance metadata.
+	for segment in segments:
+		if not bool(segment.has_centerline) or Vector3(segment.a).distance_squared_to(segment.b) <= 0.00000001 or float(segment.width) <= 0.0:
+			continue
+		for t: float in [0.15, 0.5, 0.85]:
+			var point: Vector3 = Vector3(segment.a).lerp(segment.b, t)
+			if not _uploaded_surface_covers(point, segment.normal, bases):
+				light_failure_reason = "%s uncovered centerline %s (face %d hit %d)" % [node_name, point, int(segment.face_id), int(segment.hit_id)]
+				return false
 	return true
+
+
+func _surface_uv_matches(uv: Vector2, corner: Dictionary) -> bool:
+	if not bool(corner.junction):
+		return _uv_has_basis(uv, corner.base, corner.ribbon)
+	var normal: Vector3 = corner.normal
+	var x := normal.cross(Vector3.UP).normalized()
+	if x.length_squared() < 0.1:
+		x = normal.cross(Vector3.RIGHT).normalized()
+	var y := normal.cross(x).normalized()
+	var delta: Vector3 = (Vector3(corner.base) - Vector3(corner.center)) / float(corner.ratio)
+	var expected := Vector2.ONE * 0.5 + Vector2(delta.dot(x), delta.dot(y)) / (float(corner.radius) * 2.0)
+	return uv.distance_to(expected) < 0.0003
+
+
+func _uploaded_surface_covers(point: Vector3, normal: Vector3, vertices: PackedVector3Array) -> bool:
+	for i in range(0, vertices.size(), 3):
+		if _convex_contains(point, PackedVector3Array([vertices[i], vertices[i + 1], vertices[i + 2]]), normal):
+			return true
+	return false
+
+
+func _intersection_corners(first: PackedVector3Array, second: PackedVector3Array, normal: Vector3) -> PackedVector3Array:
+	var points := PackedVector3Array()
+	for point in first:
+		if _convex_contains(point, second, normal):
+			points.append(point)
+	for point in second:
+		if _convex_contains(point, first, normal):
+			points.append(point)
+	for i in first.size():
+		var a := first[i]
+		var ab := first[(i + 1) % first.size()] - a
+		for j in second.size():
+			var c := second[j]
+			var cd := second[(j + 1) % second.size()] - c
+			var denominator := normal.dot(ab.cross(cd))
+			if absf(denominator) < 0.000000001:
+				continue
+			var t := normal.dot((c - a).cross(cd)) / denominator
+			var u := normal.dot((c - a).cross(ab)) / denominator
+			if t >= -0.00001 and t <= 1.00001 and u >= -0.00001 and u <= 1.00001:
+				points.append(a + ab * clampf(t, 0.0, 1.0))
+	return points
+
+
+func _convex_contains(point: Vector3, polygon: PackedVector3Array, normal: Vector3, tolerance: float = 0.0003) -> bool:
+	if polygon.size() < 3 or absf((point - polygon[0]).dot(normal)) > tolerance:
+		return false
+	var sign_value := 0
+	var area := 0.0
+	for i in polygon.size():
+		if absf((polygon[i] - polygon[0]).dot(normal)) > tolerance:
+			return false
+		var edge := polygon[(i + 1) % polygon.size()] - polygon[i]
+		area += normal.dot(polygon[i].cross(polygon[(i + 1) % polygon.size()]))
+		var side := normal.dot(edge.cross(point - polygon[i]))
+		if absf(side) <= tolerance * edge.length():
+			continue
+		var current := 1 if side > 0.0 else -1
+		if sign_value != 0 and sign_value != current:
+			return false
+		sign_value = current
+	return absf(area) > 0.0000000001
+
+
+func _solid_offset_geometry(cover: Chunk) -> Dictionary:
+	var mesh := cover.mesh_instance.mesh
+	var key := mesh.get_instance_id()
+	if solid_offset_cache.has(key):
+		return solid_offset_cache[key]
+	var vertices := PackedVector3Array()
+	for surface_index in mesh.get_surface_count():
+		var arrays := mesh.surface_get_arrays(surface_index)
+		var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+		if indices.is_empty():
+			vertices.append_array(points)
+		else:
+			for index in indices:
+				vertices.append(points[index])
+	var corners := {}
+	var edges := {}
+	for i in range(0, vertices.size(), 3):
+		var triangle := PackedVector3Array([vertices[i], vertices[i + 1], vertices[i + 2]])
+		var cross := (triangle[1] - triangle[0]).cross(triangle[2] - triangle[0])
+		if cross.length_squared() <= 0.000000000001:
+			continue
+		var normal := cross.normalized()
+		if normal.dot((triangle[0] + triangle[1] + triangle[2]) / 3.0 - cover.gem_socket_center) < 0.0:
+			normal = -normal
+		for j in 3:
+			var a := triangle[j]
+			var b := triangle[(j + 1) % 3]
+			var a_key := str(a.snapped(Vector3.ONE * 0.00001))
+			var b_key := str(b.snapped(Vector3.ONE * 0.00001))
+			if not corners.has(a_key):
+				corners[a_key] = {"point": a, "normals": []}
+			_add_unique_normal(corners[a_key].normals, normal)
+			var edge_key := a_key + "/" + b_key if a_key < b_key else b_key + "/" + a_key
+			if not edges.has(edge_key):
+				edges[edge_key] = {"a": a, "b": b, "normals": []}
+			_add_unique_normal(edges[edge_key].normals, normal)
+	var solid := {"corners": corners.values(), "edges": edges.values()}
+	solid_offset_cache[key] = solid
+	return solid
+
+
+func _add_unique_normal(normals: Array, normal: Vector3) -> void:
+	for existing: Vector3 in normals:
+		if existing.dot(normal) > 0.999999:
+			return
+	normals.append(normal)
+
+
+func _physical_surface_offset(point: Vector3, normal: Vector3, solid: Dictionary) -> Vector3:
+	# Only real solid corners/creases contribute a miter. Crack polygon banks
+	# inside one planar facet cannot tilt or lift the core/glow off that facet.
+	for corner: Dictionary in solid.corners:
+		if corner.normals.size() < 2 or point.distance_to(corner.point) > 0.00003:
+			continue
+		var combined := Vector3.ZERO
+		for adjacent: Vector3 in corner.normals:
+			combined += adjacent
+		combined = combined.normalized()
+		var clearance := INF
+		for adjacent: Vector3 in corner.normals:
+			clearance = minf(clearance, combined.dot(adjacent))
+		return combined / maxf(clearance, 0.25)
+	for edge: Dictionary in solid.edges:
+		if edge.normals.size() != 2 or _point_segment_distance(point, edge.a, edge.b) > 0.00003:
+			continue
+		var first: Vector3 = edge.normals[0]
+		var second: Vector3 = edge.normals[1]
+		if maxf(normal.dot(first), normal.dot(second)) > 0.999999:
+			return (first + second) / maxf(1.0 + first.dot(second), 0.25)
+	return normal
+
+
+func _uv_has_basis(uv: Vector2, point: Vector3, corners: PackedVector3Array) -> bool:
+	# Clipping interpolates both UVs and positions. All valid convex weights
+	# for a given UV lie on this interval, even for a tapered non-parallelogram.
+	var base := corners[0] * (1.0 - uv.x - uv.y) + corners[1] * uv.x + corners[3] * uv.y
+	var mixed := corners[0] - corners[1] + corners[2] - corners[3]
+	var first := base + mixed * maxf(0.0, uv.x + uv.y - 1.0)
+	var last := base + mixed * minf(uv.x, uv.y)
+	return _point_segment_distance(point, first, last) < 0.0003
 
 
 func _has_tapered_tip(segments: Array[Dictionary]) -> bool:
@@ -577,12 +749,29 @@ func _old_cracks_remain(previous: Array[Dictionary], current: Array[Dictionary])
 func _crack_distance(point: Vector3, segments: Array[Dictionary]) -> float:
 	var closest := INF
 	for segment in segments:
+		if not bool(segment.get("has_centerline", true)):
+			continue
 		closest = minf(closest, _point_segment_distance(point, segment.a, segment.b))
 	return closest
 
 
+func _uncovered_contact(cover: Chunk) -> Vector3:
+	var cracks := cover.get_surface_crack_segments()
+	for fraction: float in [0.35, 0.5, 0.65]:
+		for i in cover.face_points.size():
+			var boundary: Vector3 = Vector3(cover.face_points[i]).lerp(cover.face_points[(i + 1) % cover.face_points.size()], 0.43)
+			var point := cover.face_center.lerp(boundary, fraction)
+			if not _visible_crack_covers(point, cracks) and _crack_distance(point, cracks) > 0.025:
+				return point
+	return Vector3.INF
+
+
 func _visible_crack_covers(point: Vector3, segments: Array[Dictionary]) -> bool:
 	for segment in segments:
+		if segment.has("polygon"):
+			if _convex_contains(point, segment.polygon, segment.normal, 0.00001):
+				return true
+			continue
 		var travel := Vector3(segment.b) - Vector3(segment.a)
 		var side := Vector3(segment.side_a) + Vector3(segment.side_b)
 		var normal := travel.cross(side).normalized()

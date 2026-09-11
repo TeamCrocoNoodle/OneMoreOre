@@ -95,14 +95,14 @@ func _impact(chunk: Chunk, index: int) -> Vector3:
 
 
 func _validate_partition(chunk: Chunk, label: String) -> Array[Dictionary]:
-	var before := chunk.get_visible_crack_segments().duplicate(true)
+	var before := chunk.get_fracture_crack_segments().duplicate(true)
 	var before_rays: Array = chunk.light_node.get("_rays").duplicate(true) if is_instance_valid(chunk.light_node) else []
 	var before_pulses: int = chunk.light_node.pulse_count if is_instance_valid(chunk.light_node) else 0
 	var started := Time.get_ticks_usec()
 	var fragments: Array[Dictionary] = chunk.build_fracture_fragments()
 	print("FRACTURE_CASE ", label, " pieces=", fragments.size(), " cracks=", before.size(), " build_ms=", (Time.get_ticks_usec() - started) / 1000.0)
 	_check(chunk.destroyed and fragments.size() >= 2 and fragments.size() <= 18, label + ": destruction produces multiple bounded fragments")
-	_check(chunk.get_visible_crack_segments() == before, label + ": fracture generation preserves the accumulated visible cracks")
+	_check(chunk.get_fracture_crack_segments() == before, label + ": fracture generation preserves the accumulated visible front cuts")
 	if is_instance_valid(chunk.light_node):
 		_check(chunk.light_node.get("_rays") == before_rays and chunk.light_node.pulse_count == before_pulses, label + ": generating debris leaves the fatal light geometry and pulse unchanged")
 	if fragments.size() < 2:

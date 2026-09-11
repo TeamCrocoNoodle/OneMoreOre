@@ -26,7 +26,9 @@ Godot 4.7.2 / GDScript로 만든 3D 카툰 채굴 프로토타입.
 
 균열은 굵은 두 갈래와 작은 곁가지를 가진 각진 경로로 자랍니다. 폭은 꺾임마다 불규칙하게 달라지고, 마지막 끝에서는 뾰족하게 좁아집니다. 양쪽 단면의 명암과 가운데의 어두운 틈으로 깊이를 표현합니다. 갈림길과 교차점에서는 균열의 윤곽을 합친 뒤 노출된 가장자리에만 단면을 만들어, 한 갈래의 벽이 다른 틈을 가로막지 않게 했습니다. 모서리 위치와 색도 이웃 단면끼리 공유해 연결하며, 균열이 둘러싼 돌 부분은 그대로 남습니다. 빛의 중심과 주변 번짐도 같은 폭과 가장자리를 사용하며, 파편은 이 균열의 경로를 따라 나뉩니다.
 
-빛줄기는 문틈에서 새어 나오는 빛처럼, 돌 안의 공통 광원에서 모든 실제 균열 선분을 통과해 넓은 빛띠로 펼쳐집니다. 밑변 양 끝은 금의 양 끝에 붙고, 연결된 균열은 멀리 뻗은 끝에서도 이어집니다. 보석의 수납 위치를 기준으로 방향을 잡으며, 얕은 조각에서는 광원의 깊이를 보정해 빛이 지나치게 벌어지지 않게 합니다. 균열 가까이는 밝고 멀어질수록 투명해지며, 곧은 경계도 먼 끝에서 살짝 부드러워집니다. 빛띠 사이의 어두운 간격을 남기고 균열 수에 따라 밝기를 조절해 돌 표면이 비쳐 보입니다. 좁은 틈 주변의 빛 번짐과 작은 마름모 반짝임이 이를 받쳐 줍니다.
+앞면뿐 아니라 경사진 모서리·옆면·뒷면도 실제 타격 위치에 금이 생깁니다. 길이와 폭은 기존 앞면 균열의 크기를 유지하며, 타격 위치에서 충분히 자란 금만 가까운 모서리를 넘어갑니다. 균열은 실제 메시의 이웃 면을 따라 꺾여 자라며, 모서리를 넘어갈 때 양쪽 면이 같은 경계를 공유합니다. 면에 붙은 균열을 실제 삼각형으로 잘라 돌 밖으로 떠다니지 않게 하고, 면의 경계에는 균열을 가로막는 단면을 만들지 않습니다. 꺾임의 안쪽 벽은 합쳐진 틈 안에서 연결하고, 양쪽 면이 만나는 곳도 같은 안쪽 끝점을 사용해 벽의 폭이 갑자기 사라지지 않게 했습니다. 이미 생긴 꺾임은 움직이지 않고 끝부분만 자랍니다. 조각의 연결 정보는 생성 시 저장하고 균열 메시 갱신은 타격 시에만 수행합니다.
+
+빛줄기는 문틈에서 새어 나오는 빛처럼, 돌 안의 공통 광원에서 모든 실제 균열 선분을 통과해 넓은 빛띠로 펼쳐집니다. 밑변 양 끝은 금의 양 끝에 붙고, 연결된 균열은 멀리 뻗은 끝에서도 이어집니다. 보석의 수납 위치에 광원을 유지해 앞·옆·뒤 각 면의 바깥쪽으로 빛이 나가며, 공통 투영 배율에 제한을 두어 얕은 조각에서도 지나치게 벌어지지 않게 합니다. 균열 가까이는 밝고 멀어질수록 투명해지며, 곧은 경계도 먼 끝에서 살짝 부드러워집니다. 빛띠 사이의 어두운 간격을 남기고 균열 수에 따라 밝기를 조절해 돌 표면이 비쳐 보입니다. 좁은 틈 주변의 빛 번짐과 작은 마름모 반짝임이 이를 받쳐 줍니다.
 
 체력이 0이 되면 누적된 균열을 경계로 돌조각이 여러 입체 파편으로 갈라집니다. 끊긴 균열 끝은 파괴 순간 가장자리까지 이어집니다. 파편의 앞면은 금 모양을 따르고, 두께는 각 파편의 폭과 면적에 맞춥니다. 뒤쪽은 비대칭으로 좁아지고 단면은 비스듬히 꺾여, 얇은 돌 부스러기와 두툼한 쐐기 모양이 섞여 나옵니다. 파편마다 다른 방향과 속도로 벌어져 회전하며 떨어지고, 새 단면은 밝은 돌 색으로 표시합니다. 파편 수와 수명에 제한을 두며, 돌을 초기화하면 남은 파편도 정리됩니다.
 
@@ -48,15 +50,21 @@ godot --headless --path . --log-file .godot/gem_light.log --script res://tests/v
 godot --headless --path . --log-file .godot/fracture.log --script res://tests/validate_fracture.gd
 godot --headless --path . --log-file .godot/crack_outline.log --script res://tests/validate_crack_outline.gd
 godot --headless --path . --log-file .godot/crack_surface.log --script res://tests/validate_crack_surface.gd
+godot --headless --path . --log-file .godot/all_face_cracks.log --script res://tests/validate_all_face_cracks.gd
+godot --headless --path . --log-file .godot/crack_wrap.log --script res://tests/validate_crack_wrap.gd
+godot --headless --path . --log-file .godot/crack_coalesce.log --script res://tests/validate_crack_coalesce.gd
 godot --headless --path . --log-file .godot/gems.log --script res://tests/validate_gems.gd
 godot --path . --log-file .godot/gem_capture.log --script res://tests/capture_gems.gd
 godot --path . --log-file .godot/capture.log -- --capture-sequence
 godot --path . --log-file .godot/crack_capture.log --script res://tests/capture_cracks.gd
+godot --path . --log-file .godot/all_face_capture.log --script res://tests/capture_all_face_cracks.gd
 ```
 
 첫 명령은 실제 물리 raycast와 입력 이벤트로 여섯 층의 채굴, 보석의 조각 내부 배치·소유 관계·은폐·등장·회수, 재생성 조건, 남은 효과 정리와 입력 장치별 조작을 확인합니다. 두 번째 명령은 여섯 등급의 체력별 색 전환, 타격 위치별 균열 누적, 실제 균열과 광선의 일치, 기존 피해 보존과 깊이 판정을 검증합니다. 세 번째 명령은 균열을 따른 파편 분할, 면적 보존, 입체 메시와 분리 동작·수량·수명을 검증합니다.
 
 균열 외곽과 표면 검증은 Y·T·X 교차, 고리 안의 돌 부분, 떨어진 균열, 가늘어진 끝과 실제 타격 이력을 검사합니다. 내부를 가로막는 단면이 없는지, 단면이 균열 밖으로 나오지 않는지, 입력 선분 순서를 바꿔도 같은 외곽이 나오는지 확인합니다.
+
+전체 면 검증은 실제 삼각형의 앞·옆·뒤 타격, 기존 크기와 1:1인 경로 길이, 표면에 붙은 균열과 모서리 연결, 각 면에서 나가는 빛, 기존 손상과 파괴 시 정리를 확인합니다. 매핑·병합 검증은 접힌 면의 길이·폭·피복, 캐시 무효화와 같은 평면의 패치를 합치기 전후의 일치를 확인합니다. 전체 면 캡처는 실제 채굴 raycast로 세 방향에서 각각 때린 뒤 여러 각도의 확대 화면과 빛을 저장합니다. `artifacts/allfaces_side15_junction.png`에는 옆면을 15번 때린 갈림길의 내부 벽면을 더 확대해 저장합니다.
 
 보석 검증은 여섯 종류의 실제 메시·충돌체·수납 경계와 재구성, 등장 및 선택 상태를 확인합니다. 보석 캡처는 게임과 같은 조명으로 여섯 결정을 두 각도에서 렌더링하고, 강조 전후와 확대 화면을 `artifacts/gems_*.png`에 저장합니다.
 
