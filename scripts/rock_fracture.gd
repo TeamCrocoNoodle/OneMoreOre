@@ -462,6 +462,26 @@ func _triangle(surface: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, outward
 func _vertex(point: Vector2) -> int:
 	var key := _key(point)
 	if not _vertex_ids.has(key):
+		# Two lines compute their shared crossing independently. Float error
+		# can put that one crossing on opposite sides of a quantization border.
+		# Weld neighboring bins geometrically as well as by their rounded key;
+		# otherwise a crack appears to stop just short of another edge and a
+		# face walk doubles back through the resulting false bridge.
+		var nearest := -1
+		var distance_squared := EPS * EPS
+		for x in range(-1, 2):
+			for y in range(-1, 2):
+				var neighbor := key + Vector2i(x, y)
+				if not _vertex_ids.has(neighbor):
+					continue
+				var index := int(_vertex_ids[neighbor])
+				var candidate := _vertices[index].distance_squared_to(point)
+				if candidate < distance_squared:
+					nearest = index
+					distance_squared = candidate
+		if nearest >= 0:
+			_vertex_ids[key] = nearest
+			return nearest
 		_vertex_ids[key] = _vertices.size()
 		_vertices.append(Vector2(key) * EPS)
 	return int(_vertex_ids[key])

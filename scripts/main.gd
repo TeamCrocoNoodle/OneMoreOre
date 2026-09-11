@@ -149,6 +149,7 @@ func _warm_gem_renderer() -> void:
 	ribbon.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for vertex: Vector3 in [Vector3(-0.5, -0.02, 0), Vector3(0.5, -0.02, 0), Vector3(0.5, 0.02, 0)]:
 		ribbon.set_normal(Vector3.BACK)
+		ribbon.set_color(Color(0.12, 0.15, 0.16))
 		ribbon.add_vertex(vertex)
 	dark_crack.mesh = ribbon.commit()
 	dark_crack.material_override = chunks[0]._crack_mesh.material_override

@@ -74,6 +74,7 @@ func _run() -> void:
 			_check(cover.get_visible_crack_segments().size() <= 9 and _light_matches_cracks(cover), "Sixteen strikes at one point deepen a compact crack network and illuminate every remaining segment")
 	_validate_spatial_damage()
 	_validate_crack_density()
+	_validate_miter_contacts()
 
 	var collectible := _make_gem(5)
 	var neighboring_cover := _make_chunk()
@@ -140,6 +141,8 @@ func _validate_spatial_damage() -> void:
 	var first: Array[Dictionary] = normal.get_visible_crack_segments().duplicate(true)
 	_check(normal.impact_count == 1 and normal.latest_impact_local.distance_to(point_a) < 0.001, "An ordinary stone records its first actual off-center impact")
 	_check(_crack_distance(point_a, first) < 0.001, "Visible ordinary-stone cracks begin at the actual first strike")
+	_check(_has_tapered_tip(first), "The first strike creates a visible fissure that narrows to a sharp free tip")
+	_check(_has_angular_bend(first), "The first strike creates a distinctly angled path instead of straight radial spokes")
 	normal.hit(0.25, normal.mesh_instance.to_global(point_b))
 	var second: Array[Dictionary] = normal.get_visible_crack_segments().duplicate(true)
 	_check(normal.impact_count == 2 and normal.latest_impact_local.distance_to(point_b) < 0.001, "A second ordinary-stone hit moves the latest crack origin")
@@ -193,13 +196,22 @@ func _validate_spatial_damage() -> void:
 	var tangent := (point_b - point_a).normalized()
 	var bitangent := cover.direction.cross(tangent).normalized()
 	var last_nearby := point_b
+	var first_cycle_connections := -1
+	var stable_connections := true
 	for i in range(128):
 		last_nearby = point_b + tangent * float(i % 7 - 3) * 0.001 + bitangent * float(i % 5 - 2) * 0.001
 		cover.hit(0.002, cover.mesh_instance.to_global(last_nearby))
+		var connections := _contact_connection_stats(cover.get_visible_crack_segments())
+		if i == 34:
+			first_cycle_connections = int(connections.count)
+		elif i > 34:
+			stable_connections = stable_connections and int(connections.count) == first_cycle_connections
 	var repeated: Array[Dictionary] = cover.get_visible_crack_segments().duplicate(true)
+	var connection_stats := _contact_connection_stats(repeated)
 	_check(cover.impact_count == 130 and cover.latest_impact_local.distance_to(last_nearby) < 0.001, "Every repeated nearby strike updates the latest impact")
 	_check(_visible_crack_covers(last_nearby, repeated) and _old_cracks_remain(before_move, repeated), "Repeated nearby hits keep old damage and leave the current strike covered by an actual visible crack ribbon")
-	_check(repeated.size() <= 18 and _large_crack_groups(repeated) <= 2, "Nearby hits stay within two compact crack networks instead of adding a fan or connector for every contact")
+	_check(repeated.size() <= 32 and int(connection_stats.major_segments) <= 18 and _large_crack_groups(repeated) <= 2 and float(connection_stats.length) < 0.01, "Nearby hits keep two compact networks and less than one centimetre of extra contact connections")
+	_check(stable_connections, "Replaying all 35 nearby contact positions adds no further connections after their first complete cycle")
 	_check(_light_matches_cracks(cover), "Repeated pulses remain bounded and attached to the actual visible cracks")
 	_check(_projected_sheets_follow_source(cover), "Repeated hits preserve one coherent projection through all retained crack edges")
 	_check(_halo_follows_cracks(cover), "Repeated nearby damage keeps its halo centered on the accumulated visible crack traces")
@@ -242,6 +254,54 @@ func _validate_crack_density() -> void:
 	_check(contacts_covered, "Every scattered strike remains covered by its actual visible crack ribbon")
 	_check(history_preserved, "Adding scattered contact connections preserves earlier visible crack traces")
 	_check(all_segments_lit, "Scattered strikes track every crack exactly once and suppress geometry on the fatal strike")
+
+
+func _validate_miter_contacts() -> void:
+	var cover := _make_chunk()
+	cover.configure_gem_cover(_make_gem(5), 5)
+	var first_point: Vector3 = cover.face_center.lerp(cover.face_points[0], 0.50)
+	cover.hit(0.25, cover.mesh_instance.to_global(first_point))
+	var cracks := cover.get_visible_crack_segments()
+	var miter_point := Vector3.ZERO
+	var found_miter := false
+	for segment in cracks:
+		var travel := Vector3(segment.b) - Vector3(segment.a)
+		for end_key: String in ["a", "b"]:
+			var endpoint: Vector3 = segment[end_key]
+			var other: Vector3 = segment["b" if end_key == "a" else "a"]
+			for sign_value: float in [-1.0, 1.0]:
+				var candidate := endpoint + Vector3(segment["side_" + end_key]) * sign_value * 0.85 + (other - endpoint) * 0.01
+				var t := (candidate - Vector3(segment.a)).dot(travel) / travel.length_squared()
+				if (t < -0.0001 or t > 1.0001) and _actual_ribbon_covers(candidate, cracks, cover.direction):
+					miter_point = candidate
+					found_miter = true
+					break
+			if found_miter:
+				break
+		if found_miter:
+			break
+	_check(found_miter, "The contact fixture samples a real miter overhang beyond a segment's finite centerline range")
+	if found_miter:
+		var before := int(_contact_connection_stats(cracks).count)
+		cover.hit(0.01, cover.mesh_instance.to_global(miter_point))
+		cracks = cover.get_visible_crack_segments()
+		_check(int(_contact_connection_stats(cracks).count) == before and cover.latest_impact_local.distance_to(miter_point) < 0.0001, "Striking an already rendered miter records the contact without adding a redundant connection")
+	var outside_point := Vector3.ZERO
+	var found_outside := false
+	for segment in cracks:
+		if float(segment.width_b) < 0.00001:
+			var candidate := Vector3(segment.b) + (Vector3(segment.b) - Vector3(segment.a)).normalized() * 0.01
+			if not _actual_ribbon_covers(candidate, cracks, cover.direction):
+				outside_point = candidate
+				found_outside = true
+				break
+	_check(found_outside, "The contact fixture also samples uncovered stone just beyond a tapering crack tip")
+	if found_outside:
+		var before := int(_contact_connection_stats(cracks).count)
+		cover.hit(0.01, cover.mesh_instance.to_global(outside_point))
+		cracks = cover.get_visible_crack_segments()
+		_check(int(_contact_connection_stats(cracks).count) > before and _crack_distance(outside_point, cracks) < 0.0001 and _visible_crack_covers(outside_point, cracks), "Striking genuinely uncovered stone adds a connection at that actual contact instead of ignoring it")
+	_check(_light_matches_cracks(cover), "Miter and uncovered-tip contacts retain exact one-to-one crack light geometry")
 
 
 func _light_matches_cracks(cover: Chunk) -> bool:
@@ -315,6 +375,8 @@ func _light_matches_cracks(cover: Chunk) -> bool:
 		var expected_a := cover.mesh_instance.to_global(Vector3(segments[i].a) + normal * Light.CRACK_OFFSET)
 		var expected_b := cover.mesh_instance.to_global(Vector3(segments[i].b) + normal * Light.CRACK_OFFSET)
 		if fissures.to_global(local_a).distance_to(expected_a) > 0.002 or fissures.to_global(local_b).distance_to(expected_b) > 0.002:
+			return false
+		if not _ribbon_matches_sides(cover, fissures, vertices, i, segments[i], Light.CRACK_CORE_RATIO, Light.CRACK_OFFSET):
 			return false
 	return true
 
@@ -420,6 +482,8 @@ func _halo_follows_cracks(cover: Chunk) -> bool:
 	if glow_vertices.size() != segments.size() * 6 or core_vertices.size() != glow_vertices.size():
 		return false
 	var normal := cover.direction.normalized()
+	if Light.CRACK_CORE_RATIO <= 0.0 or Light.CRACK_CORE_RATIO >= 1.0 or Light.CRACK_GLOW_RATIO <= 1.0:
+		return false
 	for i in range(segments.size()):
 		var first := i * 6
 		# Measure rendered geometry in the stone mesh's coordinates so a changed
@@ -434,12 +498,67 @@ func _halo_follows_cracks(cover: Chunk) -> bool:
 		# an independently placed, tilted, or floating glow is not.
 		if absf(delta_a.dot(normal) - delta_b.dot(normal)) > 0.001 or absf(delta_a.dot(normal)) > 0.05:
 			return false
-		var halo_width := halo.to_global(glow_vertices[first]).distance_to(halo.to_global(glow_vertices[first + 1]))
-		var core_width := core.to_global(core_vertices[first]).distance_to(core.to_global(core_vertices[first + 1]))
-		var side := cover.mesh_instance.to_local(halo.to_global(glow_vertices[first + 1])) - cover.mesh_instance.to_local(halo.to_global(glow_vertices[first]))
-		if halo_width <= core_width or absf(side.normalized().dot(normal)) > 0.001 or absf(side.normalized().dot((b - a).normalized())) > 0.001:
+		# At a bend the true endpoint offset is a miter, not perpendicular to
+		# either adjacent tangent. Compare both rendered edges to that actual
+		# offset, including the zero-width tip, instead of assuming rectangles.
+		if not _ribbon_matches_sides(cover, halo, glow_vertices, i, segments[i], Light.CRACK_GLOW_RATIO, Light.GLOW_OFFSET):
+			return false
+		if not _ribbon_matches_sides(cover, core, core_vertices, i, segments[i], Light.CRACK_CORE_RATIO, Light.CRACK_OFFSET):
 			return false
 	return not segments.is_empty()
+
+
+func _ribbon_matches_sides(cover: Chunk, node: MeshInstance3D, vertices: PackedVector3Array, index: int, segment: Dictionary, multiplier: float, depth: float) -> bool:
+	if not segment.has_all(["width_a", "width_b", "side_a", "side_b"]):
+		return false
+	var normal := cover.direction.normalized()
+	var perpendicular := normal.cross(Vector3(segment.b) - Vector3(segment.a)).normalized()
+	var side_a: Vector3 = segment.side_a
+	var side_b: Vector3 = segment.side_b
+	var width_a := float(segment.width_a)
+	var width_b := float(segment.width_b)
+	if width_a < 0.0 or width_b < 0.0 or absf(float(segment.width) - maxf(width_a, width_b)) > 0.00001:
+		return false
+	for pair: Array in [[side_a, width_a], [side_b, width_b]]:
+		var side: Vector3 = pair[0]
+		# A limited miter can shorten the perpendicular component at a sharp
+		# corner. The actual offset remains the authoritative rendered edge.
+		if not side.is_finite() or absf(side.dot(normal)) > 0.00001 or side.dot(perpendicular) < -0.00001:
+			return false
+		if float(pair[1]) <= 0.000001 and side.length() > 0.00001:
+			return false
+	var a := Vector3(segment.a) + normal * depth
+	var b := Vector3(segment.b) + normal * depth
+	var expected: Array[Vector3] = [a - side_a * multiplier, a + side_a * multiplier, b + side_b * multiplier, a - side_a * multiplier, b + side_b * multiplier, b - side_b * multiplier]
+	for corner in 6:
+		var actual := cover.mesh_instance.to_local(node.to_global(vertices[index * 6 + corner]))
+		if actual.distance_to(expected[corner]) > 0.00005:
+			return false
+	return true
+
+
+func _has_tapered_tip(segments: Array[Dictionary]) -> bool:
+	for segment in segments:
+		if float(segment.get("width_a", 0.0)) > 0.005 and float(segment.get("width_b", 1.0)) < 0.00001:
+			var joined := false
+			for other in segments:
+				if other != segment and (_point_segment_distance(segment.b, other.a, other.b) < 0.0001):
+					joined = true
+			if not joined:
+				return true
+	return false
+
+
+func _has_angular_bend(segments: Array[Dictionary]) -> bool:
+	for first in segments:
+		for second in segments:
+			if first == second or int(first.hit_id) != int(second.hit_id) or Vector3(first.b).distance_to(second.a) > 0.0001:
+				continue
+			var incoming := (Vector3(first.b) - Vector3(first.a)).normalized()
+			var outgoing := (Vector3(second.b) - Vector3(second.a)).normalized()
+			if incoming.dot(outgoing) < cos(deg_to_rad(15.0)) and incoming.dot(outgoing) > -0.95:
+				return true
+	return false
 
 
 func _old_cracks_remain(previous: Array[Dictionary], current: Array[Dictionary]) -> bool:
@@ -464,11 +583,51 @@ func _crack_distance(point: Vector3, segments: Array[Dictionary]) -> float:
 
 func _visible_crack_covers(point: Vector3, segments: Array[Dictionary]) -> bool:
 	for segment in segments:
-		# Width is the rendered half-width. Contact already inside that ribbon
-		# should deepen it without adding a nearly coincident new centerline.
-		if _point_segment_distance(point, segment.a, segment.b) <= float(segment.width) + 0.001:
+		var travel := Vector3(segment.b) - Vector3(segment.a)
+		var side := Vector3(segment.side_a) + Vector3(segment.side_b)
+		var normal := travel.cross(side).normalized()
+		if normal.length_squared() < 0.5:
+			continue
+		if _actual_ribbon_covers(point, [segment], normal):
 			return true
 	return false
+
+
+func _actual_ribbon_covers(point: Vector3, segments: Array[Dictionary], normal: Vector3) -> bool:
+	var u := normal.cross(Vector3.UP).normalized()
+	if u.length_squared() < 0.1:
+		u = normal.cross(Vector3.RIGHT).normalized()
+	var v := normal.cross(u).normalized()
+	for segment in segments:
+		if absf((point - Vector3(segment.a)).dot(normal)) > 0.00001:
+			continue
+		var polygon := PackedVector2Array()
+		for corner: Vector3 in [Vector3(segment.a) - Vector3(segment.side_a), Vector3(segment.a) + Vector3(segment.side_a), Vector3(segment.b) + Vector3(segment.side_b), Vector3(segment.b) - Vector3(segment.side_b)]:
+			var delta := corner - point
+			polygon.append(Vector2(delta.dot(u), delta.dot(v)))
+		if Geometry2D.is_point_in_polygon(Vector2.ZERO, polygon):
+			return true
+		# Contacts on an actual edge still count, including a zero-width tip.
+		for i in polygon.size():
+			var edge := polygon[(i + 1) % polygon.size()] - polygon[i]
+			var t := clampf(-polygon[i].dot(edge) / maxf(edge.length_squared(), 0.0000000001), 0.0, 1.0)
+			if (polygon[i] + edge * t).length() < 0.00001:
+				return true
+	return false
+
+
+func _contact_connection_stats(segments: Array[Dictionary]) -> Dictionary:
+	var counts: Dictionary = {}
+	for segment in segments:
+		counts[int(segment.hit_id)] = int(counts.get(int(segment.hit_id), 0)) + 1
+	var result := {"count": 0, "length": 0.0, "major_segments": 0}
+	for segment in segments:
+		if int(counts[int(segment.hit_id)]) > 3:
+			result.major_segments += 1
+		else:
+			result.count += 1
+			result.length += Vector3(segment.a).distance_to(segment.b)
+	return result
 
 
 func _point_segment_distance(point: Vector3, a: Vector3, b: Vector3) -> float:

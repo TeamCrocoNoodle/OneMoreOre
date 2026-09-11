@@ -24,6 +24,8 @@ Godot 4.7.2 / GDScript로 만든 3D 카툰 채굴 프로토타입.
 
 돌조각에는 큰 균열 묶음이 최대 두 개 생기며, 각 묶음은 세 갈래로 뻗습니다. 이후 타격은 가장 가까운 기존 금에 짧게 연결하고, 이미 금이 간 곳은 그 금을 깊게 만듭니다. 길이와 두께의 성장을 제한해 여러 번 때려도 돌 표면을 잔금으로 뒤덮지 않도록 했습니다. 보석을 품은 조각에서는 실제로 열린 균열을 따라 빛이 새며, 새로 때린 부위와 균열의 방향에 맞춰 빛줄기도 달라집니다. 보석을 담지 않은 주변 조각은 빛을 내지 않습니다. 돌의 회전과 타격 시 흔들림에도 균열과 빛이 함께 움직입니다.
 
+균열은 굵은 두 갈래와 작은 곁가지를 가진 각진 경로로 자랍니다. 폭은 꺾임마다 불규칙하게 달라지고, 마지막 끝에서는 뾰족하게 좁아집니다. 양쪽 단면의 명암과 가운데의 어두운 틈으로 깊이를 표현합니다. 갈림길과 교차점에서는 균열의 윤곽을 합친 뒤 노출된 가장자리에만 단면을 만들어, 한 갈래의 벽이 다른 틈을 가로막지 않게 했습니다. 모서리 위치와 색도 이웃 단면끼리 공유해 연결하며, 균열이 둘러싼 돌 부분은 그대로 남습니다. 빛의 중심과 주변 번짐도 같은 폭과 가장자리를 사용하며, 파편은 이 균열의 경로를 따라 나뉩니다.
+
 빛줄기는 문틈에서 새어 나오는 빛처럼, 돌 안의 공통 광원에서 모든 실제 균열 선분을 통과해 넓은 빛띠로 펼쳐집니다. 밑변 양 끝은 금의 양 끝에 붙고, 연결된 균열은 멀리 뻗은 끝에서도 이어집니다. 보석의 수납 위치를 기준으로 방향을 잡으며, 얕은 조각에서는 광원의 깊이를 보정해 빛이 지나치게 벌어지지 않게 합니다. 균열 가까이는 밝고 멀어질수록 투명해지며, 곧은 경계도 먼 끝에서 살짝 부드러워집니다. 빛띠 사이의 어두운 간격을 남기고 균열 수에 따라 밝기를 조절해 돌 표면이 비쳐 보입니다. 좁은 틈 주변의 빛 번짐과 작은 마름모 반짝임이 이를 받쳐 줍니다.
 
 체력이 0이 되면 누적된 균열을 경계로 돌조각이 여러 입체 파편으로 갈라집니다. 끊긴 균열 끝은 파괴 순간 가장자리까지 이어집니다. 파편의 앞면은 금 모양을 따르고, 두께는 각 파편의 폭과 면적에 맞춥니다. 뒤쪽은 비대칭으로 좁아지고 단면은 비스듬히 꺾여, 얇은 돌 부스러기와 두툼한 쐐기 모양이 섞여 나옵니다. 파편마다 다른 방향과 속도로 벌어져 회전하며 떨어지고, 새 단면은 밝은 돌 색으로 표시합니다. 파편 수와 수명에 제한을 두며, 돌을 초기화하면 남은 파편도 정리됩니다.
@@ -44,16 +46,21 @@ Godot 실행 파일을 PATH에 등록한 경우:
 godot --headless --path . --log-file .godot/integration.log --script res://tests/validate_mining.gd
 godot --headless --path . --log-file .godot/gem_light.log --script res://tests/validate_gem_light.gd
 godot --headless --path . --log-file .godot/fracture.log --script res://tests/validate_fracture.gd
+godot --headless --path . --log-file .godot/crack_outline.log --script res://tests/validate_crack_outline.gd
+godot --headless --path . --log-file .godot/crack_surface.log --script res://tests/validate_crack_surface.gd
 godot --headless --path . --log-file .godot/gems.log --script res://tests/validate_gems.gd
 godot --path . --log-file .godot/gem_capture.log --script res://tests/capture_gems.gd
 godot --path . --log-file .godot/capture.log -- --capture-sequence
+godot --path . --log-file .godot/crack_capture.log --script res://tests/capture_cracks.gd
 ```
 
 첫 명령은 실제 물리 raycast와 입력 이벤트로 여섯 층의 채굴, 보석의 조각 내부 배치·소유 관계·은폐·등장·회수, 재생성 조건, 남은 효과 정리와 입력 장치별 조작을 확인합니다. 두 번째 명령은 여섯 등급의 체력별 색 전환, 타격 위치별 균열 누적, 실제 균열과 광선의 일치, 기존 피해 보존과 깊이 판정을 검증합니다. 세 번째 명령은 균열을 따른 파편 분할, 면적 보존, 입체 메시와 분리 동작·수량·수명을 검증합니다.
 
+균열 외곽과 표면 검증은 Y·T·X 교차, 고리 안의 돌 부분, 떨어진 균열, 가늘어진 끝과 실제 타격 이력을 검사합니다. 내부를 가로막는 단면이 없는지, 단면이 균열 밖으로 나오지 않는지, 입력 선분 순서를 바꿔도 같은 외곽이 나오는지 확인합니다.
+
 보석 검증은 여섯 종류의 실제 메시·충돌체·수납 경계와 재구성, 등장 및 선택 상태를 확인합니다. 보석 캡처는 게임과 같은 조명으로 여섯 결정을 두 각도에서 렌더링하고, 강조 전후와 확대 화면을 `artifacts/gems_*.png`에 저장합니다.
 
-마지막 명령은 보석이 든 한 조각의 서로 다른 세 위치를 번갈아 때리면서 여섯 빛줄기와 보석 등장·획득을 재생하고, 일반 돌조각의 파괴도 확인합니다. `artifacts/lights_*.png`에는 색 단계별 화면을, `artifacts/impacts_*.png`에는 첫 세 타격의 빛과 누적 균열을, `artifacts/fracture_*.png`에는 파괴 직전부터 파편이 벌어지고 떨어지는 화면을 저장합니다.
+`--capture-sequence` 명령은 보석이 든 한 조각의 서로 다른 세 위치를 번갈아 때리면서 여섯 빛줄기와 보석 등장·획득을 재생하고, 일반 돌조각의 파괴도 확인합니다. `artifacts/lights_*.png`에는 색 단계별 화면을, `artifacts/impacts_*.png`에는 첫 세 타격의 빛과 누적 균열을, `artifacts/fracture_*.png`에는 파괴 직전부터 파편이 벌어지고 떨어지는 화면을 저장합니다. 마지막 명령은 실제 돌을 확대해 1·3·8·15회 타격 후 빛이 가라앉은 균열, 발광 상태와 비스듬한 시점을 `artifacts/cracks_*.png`에 저장합니다.
 
 Windows / Godot 4.7.2 Compatibility 렌더러에서 실행 및 화면 검증을 수행했습니다. 입력 이벤트 자동 검증은 실제 Android·iOS 기기와 물리 컨트롤러 테스트를 대체하지 않습니다.
 

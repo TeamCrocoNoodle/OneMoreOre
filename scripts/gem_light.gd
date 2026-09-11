@@ -9,8 +9,8 @@ const BEAM_SHADER := preload("res://shaders/gem_beam.gdshader")
 const CRACK_OFFSET := 0.012
 const GLOW_OFFSET := 0.010
 const RAY_OFFSET := 0.018
-const CRACK_CORE_RATIO := 0.78
-const CRACK_GLOW_RATIO := 3.0
+const CRACK_CORE_RATIO := 0.42
+const CRACK_GLOW_RATIO := 1.7
 const SHEET_OPACITY := 0.26
 const TIER_COLORS: Array[Color] = [
 	Color("f3faff"), Color("64ff86"), Color("4896ff"),
@@ -305,13 +305,14 @@ func _draw_cracks() -> void:
 		var b: Vector3 = segment.b + _normal * CRACK_OFFSET
 		# Width is the stone renderer's complete visible half-width, including
 		# weight and growth. Applying either again would misalign the two ribbons.
-		var side := _normal.cross(b - a).normalized() * float(segment.width) * CRACK_CORE_RATIO
+		var side := _normal.cross(b - a).normalized() * float(segment.width)
+		var side_a: Vector3 = segment.get("side_a", side)
+		var side_b: Vector3 = segment.get("side_b", side)
 		var intensity := 1.0 if bool(segment.fresh) else 0.65
-		_add_quad(surface, a - side, a + side, b - side, b + side, intensity)
+		_add_quad(surface, a - side_a * CRACK_CORE_RATIO, a + side_a * CRACK_CORE_RATIO, b - side_b * CRACK_CORE_RATIO, b + side_b * CRACK_CORE_RATIO, intensity)
 		var glow_a: Vector3 = segment.a + _normal * GLOW_OFFSET
 		var glow_b: Vector3 = segment.b + _normal * GLOW_OFFSET
-		var glow_side := _normal.cross(b - a).normalized() * float(segment.width) * CRACK_GLOW_RATIO
-		_add_quad(glow_surface, glow_a - glow_side, glow_a + glow_side, glow_b - glow_side, glow_b + glow_side, intensity)
+		_add_quad(glow_surface, glow_a - side_a * CRACK_GLOW_RATIO, glow_a + side_a * CRACK_GLOW_RATIO, glow_b - side_b * CRACK_GLOW_RATIO, glow_b + side_b * CRACK_GLOW_RATIO, intensity)
 	_crack_mesh.mesh = surface.commit()
 	_glow_mesh.mesh = glow_surface.commit()
 

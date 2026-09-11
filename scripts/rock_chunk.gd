@@ -6,6 +6,7 @@ extends StaticBody3D
 const STONE_SHADER := preload("res://shaders/stone.gdshader")
 const GemLight := preload("res://scripts/gem_light.gd")
 const Fracture := preload("res://scripts/rock_fracture.gd")
+const CrackOutline := preload("res://scripts/crack_outline.gd")
 const GEM_COVER_HEALTH := 16.0
 const MAX_CRACK_NETWORKS := 2
 
@@ -38,6 +39,7 @@ var _shape: CollisionShape3D
 var _crack_mesh: MeshInstance3D
 var _crack_material: StandardMaterial3D
 var _crack_segments: Array[Dictionary] = []
+var _crack_contours: Array[PackedVector3Array] = []
 var _crack_networks: Array[Dictionary] = []
 var _crack_connectors: Array[Dictionary] = []
 var _face_extent: float = 0.5
@@ -89,7 +91,8 @@ func configure(data: Dictionary, p_layer_index: int) -> void:
 	_configure_gem_socket(data["mesh"])
 	_crack_material = StandardMaterial3D.new()
 	_crack_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_crack_material.albedo_color = Color(0.065, 0.075, 0.095)
+	_crack_material.albedo_color = Color.WHITE
+	_crack_material.vertex_color_use_as_albedo = true
 	_crack_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_crack_material.disable_receive_shadows = true
 	_crack_mesh = MeshInstance3D.new()
@@ -452,7 +455,7 @@ func _nearest_visible_crack(point: Vector3) -> Dictionary:
 		var t := (point - a).dot(edge) / maxf(edge.length_squared(), 0.00000001)
 		var target := a + edge * clampf(t, 0.0, 1.0)
 		var distance := point.distance_to(target)
-		if t >= -0.00001 and t <= 1.00001 and distance <= float(segment["width"]):
+		if _point_in_crack_ribbon(point, segment):
 			covered = true
 		if distance < nearest_distance:
 			nearest_distance = distance
@@ -460,6 +463,27 @@ func _nearest_visible_crack(point: Vector3) -> Dictionary:
 	if not closest.is_empty():
 		closest["covered"] = covered
 	return closest
+
+
+func _point_in_crack_ribbon(point: Vector3, segment: Dictionary) -> bool:
+	# A miter extends beyond the centerline's endpoint, so a distance-to-line
+	# test with a finite t range would add cracks on already opened corners.
+	var a: Vector3 = segment["a"]
+	var b: Vector3 = segment["b"]
+	var side_a: Vector3 = segment["side_a"]
+	var side_b: Vector3 = segment["side_b"]
+	var vertices := [a - side_a, a + side_a, b + side_b, b - side_b]
+	var positive := false
+	var negative := false
+	for i in 4:
+		var edge: Vector3 = vertices[(i + 1) % 4] - vertices[i]
+		var signed_distance := direction.dot(edge.cross(point - Vector3(vertices[i])))
+		var tolerance := edge.length() * 0.00001
+		positive = positive or signed_distance > tolerance
+		negative = negative or signed_distance < -tolerance
+		if positive and negative:
+			return false
+	return true
 
 
 func _add_crack_connector(origin: Vector3, target: Vector3) -> void:
@@ -476,19 +500,26 @@ func _build_crack_paths(origin: Vector3) -> Array[Dictionary]:
 	var branch_count := 3
 	var step_count := 3
 	var edge_offset := _rng.randi_range(0, face_points.size() - 1)
+	var reaches := [0.0, 0.20, 0.48, 1.0]
+	var edge_fractions := [0.0, 0.50, 0.25]
+	var branch_weights := [1.0, 0.84, 0.58]
 	for branch in branch_count:
-		var edge_index := (edge_offset + int(float(branch) / float(branch_count) * face_points.size())) % face_points.size()
+		# Two stronger arms form the broken main seam; a smaller third arm
+		# branches off it. Keep the same bounded three-arm topology.
+		var edge_index := (edge_offset + int(float(edge_fractions[branch]) * face_points.size())) % face_points.size()
 		var target := _clamp_to_face(face_points[edge_index].lerp(face_points[(edge_index + 1) % face_points.size()], _rng.randf_range(0.15, 0.70)))
 		var previous := origin
 		var travel := target - origin
 		var sideways := direction.cross(travel).normalized()
+		var jog := minf(travel.length() * 0.17, _face_extent * 0.19) * (-1.0 if _rng.randf() < 0.5 else 1.0)
+		var width_profile := [1.0, _rng.randf_range(1.05, 1.28), _rng.randf_range(0.70, 0.90), 0.50]
 		for step in step_count:
-			var progress := float(step + 1) / float(step_count)
+			var progress: float = reaches[step + 1]
 			var point := origin.lerp(target, progress)
 			if step < step_count - 1:
-				point += sideways * _rng.randf_range(-1.0, 1.0) * minf(0.035, travel.length() * 0.08) * sin(progress * PI)
+				point += sideways * jog * (0.78 if step == 0 else -0.50)
 			point = _clamp_to_face(point)
-			paths.append({"a": previous, "b": point, "start": float(step) / float(step_count), "end": progress, "branch": branch, "weight": 1.0})
+			paths.append({"a": previous, "b": point, "start": reaches[step], "end": progress, "branch": branch, "weight": branch_weights[branch], "profile_a": width_profile[step], "profile_b": width_profile[step + 1]})
 			previous = point
 	return paths
 
@@ -498,7 +529,7 @@ func _redraw_cracks(damage_ratio: float) -> void:
 	for network in _crack_networks:
 		var hits: float = network["hits"]
 		var growth := maxf(float(network["growth"]), clampf(0.25 + minf(hits, 6.0) * 0.055 + damage_ratio * 0.24, 0.0, 0.82))
-		var width := maxf(float(network["width"]), 0.0105 + damage_ratio * 0.006 + minf(maxf(hits - 1.0, 0.0), 6.0) * 0.0004)
+		var width := maxf(float(network["width"]), _crack_base_width(damage_ratio) + minf(maxf(hits - 1.0, 0.0), 6.0) * 0.0008)
 		network["growth"] = growth
 		network["width"] = width
 		var paths: Array = network["segments"]
@@ -509,36 +540,156 @@ func _redraw_cracks(damage_ratio: float) -> void:
 				continue
 			var a: Vector3 = path["a"]
 			var end: Vector3 = path["b"]
-			var b := a.lerp(end, clampf((branch_growth - start) / (float(path["end"]) - start), 0.0, 1.0))
+			var fraction := clampf((branch_growth - start) / (float(path["end"]) - start), 0.0, 1.0)
+			var b := a.lerp(end, fraction)
 			var weight: float = path["weight"]
-			_append_visible_crack(a, b, width * weight * (1.0 - start * 0.6), weight, int(network["hit_id"]), network["origin"])
+			var end_progress := lerpf(start, float(path["end"]), fraction)
+			var width_a := width * weight * float(path["profile_a"]) * sqrt(maxf(1.0 - start / branch_growth, 0.0))
+			var width_b := width * weight * lerpf(float(path["profile_a"]), float(path["profile_b"]), fraction) * sqrt(maxf(1.0 - end_progress / branch_growth, 0.0))
+			_append_visible_crack(a, b, width_a, width_b, weight, int(network["hit_id"]), network["origin"])
 	for connector in _crack_connectors:
-		var width := maxf(float(connector["width"]), (0.0105 + damage_ratio * 0.006 + minf(float(connector.get("hits", 1.0)), 6.0) * 0.0003) * 0.78)
+		var width := maxf(float(connector["width"]), (_crack_base_width(damage_ratio) + minf(float(connector.get("hits", 1.0)), 6.0) * 0.0005) * 0.64)
 		connector["width"] = width
 		var points: PackedVector3Array = connector["points"]
 		for i in points.size() - 1:
-			_append_visible_crack(points[i], points[i + 1], width, 0.78, int(connector["hit_id"]), connector["impact"])
+			_append_visible_crack(points[i], points[i + 1], width * 0.16, width, 0.64, int(connector["hit_id"]), connector["impact"])
+	_join_crack_edges()
 	# Fatal damage still supplies the complete final crack data to fracture and
 	# light provenance. The stone is hidden immediately, so its dark ribbon mesh
 	# would be uploaded and discarded before a single rendered frame could use it.
 	if health <= 0.0 or _crack_segments.is_empty():
 		return
+	_draw_crack_surface()
+
+
+func _draw_crack_surface() -> void:
+	_crack_contours = CrackOutline.build(_crack_segments, direction)
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var floor_color := Color(0.055, 0.067, 0.075)
 	for segment in _crack_segments:
 		var a: Vector3 = segment["a"] + direction * 0.006
 		var b: Vector3 = segment["b"] + direction * 0.006
-		var side := direction.cross(b - a).normalized() * float(segment["width"])
-		for vertex: Vector3 in [a - side, a + side, b + side, a - side, b + side, b - side]:
-			surface.set_normal(direction)
-			surface.add_vertex(vertex)
+		var side_a: Vector3 = segment["side_a"]
+		var side_b: Vector3 = segment["side_b"]
+		# Identical opaque floor triangles form the exact ribbon union. This
+		# preserves stone islands and disconnected cracks without filling holes.
+		_add_crack_strip(surface, a - side_a, b - side_b, a + side_a, b + side_b, floor_color, floor_color)
+	for contour in _crack_contours:
+		var inner := PackedVector3Array()
+		var colors := PackedColorArray()
+		for i in contour.size():
+			var point := contour[i]
+			var previous := contour[(i - 1 + contour.size()) % contour.size()]
+			var next := contour[(i + 1) % contour.size()]
+			var before := direction.cross(point - previous).normalized()
+			var after := direction.cross(next - point).normalized()
+			var inward := (before + after).normalized()
+			# A single inner corner and color are shared by the two neighboring
+			# walls, including three-way junctions and corners around stone islands.
+			var clearance := _nearest_crack_center_distance(point)
+			var inset := minf(clearance * 0.70 / maxf(inward.dot(after), 0.25), clearance * 1.45)
+			var candidate := point + inward * inset
+			for attempt in 6:
+				if inset <= 0.000001 or _point_in_crack_union(candidate):
+					break
+				inset *= 0.5
+				candidate = point + inward * inset
+			inner.append(candidate)
+			var tint := stone_color * (0.84 + inward.dot(Vector3(-0.45, 0.80, 0.40).normalized()) * 0.23)
+			tint.a = 1.0
+			colors.append(tint)
+		for i in contour.size():
+			var next := (i + 1) % contour.size()
+			var offset := direction * 0.0062
+			var vertices := [contour[i] + offset, inner[i] + offset, inner[next] + offset, contour[i] + offset, inner[next] + offset, contour[next] + offset]
+			var corner_colors := [colors[i], colors[i] * 0.74, colors[next] * 0.74, colors[i], colors[next] * 0.74, colors[next]]
+			for corner in 6:
+				var tint: Color = corner_colors[corner]
+				tint.a = 1.0
+				surface.set_normal(direction)
+				surface.set_color(tint)
+				surface.add_vertex(vertices[corner])
 	_crack_mesh.mesh = surface.commit()
 
 
-func _append_visible_crack(a: Vector3, b: Vector3, width: float, weight: float, hit_id: int, impact: Vector3) -> void:
+func _nearest_crack_center_distance(point: Vector3) -> float:
+	var closest := INF
+	for segment in _crack_segments:
+		var a: Vector3 = segment["a"]
+		var edge: Vector3 = segment["b"] - a
+		var t := clampf((point - a).dot(edge) / maxf(edge.length_squared(), 0.00000001), 0.0, 1.0)
+		closest = minf(closest, point.distance_squared_to(a + edge * t))
+	return sqrt(closest)
+
+
+func _point_in_crack_union(point: Vector3) -> bool:
+	for segment in _crack_segments:
+		if _point_in_crack_ribbon(point, segment):
+			return true
+	return false
+
+
+func _crack_base_width(damage_ratio: float) -> float:
+	return clampf(_face_extent * 0.038, 0.018, 0.032) + damage_ratio * 0.018
+
+
+func _append_visible_crack(a: Vector3, b: Vector3, width_a: float, width_b: float, weight: float, hit_id: int, impact: Vector3) -> void:
 	if a.distance_squared_to(b) <= 0.00000001:
 		return
-	_crack_segments.append({"a": a, "b": b, "width": width, "weight": weight, "hit_id": hit_id, "impact": impact})
+	var side := direction.cross(b - a).normalized()
+	_crack_segments.append({"a": a, "b": b, "width": maxf(width_a, width_b), "width_a": width_a, "width_b": width_b, "side_a": side * width_a, "side_b": side * width_b, "weight": weight, "hit_id": hit_id, "impact": impact})
+
+
+func _join_crack_edges() -> void:
+	var endpoints: Dictionary = {}
+	for i in _crack_segments.size():
+		for end_key: String in ["a", "b"]:
+			var point: Vector3 = _crack_segments[i][end_key]
+			var key := Vector3i(roundi(point.x * 100000.0), roundi(point.y * 100000.0), roundi(point.z * 100000.0))
+			if not endpoints.has(key):
+				endpoints[key] = []
+			endpoints[key].append({"index": i, "end": end_key})
+	for entries: Array in endpoints.values():
+		if entries.size() != 2 or entries[0]["end"] == entries[1]["end"]:
+			continue
+		var first: Dictionary = _crack_segments[int(entries[0]["index"])]
+		var second: Dictionary = _crack_segments[int(entries[1]["index"])]
+		if first["hit_id"] != second["hit_id"]:
+			continue
+		var first_side := direction.cross(Vector3(first["b"]) - Vector3(first["a"])).normalized()
+		var second_side := direction.cross(Vector3(second["b"]) - Vector3(second["a"])).normalized()
+		var miter := (first_side + second_side).normalized()
+		var factor := 1.0 / maxf(miter.dot(first_side), 0.65)
+		for entry: Dictionary in entries:
+			var segment: Dictionary = _crack_segments[int(entry["index"])]
+			var end_key: String = entry["end"]
+			segment["side_" + end_key] = miter * float(segment["width_" + end_key]) * factor
+	# Clamp both banks symmetrically to the real face so a broad root cannot
+	# float beyond the rock silhouette when the contact is close to an edge.
+	for segment in _crack_segments:
+		for end_key: String in ["a", "b"]:
+			var point: Vector3 = segment[end_key]
+			var side: Vector3 = segment["side_" + end_key]
+			var fraction := 1.0
+			for i in face_points.size():
+				var inward := direction.cross(face_points[(i + 1) % face_points.size()] - face_points[i]).normalized()
+				var projected := absf(inward.dot(side))
+				if projected > 0.000001:
+					fraction = minf(fraction, maxf(inward.dot(point - face_points[i]) - 0.002, 0.0) / projected)
+			segment["side_" + end_key] = side * fraction
+			segment["width_" + end_key] = float(segment["width_" + end_key]) * fraction
+		segment["width"] = maxf(float(segment["width_a"]), float(segment["width_b"]))
+
+
+func _add_crack_strip(surface: SurfaceTool, outer_a: Vector3, outer_b: Vector3, inner_a: Vector3, inner_b: Vector3, outer_color: Color, inner_color: Color) -> void:
+	var vertices := [outer_a, inner_a, inner_b, outer_a, inner_b, outer_b]
+	for i in 6:
+		surface.set_normal(direction)
+		var tint := inner_color if i in [1, 2, 4] else outer_color
+		tint.a = 1.0
+		surface.set_color(tint)
+		surface.add_vertex(vertices[i])
 
 
 func _average_points(points: PackedVector3Array) -> Vector3:
