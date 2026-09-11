@@ -7,8 +7,7 @@ const STONE_SHADER := preload("res://shaders/stone.gdshader")
 const GemLight := preload("res://scripts/gem_light.gd")
 const Fracture := preload("res://scripts/rock_fracture.gd")
 const GEM_COVER_HEALTH := 16.0
-const MAX_CRACK_NETWORKS := 16
-const MAX_CRACK_CONNECTORS := 32
+const MAX_CRACK_NETWORKS := 2
 
 var health: float = 3.0
 var max_health: float = 3.0
@@ -30,6 +29,9 @@ var gem_socket_center := Vector3.ZERO
 var gem_socket_radius: float = 0.0
 var contained_gem: WeakRef
 var _fracture_cache: Dictionary = {}
+var _fracture_cache_mesh: ArrayMesh
+var _fracture_source_mesh: ArrayMesh
+var _fracture_source_vertices := PackedVector3Array()
 
 var _material: ShaderMaterial
 var _shape: CollisionShape3D
@@ -105,6 +107,11 @@ func get_containment_planes() -> Array[Plane]:
 
 func _configure_gem_socket(mesh: ArrayMesh) -> void:
 	_containment_planes.clear()
+	if is_instance_valid(_fracture_source_mesh) and _fracture_source_mesh.changed.is_connected(_invalidate_fracture_source):
+		_fracture_source_mesh.changed.disconnect(_invalidate_fracture_source)
+	_invalidate_fracture_source()
+	_fracture_source_mesh = mesh
+	mesh.changed.connect(_invalidate_fracture_source)
 	var axis_min := INF
 	var axis_max := -INF
 	for surface_index in mesh.get_surface_count():
@@ -112,6 +119,13 @@ func _configure_gem_socket(mesh: ArrayMesh) -> void:
 		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 		var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
 		var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+		# Socket fitting already reads this geometry at spawn. Keep its exact
+		# triangle order on the CPU so destruction need not fetch the mesh again.
+		if indices.is_empty():
+			_fracture_source_vertices.append_array(vertices)
+		else:
+			for index in indices:
+				_fracture_source_vertices.append(vertices[index])
 		for vertex in vertices:
 			axis_min = minf(axis_min, vertex.dot(direction))
 			axis_max = maxf(axis_max, vertex.dot(direction))
@@ -177,6 +191,12 @@ func _configure_gem_socket(mesh: ArrayMesh) -> void:
 	# Intersecting all oriented triangle half-spaces is conservative even at
 	# the plate's concave inner cap; the result also stays inside its hull collider.
 	gem_socket_radius = maxf(clearance - 0.006, 0.0)
+
+
+func _invalidate_fracture_source() -> void:
+	# A replaced or edited mesh must fall back to reading its current geometry.
+	_fracture_source_vertices.clear()
+	_fracture_cache.clear()
 
 
 func _socket_clearance(point: Vector3) -> float:
@@ -342,8 +362,12 @@ func get_visible_crack_segments() -> Array[Dictionary]:
 func build_fracture_fragments() -> Array[Dictionary]:
 	if not destroyed:
 		return []
+	if _fracture_cache_mesh != mesh_instance.mesh:
+		_fracture_cache.clear()
+		_fracture_cache_mesh = mesh_instance.mesh
 	if _fracture_cache.is_empty():
-		_fracture_cache = Fracture.build(mesh_instance.mesh, face_points, face_center, direction, get_visible_crack_segments())
+		var source := _fracture_source_vertices if mesh_instance.mesh == _fracture_source_mesh else PackedVector3Array()
+		_fracture_cache = Fracture.build(mesh_instance.mesh, face_points, face_center, direction, get_visible_crack_segments(), source)
 	var fragments: Array[Dictionary] = _fracture_cache["fragments"]
 	return fragments
 
@@ -385,16 +409,27 @@ func _record_impact(world_point: Vector3, damage: float) -> void:
 		if distance < nearest_distance:
 			nearest_distance = distance
 			nearest_index = i
-	var reuse_distance := clampf(_face_extent * 0.14, 0.055, 0.13)
-	if nearest_index >= 0 and (nearest_distance <= reuse_distance or _crack_networks.size() >= MAX_CRACK_NETWORKS):
+	var nearest_crack := _nearest_visible_crack(latest_impact_local)
+	var reuse_distance := clampf(_face_extent * 0.20, 0.075, 0.16)
+	var close_to_crack := not nearest_crack.is_empty() and float(nearest_crack["distance"]) <= reuse_distance
+	if nearest_index >= 0 and (close_to_crack or nearest_distance <= reuse_distance or _crack_networks.size() >= MAX_CRACK_NETWORKS):
+		# Deepen the struck network where possible. Hits on an added connector
+		# retain that connector's own contact provenance and deepen it in place.
+		var struck_id := int(nearest_crack.get("hit_id", -1))
+		for i in _crack_networks.size():
+			if int(_crack_networks[i]["hit_id"]) == struck_id:
+				nearest_index = i
+				break
 		var network: Dictionary = _crack_networks[nearest_index]
 		network["hits"] = float(network["hits"]) + maxf(damage, 0.15)
-		# Recoil can move repeated contacts by less than a visible ribbon's
-		# half-width. That contact is already cracked; another microscopic
-		# connector would add graph slivers without any visible new damage.
-		var covered_distance := maxf(0.008, float(network["width"]))
-		if nearest_distance > covered_distance:
-			_add_crack_connector(latest_impact_local, network["origin"])
+		for connector in _crack_connectors:
+			if int(connector["hit_id"]) == struck_id:
+				connector["hits"] = float(connector.get("hits", 0.0)) + maxf(damage, 0.15)
+		# Coverage is measured against the actual finite ribbon, including its
+		# endpoint range. A nearby but uncovered contact still leaves a new mark.
+		if not bool(nearest_crack.get("covered", false)):
+			var target: Vector3 = nearest_crack.get("point", network["origin"])
+			_add_crack_connector(latest_impact_local, target)
 	else:
 		_crack_networks.append({
 			"origin": latest_impact_local,
@@ -406,25 +441,40 @@ func _record_impact(world_point: Vector3, damage: float) -> void:
 		})
 
 
+func _nearest_visible_crack(point: Vector3) -> Dictionary:
+	var closest: Dictionary = {}
+	var nearest_distance := INF
+	var covered := false
+	for segment in _crack_segments:
+		var a: Vector3 = segment["a"]
+		var b: Vector3 = segment["b"]
+		var edge := b - a
+		var t := (point - a).dot(edge) / maxf(edge.length_squared(), 0.00000001)
+		var target := a + edge * clampf(t, 0.0, 1.0)
+		var distance := point.distance_to(target)
+		if t >= -0.00001 and t <= 1.00001 and distance <= float(segment["width"]):
+			covered = true
+		if distance < nearest_distance:
+			nearest_distance = distance
+			closest = {"point": target, "distance": distance, "hit_id": int(segment["hit_id"])}
+	if not closest.is_empty():
+		closest["covered"] = covered
+	return closest
+
+
 func _add_crack_connector(origin: Vector3, target: Vector3) -> void:
-	var sideways := direction.cross(target - origin).normalized()
-	var bend := minf(origin.distance_to(target) * 0.16, 0.026)
-	var points := PackedVector3Array([
-		origin,
-		_clamp_to_face(origin.lerp(target, 0.33) + sideways * bend),
-		_clamp_to_face(origin.lerp(target, 0.67) - sideways * bend * 0.6),
-		target,
-	])
-	_crack_connectors.append({"points": points, "hit_id": impact_count, "impact": origin, "width": 0.0})
-	# Repeated almost-identical fractional hits deepen existing fractures
-	# instead of accumulating an unbounded number of overlapping random fans.
-	if _crack_connectors.size() > MAX_CRACK_CONNECTORS:
-		_crack_connectors.pop_front()
+	if origin.distance_squared_to(target) <= 0.00000001:
+		return
+	var points := PackedVector3Array([origin, target])
+	_crack_connectors.append({"points": points, "hit_id": impact_count, "impact": origin, "width": 0.0, "hits": 1.0})
+	# One shortest connection per uncovered contact, with no old lines removed.
+	# The 16-hit cover therefore has at most 18 major + 14 connector segments.
 
 
 func _build_crack_paths(origin: Vector3) -> Array[Dictionary]:
 	var paths: Array[Dictionary] = []
-	var branch_count := 5
+	var branch_count := 3
+	var step_count := 3
 	var edge_offset := _rng.randi_range(0, face_points.size() - 1)
 	for branch in branch_count:
 		var edge_index := (edge_offset + int(float(branch) / float(branch_count) * face_points.size())) % face_points.size()
@@ -432,18 +482,13 @@ func _build_crack_paths(origin: Vector3) -> Array[Dictionary]:
 		var previous := origin
 		var travel := target - origin
 		var sideways := direction.cross(travel).normalized()
-		for step in 5:
-			var progress := float(step + 1) / 5.0
+		for step in step_count:
+			var progress := float(step + 1) / float(step_count)
 			var point := origin.lerp(target, progress)
-			if step < 4:
-				point += sideways * _rng.randf_range(-0.075, 0.075) * sin(progress * PI)
+			if step < step_count - 1:
+				point += sideways * _rng.randf_range(-1.0, 1.0) * minf(0.035, travel.length() * 0.08) * sin(progress * PI)
 			point = _clamp_to_face(point)
-			paths.append({"a": previous, "b": point, "start": float(step) / 5.0, "end": progress, "branch": branch, "weight": 1.0})
-			if step == 2:
-				var branch_target := _clamp_to_face(point.lerp(face_points[(edge_index + 2) % face_points.size()], 0.43))
-				var branch_middle := _clamp_to_face(point.lerp(branch_target, 0.48) + sideways * 0.032)
-				paths.append({"a": point, "b": branch_middle, "start": 0.60, "end": 0.78, "branch": branch, "weight": 0.56})
-				paths.append({"a": branch_middle, "b": branch_target, "start": 0.78, "end": 0.98, "branch": branch, "weight": 0.40})
+			paths.append({"a": previous, "b": point, "start": float(step) / float(step_count), "end": progress, "branch": branch, "weight": 1.0})
 			previous = point
 	return paths
 
@@ -452,13 +497,13 @@ func _redraw_cracks(damage_ratio: float) -> void:
 	_crack_segments.clear()
 	for network in _crack_networks:
 		var hits: float = network["hits"]
-		var growth := maxf(float(network["growth"]), clampf(0.28 + minf(hits, 8.0) * 0.065 + damage_ratio * 0.54, 0.0, 1.0))
-		var width := maxf(float(network["width"]), 0.0105 + damage_ratio * 0.014 + minf(maxf(hits - 1.0, 0.0), 6.0) * 0.0007)
+		var growth := maxf(float(network["growth"]), clampf(0.25 + minf(hits, 6.0) * 0.055 + damage_ratio * 0.24, 0.0, 0.82))
+		var width := maxf(float(network["width"]), 0.0105 + damage_ratio * 0.006 + minf(maxf(hits - 1.0, 0.0), 6.0) * 0.0004)
 		network["growth"] = growth
 		network["width"] = width
 		var paths: Array = network["segments"]
 		for path: Dictionary in paths:
-			var branch_growth := growth - float(int(path["branch"]) % 3) * 0.04
+			var branch_growth := growth - float(int(path["branch"]) % 3) * 0.025
 			var start: float = path["start"]
 			if branch_growth <= start:
 				continue
@@ -468,12 +513,15 @@ func _redraw_cracks(damage_ratio: float) -> void:
 			var weight: float = path["weight"]
 			_append_visible_crack(a, b, width * weight * (1.0 - start * 0.6), weight, int(network["hit_id"]), network["origin"])
 	for connector in _crack_connectors:
-		var width := maxf(float(connector["width"]), (0.0105 + damage_ratio * 0.014) * 0.78)
+		var width := maxf(float(connector["width"]), (0.0105 + damage_ratio * 0.006 + minf(float(connector.get("hits", 1.0)), 6.0) * 0.0003) * 0.78)
 		connector["width"] = width
 		var points: PackedVector3Array = connector["points"]
 		for i in points.size() - 1:
 			_append_visible_crack(points[i], points[i + 1], width, 0.78, int(connector["hit_id"]), connector["impact"])
-	if _crack_segments.is_empty():
+	# Fatal damage still supplies the complete final crack data to fracture and
+	# light provenance. The stone is hidden immediately, so its dark ribbon mesh
+	# would be uploaded and discarded before a single rendered frame could use it.
+	if health <= 0.0 or _crack_segments.is_empty():
 		return
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)

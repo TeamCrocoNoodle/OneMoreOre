@@ -167,8 +167,8 @@ func _validate_showcase() -> void:
 	var departing: WeakRef = weakref(final_cap.light_node)
 	_check(await _break_visible(_gem_target_screen(final_gem), false), "A showcase owner breaks through the normal mining path")
 	_check(final_gem.collected and final_gem.is_emerging and final_gem.visible and final_gem.collision_layer == 0 and game.gems.size() == 5, "The first showcase owner immediately awards one gem while the other five remain buried")
-	_check(departing.get_ref() != null and departing.get_ref().get_parent() == game.effects, "The owner's final light flash survives stone detachment")
-	# Reset during emergence, while both the gem tween and detached light exist.
+	_check(departing.get_ref() == null, "The broken showcase owner's light is freed with its stone without a detached final flash")
+	# Reset during the awarded gem's emergence after its owner's light is gone.
 	game._spawn_rock(TEST_SEED, false)
 	await _frames(3)
 	var all_lights_freed := true
@@ -177,7 +177,7 @@ func _validate_showcase() -> void:
 		all_lights_freed = all_lights_freed and previous.get_ref() == null
 	for previous in preview_gems:
 		all_gems_freed = all_gems_freed and previous.get_ref() == null
-	_check(all_lights_freed, "Reset clears both attached and detached lights from the previous rock")
+	_check(all_lights_freed, "Reset frees the remaining owner lights from the previous rock")
 	_check(all_gems_freed and _count_gems(game) == game.gems.size() and game.collecting_gems.is_empty(), "Reset during automatic collection frees its emerging gem and every old embedded gem")
 	_check(game.effects.loose_chunks.is_empty() and game.effects.get("_fragment_pool").is_empty(), "Reset clears active fracture pieces and their reusable pool")
 	owner_releases = 0
@@ -388,6 +388,7 @@ func _break_visible(screen: Vector2, finish_emergence: bool = true) -> bool:
 			if not prior_fragment_batches.has(int(fragment.batch_id)):
 				prior_fragment_batches.append(int(fragment.batch_id))
 	var linked_gem: StaticBody3D = body.contained_gem.get_ref() as StaticBody3D if body.contained_gem != null else null
+	var owner_light: WeakRef = weakref(body.light_node) if is_instance_valid(linked_gem) else null
 	var original_max_health: float = body.max_health
 	var embedded_before: Array[StaticBody3D] = []
 	for jewel in game.gems:
@@ -404,7 +405,10 @@ func _break_visible(screen: Vector2, finish_emergence: bool = true) -> bool:
 		strikes += 1
 		if is_instance_valid(linked_gem):
 			_check(body.max_health == 16.0 and body.contained_gem.get_ref() == linked_gem and body.cover_gem.get_ref() == linked_gem, "Every owner strike retains its original high health and unique gem")
-			_check(body.light_node.pulse_count == pulses_before + 1 and body.light_node.current_tier <= linked_gem.light_tier, "Each owner strike emits one light pulse bounded by its own gem tier")
+			if body.destroyed:
+				_check(body.is_ancestor_of(body.light_node) and _light_is_cleared(body.light_node), "The fatal mining call immediately stops its crack light, clears all visual meshes, and keeps the light owned by its stone")
+			else:
+				_check(body.light_node.pulse_count == pulses_before + 1 and body.light_node.current_tier <= linked_gem.light_tier, "Each surviving owner strike emits one light pulse bounded by its own gem tier")
 			if pulses_before == 0:
 				_check(body.get_revealed_tier() == 0, "The first real strike on a pristine owner begins with white light")
 			if not body.destroyed:
@@ -451,12 +455,25 @@ func _break_visible(screen: Vector2, finish_emergence: bool = true) -> bool:
 	await _frames(1)
 	_check(not is_instance_valid(body), "A detached chunk's physics body is freed")
 	if is_instance_valid(linked_gem):
+		_check(owner_light.get_ref() == null, "The broken owner's crack light is freed with the stone instead of lingering in effects")
 		_check(_has_collection(linked_gem) and linked_gem.collected, "The automatically awarded gem survives its former owner's node deletion")
 		if finish_emergence:
 			_check(await _until(func(): return not linked_gem.is_emerging), "Immediate collection preserves the complete outward emergence animation")
 			_check(linked_gem.collected and linked_gem.collision_layer == 0 and linked_gem.visible and not linked_gem.is_embedded, "The emerged reward remains nonselectable while its collection animation continues")
 			_check(game.hit_count == hits_at_break and game.collected_count == previous_collected + 1, "The reward emerges and stays awarded with zero additional mining hits")
 			_check(linked_gem.global_basis.z.normalized().dot(game.camera.global_basis.z.normalized()) > 0.8, "An emerging reward presents its broad front face to the orthographic camera")
+	return true
+
+
+func _light_is_cleared(light: Node3D) -> bool:
+	if light.visible or light.is_processing() or light.current_tier != -1 or light.pulse_count != 0:
+		return false
+	for child in light.get_children():
+		if child is MeshInstance3D:
+			if child.mesh != null:
+				return false
+			if child.material_override is ShaderMaterial and float(child.material_override.get_shader_parameter("pulse_amount")) != 0.0:
+				return false
 	return true
 
 

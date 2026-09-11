@@ -18,12 +18,12 @@ var _fallback_depth := 0.3
 var _depth_cache: Dictionary = {}
 
 
-static func build(mesh: ArrayMesh, face: PackedVector3Array, center: Vector3, normal: Vector3, cracks: Array[Dictionary]) -> Dictionary:
+static func build(mesh: ArrayMesh, face: PackedVector3Array, center: Vector3, normal: Vector3, cracks: Array[Dictionary], source_vertices: PackedVector3Array = PackedVector3Array()) -> Dictionary:
 	var builder: RefCounted = (load("res://scripts/rock_fracture.gd") as GDScript).new()
-	return builder._build(mesh, face, center, normal, cracks)
+	return builder._build(mesh, face, center, normal, cracks, source_vertices)
 
 
-func _build(mesh: ArrayMesh, face: PackedVector3Array, center: Vector3, normal: Vector3, cracks: Array[Dictionary]) -> Dictionary:
+func _build(mesh: ArrayMesh, face: PackedVector3Array, center: Vector3, normal: Vector3, cracks: Array[Dictionary], source_vertices: PackedVector3Array = PackedVector3Array()) -> Dictionary:
 	_origin = center
 	_normal = normal.normalized()
 	_u = _normal.cross(Vector3.UP).normalized()
@@ -83,7 +83,7 @@ func _build(mesh: ArrayMesh, face: PackedVector3Array, center: Vector3, normal: 
 		if int(edge["source"]) >= 0:
 			sources.append(int(edge["source"]))
 		boundaries.append({"a": _unproject(_vertices[a]), "b": _unproject(_vertices[b]), "kind": edge["kind"], "source_indices": sources})
-	_read_mesh(mesh)
+	_read_mesh(mesh, source_vertices)
 	var fragments: Array[Dictionary] = []
 	var region_ids: Array = regions.keys()
 	region_ids.sort()
@@ -272,16 +272,20 @@ func _merge_regions(regions: Dictionary, parents: Array[int], owners: Dictionary
 			blocked[a] = true
 
 
-func _read_mesh(mesh: ArrayMesh) -> void:
-	for surface_index in mesh.get_surface_count():
-		var arrays: Array = mesh.surface_get_arrays(surface_index)
-		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-		var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
-		if indices.is_empty():
-			_mesh_vertices.append_array(vertices)
-		else:
-			for index in indices:
-				_mesh_vertices.append(vertices[index])
+func _read_mesh(mesh: ArrayMesh, source_vertices: PackedVector3Array = PackedVector3Array()) -> void:
+	_mesh_vertices = source_vertices
+	# External callers can still supply only a mesh. Game chunks provide the
+	# same flattened triangle vertices retained during their socket setup.
+	if _mesh_vertices.is_empty():
+		for surface_index in mesh.get_surface_count():
+			var arrays: Array = mesh.surface_get_arrays(surface_index)
+			var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+			var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+			if indices.is_empty():
+				_mesh_vertices.append_array(vertices)
+			else:
+				for index in indices:
+					_mesh_vertices.append(vertices[index])
 	_fallback_depth = 0.02
 	for vertex in _mesh_vertices:
 		_fallback_depth = maxf(_fallback_depth, (_origin - vertex).dot(_normal))

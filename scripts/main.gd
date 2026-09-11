@@ -7,6 +7,7 @@ const Pickaxe = preload("res://scripts/pickaxe.gd")
 const MiningAudio = preload("res://scripts/mining_audio.gd")
 const Effects = preload("res://scripts/mining_effects.gd")
 const Gem = preload("res://scripts/gem.gd")
+const GemLight = preload("res://scripts/gem_light.gd")
 const ROCK_RADIUS := 4.9
 const LAYER_COUNT := 6
 const LAYER_COUNTS := [100, 80, 60, 42, 26, 14]
@@ -97,6 +98,66 @@ func _ready() -> void:
 	Input.joy_connection_changed.connect(_controller_connection)
 	for device in Input.get_connected_joypads():
 		controller_id = device
+	_warm_gem_renderer.call_deferred()
+
+func _warm_gem_renderer() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	# Compatibility compiles rendering variants on their first actual draw.
+	# Submit hidden gems and hit effects during startup in an offscreen world,
+	# so the first hit/discovery does not have to do it. Real gems stay sealed.
+	var warmup := SubViewport.new()
+	warmup.name = "GemRenderWarmup"
+	warmup.size = Vector2i(96, 96)
+	warmup.msaa_3d = get_viewport().msaa_3d
+	warmup.world_3d = World3D.new()
+	warmup.world_3d.environment = get_world_3d().environment
+	warmup.render_target_update_mode = SubViewport.UPDATE_ONCE
+	add_child(warmup)
+	var warm_camera := Camera3D.new()
+	warm_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	warm_camera.size = 4.0
+	warm_camera.position = Vector3(0, 0, 5)
+	warm_camera.current = true
+	warmup.add_child(warm_camera)
+	for child in get_children():
+		if child is DirectionalLight3D:
+			warmup.add_child(child.duplicate(0))
+	for i in gems.size():
+		var source: MeshInstance3D = gems[i].facets
+		var proxy := MeshInstance3D.new()
+		proxy.mesh = source.mesh
+		proxy.material_override = source.material_override
+		proxy.cast_shadow = source.cast_shadow
+		proxy.position = Vector3((float(i % 3) - 1.0) * 1.15, 0.70 if i < 3 else -0.70, 0)
+		warmup.add_child(proxy)
+	var warm_effects := Node3D.new()
+	warm_effects.position.z = 1.2
+	warmup.add_child(warm_effects)
+	effects.append_render_warmup(warm_effects)
+	var warm_light := GemLight.new()
+	warm_effects.add_child(warm_light)
+	warm_light.position.z = 1.2
+	warm_light.configure(PackedVector3Array(), Vector3.ZERO, Vector3.BACK, 0)
+	var seam: Array[Dictionary] = [{"a": Vector3(-0.5, 0, 0), "b": Vector3(0.5, 0.1, 0), "width": 0.024}]
+	warm_light.set_cracks(seam, Vector3.ZERO)
+	warm_light.pulse(0, 0.5)
+	warm_light.set_process(false)
+	# The dark stone ribbon has a different unshaded, two-sided material.
+	var dark_crack := MeshInstance3D.new()
+	var ribbon := SurfaceTool.new()
+	ribbon.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for vertex: Vector3 in [Vector3(-0.5, -0.02, 0), Vector3(0.5, -0.02, 0), Vector3(0.5, 0.02, 0)]:
+		ribbon.set_normal(Vector3.BACK)
+		ribbon.add_vertex(vertex)
+	dark_crack.mesh = ribbon.commit()
+	dark_crack.material_override = chunks[0]._crack_mesh.material_override
+	dark_crack.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	dark_crack.position = Vector3(0, -1.5, 1.2)
+	warm_effects.add_child(dark_crack)
+	await RenderingServer.frame_post_draw
+	if is_instance_valid(warmup):
+		warmup.queue_free()
 
 func _create_actions() -> void:
 	_bind_key("mine", KEY_SPACE)
@@ -435,7 +496,7 @@ func _orbit(amount: Vector2) -> void:
 	idle_time = 0.0
 
 func _request_swing() -> void:
-	if not focused or completion_time >= 0.0 or spawn_time < 0.68 or swing_cooldown > 0.0 or pickaxe.is_swinging or dragging or touch_rotating:
+	if (not focused and not capture_mode) or completion_time >= 0.0 or spawn_time < 0.68 or swing_cooldown > 0.0 or pickaxe.is_swinging or dragging or touch_rotating:
 		return
 	pending_aim = aim_position
 	pending_rock_number = rock_number
@@ -538,17 +599,16 @@ func _mine_at(screen_position: Vector2) -> bool:
 			light_pulse_history.pop_front()
 		audio.play_resonance(tier, 1.0 - body.health / body.max_health)
 	effects.impact(point, normal, broken, color, body.is_gem_cover)
-	audio.play_hit(1.15 if broken else 0.9, layer)
 	if broken:
-		# The dead owner must not clear its detached final light pulse after its
-		# gem becomes collected during this same physics impact.
+		audio.play_break(layer)
+	else:
+		audio.play_hit(0.9, layer)
+	if broken:
 		body.set_process(false)
-		if body.is_gem_cover and body.light_node != null:
-			var departing_light: Node3D = body.light_node
-			departing_light.reparent(effects)
-			departing_light.set_meta("gem_light_pulse", true)
-			# Finish the outward flash after the solid cap detaches.
-			departing_light.pulse_finished.connect(departing_light.queue_free, CONNECT_ONE_SHOT)
+		if is_instance_valid(body.light_node):
+			# Extinguish the fissures in this same impact. The light remains
+			# owned by the stone and is freed with it, without a detached tail.
+			body.light_node.clear()
 		if body.cover_gem != null:
 			var contained_gem: StaticBody3D = body.cover_gem.get_ref()
 			if is_instance_valid(contained_gem) and contained_gem.is_embedded:
@@ -556,7 +616,6 @@ func _mine_at(screen_position: Vector2) -> bool:
 				var exit_point: Vector3 = point - camera.project_ray_normal(screen_position) * (contained_gem.bound_radius + 0.16)
 				if contained_gem.release_from_chunk(self, to_local(exit_point)):
 					auto_collected = _collect_gem(contained_gem, exit_point)
-		audio.play_break(layer)
 		var fracture_started := Time.get_ticks_usec() if capture_mode else 0
 		var fragments: Array[Dictionary] = body.build_fracture_fragments()
 		effects.shed_fragments(fragments, body.mesh_instance.material_override, placement, normal, point)
@@ -785,11 +844,13 @@ func _capture(label: String) -> void:
 	await RenderingServer.frame_post_draw
 	var screenshot := get_viewport().get_texture().get_image()
 	screenshot.save_png("res://artifacts/" + label + ".png")
-	if label.begins_with("impacts_"):
+	var light_tier_shot := label.begins_with("lights_") and label.get_slice("_", 1).to_int() >= 1 and label.get_slice("_", 1).to_int() <= 6
+	if label.begins_with("impacts_") or light_tier_shot:
 		var cap: StaticBody3D = showcase_covers[5]
 		var center := camera.unproject_position(cap.mesh_instance.to_global(cap.face_center))
 		var pixel_scale := Vector2(screenshot.get_size()) / get_viewport().get_visible_rect().size
-		var region := Rect2i(Vector2i(center * pixel_scale) - Vector2i(200, 180), Vector2i(400, 360))
+		var detail_size := Vector2i(680, 560) if light_tier_shot else Vector2i(400, 360)
+		var region := Rect2i(Vector2i(center * pixel_scale) - detail_size / 2, detail_size)
 		region = region.intersection(Rect2i(Vector2i.ZERO, screenshot.get_size()))
 		screenshot.get_region(region).save_png("res://artifacts/" + label + "_detail.png")
 	elif label.begins_with("fracture_"):

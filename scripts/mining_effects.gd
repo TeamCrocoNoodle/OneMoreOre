@@ -6,6 +6,7 @@ const FRAGMENT_CAPACITY := 80
 const FRAGMENT_LIFETIME := 1.05
 const FRAGMENT_OPEN_TIME := 0.09
 const FRAGMENT_FLOOR_Y := -5.2
+const RING_POOL_CAPACITY := 8
 var batches: Array[MultiMeshInstance3D] = []
 var particles: Array[Dictionary] = []
 var loose_chunks: Array[Dictionary] = []
@@ -13,6 +14,10 @@ var rings: Array[Dictionary] = []
 var rng := RandomNumberGenerator.new()
 var _fragment_pool: Array[MeshInstance3D] = []
 var _fragment_batch_id := 0
+var _ring_mesh: TorusMesh
+var _ring_material: StandardMaterial3D
+var _ring_root: Node3D
+var _ring_pool: Array[MeshInstance3D] = []
 
 func _ready() -> void:
 	rng.seed = 90421
@@ -41,8 +46,62 @@ func _ready() -> void:
 		instance.custom_aabb = AABB(Vector3(-15, -15, -15), Vector3(30, 30, 30))
 		add_child(instance)
 		batches.append(instance)
+	_ring_mesh = TorusMesh.new()
+	_ring_mesh.inner_radius = 0.88
+	_ring_mesh.outer_radius = 1.0
+	_ring_mesh.rings = 24
+	_ring_mesh.ring_segments = 4
+	_ring_material = StandardMaterial3D.new()
+	_ring_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_ring_material.albedo_color = Color("fff2c9")
+	_ring_root = Node3D.new()
+	_ring_root.name = "ImpactRings"
+	add_child(_ring_root)
+	# Ordinary hits and a gem award can overlap. Prepare their small node pool
+	# once, while all rings share the same immutable shape and material.
+	for i in range(4):
+		_ring_pool.append(_make_ring_node())
+	set_process(false)
+
+func append_render_warmup(parent: Node3D) -> void:
+	if not is_node_ready() or not is_instance_valid(parent):
+		return
+	# These disposable proxies belong only to the caller's warmup viewport.
+	# Share actual render resources without emitting particles or consuming RNG.
+	var stone_color := Color("89959b")
+	var colors: Array[Color] = [stone_color, Color(1.0, 0.8, 0.4), stone_color.lightened(0.22)]
+	for kind in range(batches.size()):
+		var source := batches[kind]
+		var batch := MultiMesh.new()
+		batch.transform_format = source.multimesh.transform_format
+		batch.use_colors = source.multimesh.use_colors
+		batch.use_custom_data = source.multimesh.use_custom_data
+		batch.mesh = source.multimesh.mesh
+		batch.instance_count = 1
+		batch.visible_instance_count = 1
+		var size := Vector3(0.07, 0.07 * 3.8, 0.07) if kind == 1 else Vector3.ONE * 0.16
+		batch.set_instance_transform(0, Transform3D(Basis.IDENTITY.scaled(size), Vector3.ZERO))
+		batch.set_instance_color(0, colors[kind])
+		var proxy := MultiMeshInstance3D.new()
+		proxy.name = "WarmupParticle%d" % kind
+		proxy.multimesh = batch
+		proxy.material_override = source.material_override
+		proxy.cast_shadow = source.cast_shadow
+		proxy.layers = source.layers
+		proxy.position = Vector3(float(kind - 1) * 0.8, 0.0, 0.0)
+		parent.add_child(proxy)
+	var ring := MeshInstance3D.new()
+	ring.name = "WarmupImpactRing"
+	ring.mesh = _ring_mesh
+	ring.material_override = _ring_material
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	ring.position = Vector3(0.0, -0.65, 0.0)
+	ring.quaternion = Quaternion(Vector3.UP, Vector3.BACK)
+	ring.scale = Vector3.ONE * 0.28
+	parent.add_child(ring)
 
 func impact(point: Vector3, normal: Vector3, broken: bool, stone_color: Color, gem_cover: bool = false) -> void:
+	set_process(true)
 	var amount := 23 if broken else 10
 	for i in range(amount):
 		var direction := (normal * rng.randf_range(1.2, 2.6) + _random_direction() * 1.7).normalized()
@@ -70,6 +129,7 @@ func shed_fragments(fragments: Array[Dictionary], material: Material, placement:
 		valid_fragments.append(fragment)
 	if valid_fragments.is_empty():
 		return
+	set_process(true)
 	var plate_center := center_sum / area_sum
 	var average_area := area_sum / float(valid_fragments.size())
 	var normal := outward.normalized() if outward.length_squared() > 0.0001 else Vector3.UP
@@ -146,6 +206,8 @@ func clear_fragments() -> void:
 			node.queue_free()
 	_fragment_pool.clear()
 	_fragment_batch_id = 0
+	if particles.is_empty() and rings.is_empty():
+		set_process(false)
 
 
 func _acquire_fragment_node() -> MeshInstance3D:
@@ -176,12 +238,13 @@ func _recycle_fragment(fragment: Dictionary) -> void:
 		node.queue_free()
 
 func gem_burst(point: Vector3, special: bool = true, tier: int = -1) -> void:
+	set_process(true)
+	var palette := [Color("ffce64"), Color("fff1c0"), Color("f5a6ff")] if special else [Color("7ffff0"), Color("d7fff5"), Color("bdf7ea")]
+	if tier >= 0:
+		var tint: Color = preload("res://scripts/gem.gd").LIGHT_COLORS[clampi(tier, 0, 5)]
+		palette = [tint, tint.lightened(0.40), tint.lightened(0.72)]
 	for i in range(100 if special else 32):
 		var direction := _random_direction()
-		var palette := [Color("ffce64"), Color("fff1c0"), Color("f5a6ff")] if special else [Color("7ffff0"), Color("d7fff5"), Color("bdf7ea")]
-		if tier >= 0:
-			var tint: Color = preload("res://scripts/gem.gd").LIGHT_COLORS[clampi(tier, 0, 5)]
-			palette = [tint, tint.lightened(0.40), tint.lightened(0.72)]
 		_spawn(1 if i % 2 else 0, point, direction * rng.randf_range(2.0, 8.0 if special else 4.5), palette[i % 3], rng.randf_range(0.025, 0.10), rng.randf_range(0.6, 1.6))
 	_ring(point, Vector3.FORWARD, special)
 
@@ -191,23 +254,30 @@ func _spawn(kind: int, point: Vector3, velocity: Vector3, color: Color, size: fl
 	particles.append({"kind": kind, "position": point, "velocity": velocity, "color": color, "size": size, "age": 0.0, "life": life, "spin": rng.randf_range(-6.0, 6.0)})
 
 func _ring(point: Vector3, normal: Vector3, broken: bool) -> void:
-	var node := MeshInstance3D.new()
-	var mesh := TorusMesh.new()
-	mesh.inner_radius = 0.88
-	mesh.outer_radius = 1.0
-	mesh.rings = 24
-	mesh.ring_segments = 4
-	node.mesh = mesh
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = Color("fff2c9")
-	node.material_override = material
-	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(node)
+	set_process(true)
+	var node: MeshInstance3D = _ring_pool.pop_back() if not _ring_pool.is_empty() else _make_ring_node()
 	node.position = point
 	node.quaternion = Quaternion(Vector3.UP, normal.normalized())
 	node.scale = Vector3.ONE * 0.025
+	node.show()
 	rings.append({"node": node, "age": 0.0, "life": 0.22 if broken else 0.14, "size": 0.62 if broken else 0.32})
+
+func _make_ring_node() -> MeshInstance3D:
+	var node := MeshInstance3D.new()
+	node.name = "ImpactRing"
+	node.mesh = _ring_mesh
+	node.material_override = _ring_material
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.hide()
+	_ring_root.add_child(node)
+	return node
+
+func _recycle_ring(node: MeshInstance3D) -> void:
+	node.hide()
+	if _ring_pool.size() < RING_POOL_CAPACITY:
+		_ring_pool.append(node)
+	else:
+		node.queue_free()
 
 func _random_direction() -> Vector3:
 	return Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)).normalized()
@@ -270,9 +340,11 @@ func _process(delta: float) -> void:
 		var p: Dictionary = rings[i]
 		p.age += delta
 		if p.age >= p.life:
-			p.node.queue_free()
+			_recycle_ring(p.node)
 			rings.remove_at(i)
 			continue
 		var t: float = p.age / p.life
 		p.node.scale = Vector3.ONE * lerpf(0.06, p.size, t)
 		p.node.visible = t < 0.82
+	if particles.is_empty() and loose_chunks.is_empty() and rings.is_empty():
+		set_process(false)

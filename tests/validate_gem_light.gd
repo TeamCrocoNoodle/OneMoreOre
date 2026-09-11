@@ -60,7 +60,7 @@ func _run() -> void:
 				var remaining := cover.health
 				cover.configure_gem_cover(jewel, tier)
 				_check(cover.health == remaining and light.pulse_count == 1, "Repeated cover designation cannot heal or restart its progression")
-				_check(_materials_use_depth_test(light), "Beam, fissure, and mote materials retain scene depth testing")
+				_check(_materials_use_depth_test(light), "Beam, source, fissure, halo, and mote materials retain scene depth testing")
 			if strike == 15:
 				_check(current == tier and _is_color_tier(_light_color(light), tier), "Every gem's final color becomes visible before the cover breaks")
 			_check(broken == (strike == 16), "A 16 HP cover survives precisely 15 unit strikes")
@@ -69,15 +69,34 @@ func _run() -> void:
 			expected.append(value)
 		_check(observed == expected, "A cover reveals exactly the complete color prefix ending at its gem tier")
 		_check(cover.destroyed and cover.collision_layer == 0 and not cover.visible, "A destroyed cover stops hiding the gem")
+		_check(_light_has_no_visuals(light), "A fatal cover hit retains its tier without building invisible light meshes")
+		if tier == 5:
+			_check(cover.get_visible_crack_segments().size() <= 9 and _light_matches_cracks(cover), "Sixteen strikes at one point deepen a compact crack network and illuminate every remaining segment")
 	_validate_spatial_damage()
+	_validate_crack_density()
 
 	var collectible := _make_gem(5)
 	var neighboring_cover := _make_chunk()
 	neighboring_cover.configure_gem_cover(collectible, 5)
 	neighboring_cover.hit(1.0, neighboring_cover.to_global(neighboring_cover.face_center))
+	var sources := neighboring_cover.light_node.get_node_or_null("LightSources") as MeshInstance3D
+	var shafts := neighboring_cover.light_node.get_node("LightShafts") as MeshInstance3D
+	_check(sources != null and sources.visible and sources.mesh != null and sources.mesh == shafts.mesh, "The source glow shares the current beam geometry during a pulse")
+	neighboring_cover.light_node.set_process(false)
+	var mote_mesh: Mesh = neighboring_cover.light_node.get_node("CrystalMotes").mesh
+	var shaft_mesh: Mesh = shafts.mesh
+	neighboring_cover.light_node._process(0.20)
+	neighboring_cover.light_node._process(0.10)
+	_check(shafts.mesh == shaft_mesh and sources.mesh == shaft_mesh and neighboring_cover.light_node.get_node("CrystalMotes").mesh == mote_mesh, "Beam expansion and mote travel reuse their uploaded meshes throughout a pulse")
+	_check(float(shafts.material_override.get_shader_parameter("beam_growth")) == 1.0 and float(neighboring_cover.light_node.get_node("CrystalMotes").material_override.get_shader_parameter("effect_progress")) > 0.3, "Reused light meshes still advance their expansion and particle animation")
+	neighboring_cover.light_node._process(2.0)
+	_check(sources != null and not sources.visible and not shafts.visible, "Completing a pulse hides both its colored shaft and source glow")
+	neighboring_cover.hit(1.0, neighboring_cover.to_global(neighboring_cover.face_center))
+	_check(sources != null and sources.is_visible_in_tree() and sources.mesh != null and sources.mesh == shafts.mesh, "A subsequent strike renews the source glow on the new beam geometry")
 	_check(collectible.begin_collection(), "The linked gem can enter collection once")
 	await _frames(2)
 	_check(not neighboring_cover.is_gem_cover and neighboring_cover.cover_gem == null and not neighboring_cover.light_node.visible, "Collecting a gem clears surviving cover links and their light")
+	_check(sources != null and not sources.is_visible_in_tree() and sources.mesh == null and shafts.mesh == null and float(sources.material_override.get_shader_parameter("pulse_amount")) == 0.0, "Clearing a collected gem's light releases both shared geometry references and extinguishes its source glow")
 	var pulses_after_collection: int = neighboring_cover.light_node.pulse_count
 	neighboring_cover.hit(1.0, neighboring_cover.to_global(neighboring_cover.face_center))
 	_check(neighboring_cover.light_node.pulse_count == pulses_after_collection, "An already collected gem cannot cause further cover pulses")
@@ -138,6 +157,7 @@ func _validate_spatial_damage() -> void:
 	promoted.hit(0.25, promoted.mesh_instance.to_global(point_b))
 	_check(_old_cracks_remain(before_promotion, promoted.get_visible_crack_segments()), "The first cover pulse retains cracks made before the gem was discovered")
 	_check(_light_matches_cracks(promoted), "A promoted cover's light uses its existing and new visible cracks")
+	_check(_halo_follows_cracks(promoted), "The fissure halo widens around the stone's actual existing and new crack traces")
 
 	var transformed := Node3D.new()
 	fixture.add_child(transformed)
@@ -154,6 +174,7 @@ func _validate_spatial_damage() -> void:
 	var rays_before: Array[Dictionary] = cover.light_node.get("_rays").duplicate(true)
 	_check(cover.latest_impact_local.distance_to(point_a) < 0.001, "Rotated and recoiling cover maps the world strike to the visible face")
 	_check(_light_matches_cracks(cover), "Initial beam origins and luminous fissures follow the real cracks under rotation and recoil")
+	_check(_halo_follows_cracks(cover), "The fissure halo shares the visible crack centerlines under rotation and recoil")
 	cover.mesh_instance.position = -cover.direction * 0.093
 	cover.hit(0.2, cover.mesh_instance.to_global(point_b))
 	var after_move := cover.get_visible_crack_segments()
@@ -164,6 +185,7 @@ func _validate_spatial_damage() -> void:
 	_check(_ray_field_changes(rays_before, rays_after, "direction", 0.015), "Moving the impact changes the beams' fan directions")
 	_check(_rays_reference_impact(rays_after, point_b), "The new beam pulse includes geometry rooted at the latest impact")
 	_check(_light_matches_cracks(cover), "Moved beams and fissures share the visible crack geometry in world space")
+	_check(_halo_follows_cracks(cover), "Moving the impact updates the halo around both retained and newly created cracks")
 
 	var tangent := (point_b - point_a).normalized()
 	var bitangent := cover.direction.cross(tangent).normalized()
@@ -174,8 +196,9 @@ func _validate_spatial_damage() -> void:
 	var repeated: Array[Dictionary] = cover.get_visible_crack_segments().duplicate(true)
 	_check(cover.impact_count == 130 and cover.latest_impact_local.distance_to(last_nearby) < 0.001, "Every repeated nearby strike updates the latest impact")
 	_check(_visible_crack_covers(last_nearby, repeated) and _old_cracks_remain(before_move, repeated), "Repeated nearby hits keep old damage and leave the current strike covered by an actual visible crack ribbon")
-	_check(repeated.size() <= 656 and _large_crack_groups(repeated) <= 2, "Nearby hits reuse bounded crack networks instead of creating an unbounded fan per hit")
+	_check(repeated.size() <= 18 and _large_crack_groups(repeated) <= 2, "Nearby hits stay within two compact crack networks instead of adding a fan or connector for every contact")
 	_check(_light_matches_cracks(cover), "Repeated pulses remain bounded and attached to the actual visible cracks")
+	_check(_halo_follows_cracks(cover), "Repeated nearby damage keeps its halo centered on the accumulated visible crack traces")
 	var pulses_before_fatal: int = cover.light_node.pulse_count
 	cover.hit(cover.health, cover.mesh_instance.to_global(point_c))
 	var fatal_cover := cover.get_visible_crack_segments()
@@ -183,19 +206,64 @@ func _validate_spatial_damage() -> void:
 	_check(cover.destroyed and cover.impact_count == 131 and cover.latest_impact_local.distance_to(point_c) < 0.001, "Fatal cover damage records the final moved strike before destruction")
 	_check(_crack_distance(point_c, fatal_cover) < 0.001 and _old_cracks_remain(before_move, fatal_cover), "The fatal cover hit adds its own origin while retaining previous damage")
 	_check(cover.light_node.pulse_count == pulses_before_fatal + 1 and _rays_reference_impact(fatal_rays, point_c), "The fatal pulse uses the final strike's new crack geometry")
-	_check(_light_matches_cracks(cover), "The detached final flash has the same spatial sources as the fatal cracks")
+	_check(_light_matches_cracks(cover), "The final hit retains its spatial sources without uploading an invisible final flash")
+	_check(_light_has_no_visuals(cover.light_node), "The fatal hit leaves no halo, shaft or mote geometry to render")
+
+
+func _validate_crack_density() -> void:
+	var cover := _make_chunk()
+	cover.configure_gem_cover(_make_gem(5), 5)
+	var prior: Array[Dictionary] = []
+	var maximum_segments := 0
+	var maximum_networks := 0
+	var contacts_covered := true
+	var history_preserved := true
+	var all_segments_lit := true
+	for strike in range(16):
+		# Spread actual contacts through the interior of the face instead of
+		# replaying a fixed origin or relying on crack-generator internals.
+		var boundary_position := float(strike) * float(cover.face_points.size()) / 16.0
+		var edge := floori(boundary_position)
+		var boundary: Vector3 = cover.face_points[edge].lerp(cover.face_points[(edge + 1) % cover.face_points.size()], fposmod(boundary_position, 1.0))
+		var point := cover.face_center.lerp(boundary, 0.36 + float(strike % 3) * 0.14)
+		cover.hit(1.0, cover.mesh_instance.to_global(point))
+		var current := cover.get_visible_crack_segments()
+		maximum_segments = maxi(maximum_segments, current.size())
+		maximum_networks = maxi(maximum_networks, _large_crack_groups(current))
+		contacts_covered = contacts_covered and _visible_crack_covers(point, current)
+		history_preserved = history_preserved and (prior.is_empty() or _old_cracks_remain(prior, current))
+		all_segments_lit = all_segments_lit and _light_matches_cracks(cover)
+		prior = current.duplicate(true)
+	_check(maximum_segments <= 32 and maximum_networks <= 2, "Sixteen separated strikes keep at most two major crack networks and a bounded set of contact connections")
+	_check(contacts_covered, "Every scattered strike remains covered by its actual visible crack ribbon")
+	_check(history_preserved, "Adding scattered contact connections preserves earlier visible crack traces")
+	_check(all_segments_lit, "Scattered strikes track every crack exactly once and suppress geometry on the fatal strike")
 
 
 func _light_matches_cracks(cover: Chunk) -> bool:
 	var segments := cover.get_visible_crack_segments()
 	var rays: Array[Dictionary] = cover.light_node.get("_rays")
-	if segments.is_empty() or rays.is_empty() or rays.size() > Light.MAX_RAYS:
+	if segments.is_empty() or rays.size() != segments.size():
 		return false
-	var normal := cover.direction.normalized()
-	for ray in rays:
-		var source_index: int = ray.source_index
-		if source_index < 0 or source_index >= segments.size():
+	var shafts := cover.light_node.get_node_or_null("LightShafts") as MeshInstance3D
+	var beam_vertices := PackedVector3Array()
+	if cover.destroyed:
+		if not _light_has_no_visuals(cover.light_node):
 			return false
+	else:
+		if shafts == null or shafts.mesh == null or shafts.mesh.get_surface_count() != 1:
+			return false
+		beam_vertices = shafts.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		if beam_vertices.size() != rays.size() * 6:
+			return false
+	var normal := cover.direction.normalized()
+	var illuminated_sources: Dictionary = {}
+	for ray_index in range(rays.size()):
+		var ray := rays[ray_index]
+		var source_index: int = ray.source_index
+		if source_index < 0 or source_index >= segments.size() or illuminated_sources.has(source_index):
+			return false
+		illuminated_sources[source_index] = true
 		var source: Dictionary = segments[source_index]
 		if Vector3(ray.source_a).distance_to(source.a) > 0.001 or Vector3(ray.source_b).distance_to(source.b) > 0.001:
 			return false
@@ -209,10 +277,27 @@ func _light_matches_cracks(cover: Chunk) -> bool:
 		var world_b := cover.mesh_instance.to_global(Vector3(source.b) + normal * Light.RAY_OFFSET)
 		if _point_segment_distance(world_origin, world_a, world_b) > 0.002:
 			return false
+		# Measure the rendered root edge, not just its provenance metadata: the
+		# whole crack segment must emit the sheet even after rotation and recoil.
+		if not cover.destroyed:
+			var root_a := shafts.to_global(beam_vertices[ray_index * 6])
+			var root_b := shafts.to_global(beam_vertices[ray_index * 6 + 1])
+			var direct_error := maxf(root_a.distance_to(world_a), root_b.distance_to(world_b))
+			var reverse_error := maxf(root_a.distance_to(world_b), root_b.distance_to(world_a))
+			if minf(direct_error, reverse_error) > 0.002:
+				return false
+			# Relative length also catches a collapsed point root on short cracks.
+			var expected_length := world_a.distance_to(world_b)
+			if absf(root_a.distance_to(root_b) - expected_length) > expected_length * 0.01:
+				return false
+		if world_origin.distance_to(world_a.lerp(world_b, 0.5)) > 0.002:
+			return false
 		var world_normal := (cover.mesh_instance.global_basis.inverse().transposed() * normal).normalized()
 		var world_direction: Vector3 = (cover.light_node.global_basis * Vector3(ray.direction)).normalized()
 		if world_direction.dot(world_normal) <= 0.0:
 			return false
+	if cover.destroyed:
+		return true
 	var fissures: MeshInstance3D = cover.light_node.get_node("LitFissures")
 	if fissures.mesh == null or fissures.mesh.get_surface_count() == 0:
 		return false
@@ -228,6 +313,50 @@ func _light_matches_cracks(cover: Chunk) -> bool:
 		if fissures.to_global(local_a).distance_to(expected_a) > 0.002 or fissures.to_global(local_b).distance_to(expected_b) > 0.002:
 			return false
 	return true
+
+
+func _light_has_no_visuals(light: Node3D) -> bool:
+	if light.visible or light.is_processing():
+		return false
+	for child in light.get_children():
+		if child is MeshInstance3D and child.mesh != null:
+			return false
+	return true
+
+
+func _halo_follows_cracks(cover: Chunk) -> bool:
+	var halo := cover.light_node.get_node_or_null("FissureGlow") as MeshInstance3D
+	var core := cover.light_node.get_node_or_null("LitFissures") as MeshInstance3D
+	if halo == null or core == null or halo.mesh == null or core.mesh == null:
+		return false
+	if halo.mesh.get_surface_count() != 1 or core.mesh.get_surface_count() != 1:
+		return false
+	var segments := cover.get_visible_crack_segments()
+	var glow_vertices: PackedVector3Array = halo.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var core_vertices: PackedVector3Array = core.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	if glow_vertices.size() != segments.size() * 6 or core_vertices.size() != glow_vertices.size():
+		return false
+	var normal := cover.direction.normalized()
+	for i in range(segments.size()):
+		var first := i * 6
+		# Measure rendered geometry in the stone mesh's coordinates so a changed
+		# parent transform or recoil cannot accidentally pass a local-only check.
+		var a := cover.mesh_instance.to_local(halo.to_global((glow_vertices[first] + glow_vertices[first + 1]) * 0.5))
+		var b := cover.mesh_instance.to_local(halo.to_global((glow_vertices[first + 2] + glow_vertices[first + 5]) * 0.5))
+		var delta_a: Vector3 = a - Vector3(segments[i].a)
+		var delta_b: Vector3 = b - Vector3(segments[i].b)
+		if (delta_a - normal * delta_a.dot(normal)).length() > 0.001 or (delta_b - normal * delta_b.dot(normal)).length() > 0.001:
+			return false
+		# A small common depth offset is allowed to avoid fighting the stone;
+		# an independently placed, tilted, or floating glow is not.
+		if absf(delta_a.dot(normal) - delta_b.dot(normal)) > 0.001 or absf(delta_a.dot(normal)) > 0.05:
+			return false
+		var halo_width := halo.to_global(glow_vertices[first]).distance_to(halo.to_global(glow_vertices[first + 1]))
+		var core_width := core.to_global(core_vertices[first]).distance_to(core.to_global(core_vertices[first + 1]))
+		var side := cover.mesh_instance.to_local(halo.to_global(glow_vertices[first + 1])) - cover.mesh_instance.to_local(halo.to_global(glow_vertices[first]))
+		if halo_width <= core_width or absf(side.normalized().dot(normal)) > 0.001 or absf(side.normalized().dot((b - a).normalized())) > 0.001:
+			return false
+	return not segments.is_empty()
 
 
 func _old_cracks_remain(previous: Array[Dictionary], current: Array[Dictionary]) -> bool:
