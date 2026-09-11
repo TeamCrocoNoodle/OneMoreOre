@@ -77,6 +77,11 @@ func play_discovery(special: bool, variant: int = 0) -> void:
 		_play(_discovery, -10.0, 1.0 + float(variant % 5) * 0.07)
 
 
+func play_resonance(tier: int, damage_ratio: float) -> void:
+	if _discovery != null:
+		_play(_discovery, -19.0 + clampf(damage_ratio, 0.0, 1.0) * 4.0, pow(2.0, float(clampi(tier, 0, 5)) * 2.0 / 12.0))
+
+
 func play_swing() -> void:
 	if _swings.is_empty():
 		return

@@ -3,9 +3,12 @@ extends StaticBody3D
 
 const COMMON := 0
 const SPECIAL := 1
+const LIGHT_COLORS := [Color("f3faff"), Color("64ff86"), Color("4896ff"), Color("ffe15b"), Color("be65ff"), Color("ff4c61")]
+const LIGHT_NAMES := ["white", "green", "blue", "yellow", "purple", "red"]
 
 var grade: int = COMMON
 var variant: int = 0
+var light_tier: int = 0
 var collected: bool = false
 var bound_radius: float = 0.38
 var visual := Node3D.new()
@@ -18,6 +21,7 @@ var _colliders: Array[CollisionShape3D] = []
 func configure(new_grade: int, new_variant: int = 0) -> void:
 	grade = SPECIAL if new_grade == SPECIAL else COMMON
 	variant = posmod(new_variant, 5)
+	light_tier = 5 if grade == SPECIAL else variant
 	collected = false
 	# Ready before insertion into the tree, for the caller's placement checks.
 	bound_radius = 0.52 if grade == SPECIAL else _common_dimensions().w
@@ -104,12 +108,12 @@ func _common_palette() -> Array[Color]:
 		1:
 			return [Color("a6ffc2"), Color("28cf80"), Color("14885d"), Color("62ef97"), Color("d1ffe0"), Color("21af74"), Color("69dfab"), Color("16715c")]
 		2:
-			return [Color("ffb5c1"), Color("e53563"), Color("a5194d"), Color("fb6680"), Color("ffe0db"), Color("c52b59"), Color("fa88a4"), Color("8b234e")]
+			return [Color("a7d0ff"), Color("387ce5"), Color("224ba6"), Color("649dff"), Color("e0efff"), Color("2963ce"), Color("87b8ff"), Color("24418e")]
 		3:
 			return [Color("fff0a7"), Color("f3b635"), Color("b76c20"), Color("ffd867"), Color("fff6d2"), Color("de8c27"), Color("ffc775"), Color("a45d28")]
 		4:
 			return [Color("dbbcff"), Color("9d65e4"), Color("6740a9"), Color("bf86f7"), Color("f0e0ff"), Color("884bd0"), Color("c6a1ef"), Color("543a92")]
-	return [Color("a1f8ff"), Color("38bfdf"), Color("247eac"), Color("62def3"), Color("defdff"), Color("29a3ce"), Color("8ddfef"), Color("236a98")]
+	return [Color("ffffff"), Color("d1e7f0"), Color("8ca9bb"), Color("e6f5ff"), Color("ffffff"), Color("bbd5e3"), Color("e6f0f5"), Color("718fa9")]
 
 
 func _build_common(surface: SurfaceTool) -> void:
@@ -136,7 +140,7 @@ func _build_common(surface: SurfaceTool) -> void:
 
 
 func _build_special(surface: SurfaceTool) -> void:
-	var colors: Array[Color] = [Color("ffefa9"), Color("ffc45b"), Color("e6a072"), Color("efa5b3"), Color("c8b2ed"), Color("fff1d3"), Color("ffdd7d"), Color("e8b56b")]
+	var colors: Array[Color] = [Color("ffc4cf"), Color("ff3657"), Color("be2449"), Color("f87d94"), Color("e84377"), Color("ffe1de"), Color("ff667b"), Color("a82248")]
 	var top := Vector3(0.0, 0.52, 0.0)
 	var bottom := Vector3(0.0, -0.50, 0.0)
 	var top_crown := _ring(0.19, 0.295, 8, PI / 8.0)
@@ -151,8 +155,8 @@ func _build_special(surface: SurfaceTool) -> void:
 		_triangle(surface, top, top_crown[i], top_crown[j], colors[(i + 5) % 8])
 		_triangle(surface, top_crown[i], upper[i], upper[j], colors[i])
 		_triangle(surface, top_crown[i], upper[j], top_crown[j], colors[i].lightened(0.12))
-		_triangle(surface, upper[i], lower[i], lower[j], Color("ffe6a0").darkened(float(i % 3) * 0.09))
-		_triangle(surface, upper[i], lower[j], upper[j], Color("ffe6a0").darkened(float(i % 3) * 0.09))
+		_triangle(surface, upper[i], lower[i], lower[j], Color("ffb0bf").darkened(float(i % 3) * 0.09))
+		_triangle(surface, upper[i], lower[j], upper[j], Color("ffb0bf").darkened(float(i % 3) * 0.09))
 		_triangle(surface, lower[i], bottom_crown[i], bottom_crown[j], colors[(i + 1) % 8])
 		_triangle(surface, lower[i], bottom_crown[j], lower[j], colors[(i + 1) % 8].darkened(0.07))
 		_triangle(surface, bottom_crown[i], bottom, bottom_crown[j], colors[(i + 3) % 8])

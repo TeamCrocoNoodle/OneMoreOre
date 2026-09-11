@@ -36,7 +36,7 @@ func _ready() -> void:
 		add_child(instance)
 		batches.append(instance)
 
-func impact(point: Vector3, normal: Vector3, broken: bool, stone_color: Color) -> void:
+func impact(point: Vector3, normal: Vector3, broken: bool, stone_color: Color, gem_cover: bool = false) -> void:
 	var amount := 23 if broken else 10
 	for i in range(amount):
 		var direction := (normal * rng.randf_range(1.2, 2.6) + _random_direction() * 1.7).normalized()
@@ -44,8 +44,9 @@ func impact(point: Vector3, normal: Vector3, broken: bool, stone_color: Color) -
 	for i in range(15 if broken else 8):
 		var direction := (normal * 0.8 + _random_direction()).normalized()
 		_spawn(1, point + normal * 0.07, direction * rng.randf_range(3.0, 7.6), Color(1.0, 0.8, 0.4) if i % 3 else Color(1.0, 0.97, 0.79), rng.randf_range(0.026, 0.054), rng.randf_range(0.12, 0.3))
-	for i in range(9 if broken else 4):
-		_spawn(2, point + _random_direction() * 0.12, normal * 0.6 + _random_direction() * 0.65, stone_color.lightened(0.22), rng.randf_range(0.07, 0.15), rng.randf_range(0.28, 0.55))
+	for i in range(4 if gem_cover and broken else 1 if gem_cover else 9 if broken else 4):
+		var dust_size := rng.randf_range(0.035, 0.055) if gem_cover else rng.randf_range(0.07, 0.15)
+		_spawn(2, point + _random_direction() * 0.12, normal * 0.6 + _random_direction() * 0.65, stone_color.lightened(0.08 if gem_cover else 0.22), dust_size, rng.randf_range(0.22, 0.42))
 	_ring(point + normal * 0.06, normal, broken)
 
 func shed_chunk(mesh: Mesh, material: Material, placement: Transform3D, outward: Vector3) -> void:
@@ -59,10 +60,13 @@ func shed_chunk(mesh: Mesh, material: Material, placement: Transform3D, outward:
 	node.global_transform = placement
 	loose_chunks.append({"node": node, "velocity": outward * rng.randf_range(2.5, 4.5) + Vector3.UP * 2.3, "spin": _random_direction() * rng.randf_range(3.0, 6.0), "age": 0.0, "life": 1.2})
 
-func gem_burst(point: Vector3, special: bool = true) -> void:
+func gem_burst(point: Vector3, special: bool = true, tier: int = -1) -> void:
 	for i in range(100 if special else 32):
 		var direction := _random_direction()
 		var palette := [Color("ffce64"), Color("fff1c0"), Color("f5a6ff")] if special else [Color("7ffff0"), Color("d7fff5"), Color("bdf7ea")]
+		if tier >= 0:
+			var tint: Color = preload("res://scripts/gem.gd").LIGHT_COLORS[clampi(tier, 0, 5)]
+			palette = [tint, tint.lightened(0.40), tint.lightened(0.72)]
 		_spawn(1 if i % 2 else 0, point, direction * rng.randf_range(2.0, 8.0 if special else 4.5), palette[i % 3], rng.randf_range(0.025, 0.10), rng.randf_range(0.6, 1.6))
 	_ring(point, Vector3.FORWARD, special)
 

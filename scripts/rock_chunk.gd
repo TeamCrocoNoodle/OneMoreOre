@@ -4,6 +4,8 @@ extends StaticBody3D
 ## hit() returns true on destruction and hides / disables this plate. Its mesh
 ## remains available to the caller for debris before the caller frees the node.
 const STONE_SHADER := preload("res://shaders/stone.gdshader")
+const GemLight := preload("res://scripts/gem_light.gd")
+const GEM_COVER_HEALTH := 16.0
 
 var health: float = 3.0
 var max_health: float = 3.0
@@ -15,6 +17,10 @@ var stone_color := Color.GRAY
 var face_points := PackedVector3Array()
 var face_center := Vector3.ZERO
 var destroyed: bool = false
+var cover_gem: WeakRef
+var cover_tier: int = 0
+var is_gem_cover: bool = false
+var light_node: Node3D
 
 var _material: ShaderMaterial
 var _shape: CollisionShape3D
@@ -27,6 +33,8 @@ var _hover_amount: float = 0.0
 var _flash: float = 0.0
 var _impact: float = 0.0
 var _impact_time: float = 0.0
+var _cover_hit_count: int = 0
+var _stone_seed: int = 1
 
 
 func configure(data: Dictionary, p_layer_index: int) -> void:
@@ -38,6 +46,7 @@ func configure(data: Dictionary, p_layer_index: int) -> void:
 	face_points = data["face_points"]
 	face_center = data.get("face_center", _average_points(face_points))
 	_rng.seed = data.get("seed", 1)
+	_stone_seed = int(data.get("seed", 1))
 	# Larger rocks contain hundreds of pieces: depth adds modest resistance
 	# while every individual plate still breaks in a short, satisfying burst.
 	var toughness := 3.0 if layer_index >= 2 else 2.0
@@ -70,6 +79,65 @@ func configure(data: Dictionary, p_layer_index: int) -> void:
 	set_process(false)
 
 
+func configure_gem_cover(jewel: StaticBody3D, tier: int) -> void:
+	if destroyed or not is_instance_valid(jewel) or jewel.is_queued_for_deletion():
+		return
+	if bool(jewel.get("collected")):
+		return
+	# Main may discover the same final obstruction more than once. Repeating
+	# its designation must never replenish a cover the player is already mining.
+	if is_gem_cover and cover_gem != null and cover_gem.get_ref() == jewel:
+		cover_tier = clampi(tier, 0, 5)
+		return
+	cover_gem = weakref(jewel)
+	cover_tier = clampi(tier, 0, 5)
+	is_gem_cover = true
+	_cover_hit_count = 0
+	var previous_damage := maxf(max_health - health, 0.0)
+	max_health = maxf(max_health, GEM_COVER_HEALTH)
+	health = maxf(max_health - previous_damage, 1.0)
+	if not is_instance_valid(light_node):
+		light_node = GemLight.new()
+		light_node.name = "HiddenGemLight"
+		mesh_instance.add_child(light_node)
+	light_node.call("clear")
+	light_node.call("configure", face_points, face_center, direction, _stone_seed)
+	set_process(true)
+
+
+func release_gem_cover() -> void:
+	is_gem_cover = false
+	cover_gem = null
+	cover_tier = 0
+	_cover_hit_count = 0
+	if is_instance_valid(light_node):
+		light_node.call("clear")
+	# Existing damage remains meaningful after the hidden gem is collected.
+	set_process(true)
+
+
+func get_revealed_tier() -> int:
+	if not is_gem_cover or _cover_hit_count == 0:
+		return -1
+	if _cover_hit_count <= 1 and health > 0.0:
+		return 0
+	var damage_taken := maxf(max_health - health, 0.0)
+	var reveal_span := maxf(max_health * 0.8 - 1.0, 1.0)
+	var progression := clampf((damage_taken - 1.0) / reveal_span, 0.0, 1.0)
+	# At 16 HP, a red gem shows white / green / blue / yellow / purple / red
+	# at hits 1 / 4 / 6 / 9 / 11 / 13. A unit hit cannot skip a color tier.
+	return clampi(floori(progression * float(cover_tier)), 0, cover_tier)
+
+
+func _cover_target_is_active() -> bool:
+	if cover_gem == null:
+		return false
+	var jewel: Object = cover_gem.get_ref()
+	if not is_instance_valid(jewel) or jewel.is_queued_for_deletion():
+		return false
+	return not bool(jewel.get("collected"))
+
+
 func set_hovered(value: bool) -> void:
 	if _hovered == value or destroyed:
 		return
@@ -80,11 +148,17 @@ func set_hovered(value: bool) -> void:
 func hit(damage: float, point: Vector3) -> bool:
 	if destroyed:
 		return true
+	if is_gem_cover and not _cover_target_is_active():
+		release_gem_cover()
 	health = maxf(health - damage, 0.0)
 	_flash = 1.0
 	_impact = minf(0.085 + damage * 0.012, 0.14)
 	_impact_time = 0.0
 	set_process(true)
+	if is_gem_cover:
+		_cover_hit_count += 1
+		if is_instance_valid(light_node):
+			light_node.call("pulse", get_revealed_tier(), 1.0 - health / max_health, health <= 0.0)
 	if health <= 0.0:
 		destroyed = true
 		visible = false
@@ -113,6 +187,8 @@ func hit(damage: float, point: Vector3) -> bool:
 
 
 func _process(delta: float) -> void:
+	if is_gem_cover and not _cover_target_is_active():
+		release_gem_cover()
 	_flash = move_toward(_flash, 0.0, delta * 7.8)
 	_hover_amount = move_toward(_hover_amount, 1.0 if _hovered else 0.0, delta * 8.0)
 	_impact_time += delta
@@ -120,7 +196,7 @@ func _process(delta: float) -> void:
 	mesh_instance.position = -direction * sin(_impact_time * 42.0) * _impact
 	_material.set_shader_parameter("hit_flash", _flash)
 	_material.set_shader_parameter("hovered", _hover_amount)
-	if _flash <= 0.0 and _impact <= 0.0 and is_equal_approx(_hover_amount, 1.0 if _hovered else 0.0):
+	if _flash <= 0.0 and _impact <= 0.0 and is_equal_approx(_hover_amount, 1.0 if _hovered else 0.0) and not is_gem_cover:
 		mesh_instance.position = Vector3.ZERO
 		set_process(false)
 

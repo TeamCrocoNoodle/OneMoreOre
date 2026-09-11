@@ -15,6 +15,8 @@ var impact_was_deferred := false
 var hit_count_at_signal := -1
 var traversed_layers: Array[int] = []
 var initial_gem_count := 0
+var cover_promotions := 0
+var cover_exposures := 0
 
 
 func _initialize() -> void:
@@ -30,6 +32,7 @@ func _run() -> void:
 	game = load("res://scenes/main.tscn").instantiate() as Main
 	root.add_child(game)
 	await _frames(4)
+	await _validate_showcase()
 	await _validate_seeded_layouts()
 	initial_gem_count = game.gems.size()
 	_check(game.chunks.size() == EXPECTED_CHUNKS, "A large fresh rock has 322 independently mineable chunks")
@@ -80,6 +83,7 @@ func _run() -> void:
 		steps += 1
 	_check(game.gems.is_empty() and game.gems_collected_this_rock == initial_gem_count, "Every randomly placed gem can be reached through ordinary mining rays")
 	_check(game.collected_count == collected_before + initial_gem_count, "Each exposed gem awards exactly one collection")
+	_check(cover_promotions > 0 and cover_exposures > 0, "Random excavation encounters and removes real high-health gem covers")
 	_check(game.chunks.size() > 0, "Finding all gems leaves unrelated stone intact")
 	if not game.gems.is_empty() or game.chunks.is_empty():
 		_finish()
@@ -126,6 +130,39 @@ func _run() -> void:
 	_check(game.hit_count == hits_after_release and not game.mouse_down, "Releasing the mouse after respawn stops repeated mining")
 	await _validate_inputs()
 	_finish()
+
+
+func _validate_showcase() -> void:
+	game._spawn_rock(12873, true)
+	await create_timer(0.75).timeout
+	await _frames(2)
+	_check(game.showcase_mode and game.showcase_covers.size() == game.gems.size(), "The first-rock showcase provides one stone cap for each gem")
+	var preview_lights: Array[WeakRef] = []
+	var tiers: Array[int] = []
+	for cap in game.showcase_covers:
+		var jewel: StaticBody3D = cap.cover_gem.get_ref()
+		var screen: Vector2 = game.camera.unproject_position(jewel.global_position)
+		var visible := game.ray_at(screen)
+		var behind := _ray_without(screen, cap)
+		_check(not visible.is_empty() and visible.collider == cap, "Every showcase gem is initially hidden by its selected front cap")
+		_check(not behind.is_empty() and behind.collider == jewel, "Excluding a showcase cap exposes its gem rather than another stone")
+		_check(cap.health == 16.0 and cap.max_health == 16.0, "Showcase caps have their high health before any hit")
+		_check(not cap.light_node.visible and cap.light_node.pulse_count == 0, "Unstruck showcase caps give away no beam color")
+		tiers.append(jewel.light_tier)
+		preview_lights.append(weakref(cap.light_node))
+	tiers.sort()
+	_check(tiers == [0, 1, 2, 3, 4, 5], "All six final light colors are available on the first rock")
+	var final_cap: StaticBody3D = game.showcase_covers[-1]
+	var final_gem: StaticBody3D = final_cap.cover_gem.get_ref()
+	var departing: WeakRef = weakref(final_cap.light_node)
+	_check(await _break_visible(game.camera.unproject_position(final_gem.global_position)), "A showcase cap is removable through the normal mining path")
+	_check(departing.get_ref() != null and departing.get_ref().get_parent() == game.effects, "The cover's final light flash survives its stone detachment")
+	game._spawn_rock(TEST_SEED, false)
+	await _frames(3)
+	var all_lights_freed := true
+	for previous in preview_lights:
+		all_lights_freed = all_lights_freed and previous.get_ref() == null
+	_check(all_lights_freed, "Reset clears both attached and detached lights from the previous rock")
 
 
 func _validate_seeded_layouts() -> void:
@@ -237,24 +274,59 @@ func _break_visible(screen: Vector2) -> bool:
 		return false
 	var previous_stone := game.chunks.size()
 	var previous_collected := game.collected_count
-	var strikes := 1
+	var following := _ray_without(screen, body)
+	var linked_gem: StaticBody3D = body.cover_gem.get_ref() as StaticBody3D if stone and body.cover_gem != null else null
+	var originally_ordinary: bool = stone and body.max_health <= 4.0
+	var previous_damage: float = maxf(body.max_health - body.health, 0.0) if stone else 0.0
+	var strikes := 0
 	if stone:
 		if not traversed_layers.has(body.layer_index):
 			traversed_layers.append(body.layer_index)
-		strikes = int(ceil(body.health))
-	for i in range(strikes):
+	# Designation happens on the first real strike. Read health after that hit,
+	# so promoting a 2-4 HP stone to a 16 HP cover cannot fool this helper.
+	while strikes < 32:
 		if not game._mine_at(screen):
 			_check(false, "A reachable body's mining hits must be accepted")
 			return false
+		strikes += 1
+		if stone and strikes == 1:
+			if body.is_gem_cover:
+				linked_gem = body.cover_gem.get_ref() as StaticBody3D
+				if originally_ordinary:
+					cover_promotions += 1
+					_check(body.max_health == 16.0 and body.health == 15.0 - previous_damage, "Main assigns 16 cover HP before the hit while preserving any prior damage")
+					_check(not following.is_empty() and following.collider == linked_gem, "A promoted cover is the final physical obstruction before its linked gem")
+					_check(body.get_revealed_tier() == 0 and body.light_node.current_tier == 0, "A newly identified cover starts with white light")
+			elif originally_ordinary:
+				_check(body.max_health >= 2.0 and body.max_health <= 4.0 and not is_instance_valid(body.light_node), "Ordinary overlying blockers stay soft and do not emit gem beams")
+		if not stone or body.destroyed:
+			break
 	if stone:
 		_check(body.collision_layer == 0 and body.destroyed and game.chunks.size() == previous_stone - 1, "Breaking one chunk disables its collision and removes exactly that chunk")
+		if is_instance_valid(linked_gem) and not following.is_empty() and following.collider == linked_gem:
+			var exposed := game.ray_at(screen)
+			_check(not exposed.is_empty() and exposed.collider == linked_gem, "Removing the final cover immediately exposes its gem to the same mining ray")
+			cover_exposures += 1
 		await _frames(1)
 		_check(not is_instance_valid(body), "A detached chunk's physics body is freed")
 	else:
 		_check(game.chunks.size() == previous_stone, "Collecting a gem preserves every remaining stone chunk")
 		_check(body.collision_layer == 0 and not game.gems.has(body) and game.collected_count == previous_collected + 1, "Collected gem is removed from selection and awarded exactly once")
+		var stale_links := false
+		for remaining in game.chunks:
+			if remaining.cover_gem != null and remaining.cover_gem.get_ref() == body:
+				stale_links = true
+		_check(not stale_links, "Collection releases every surviving cover linked to the gem")
 		await _frames(1)
 	return true
+
+
+func _ray_without(screen: Vector2, excluded: StaticBody3D) -> Dictionary:
+	var origin := game.camera.project_ray_origin(screen)
+	var direction := game.camera.project_ray_normal(screen)
+	var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 40.0, 3)
+	query.exclude = [excluded.get_rid()]
+	return game.get_world_3d().direct_space_state.intersect_ray(query)
 
 
 func _validate_inputs() -> void:
