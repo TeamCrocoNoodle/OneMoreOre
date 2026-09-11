@@ -12,9 +12,7 @@ uniform vec3 camera_up = vec3(0.0, 1.0, 0.0);
 void vertex() {
 	if (effect_kind == 4) {
 		vec3 root = CUSTOM0.xyz;
-		vec3 travel = CUSTOM1.xyz;
-		vec3 spread = VERTEX - root - travel;
-		VERTEX = root + travel * mix(0.72, 1.0, beam_growth) + spread * mix(0.65, 1.0, beam_growth);
+		VERTEX = root + CUSTOM1.xyz * mix(0.72, 1.0, beam_growth);
 	} else if (effect_kind == 2) {
 		float travel = CUSTOM0.w + effect_progress * 0.18;
 		float size = CUSTOM1.z * sin(travel * PI);
@@ -31,10 +29,10 @@ void fragment() {
 	if (effect_kind == 4) {
 		// Illuminate the entire slit evenly. Keep the hot light close to its
 		// line-shaped root instead of forming a bright triangular point flare.
-		float edge = 1.0 - smoothstep(0.97, 1.0, across);
-		float source = 1.0 - smoothstep(0.005, 0.10, UV.y);
-		alpha = edge * 0.90 * pow(source, 1.5);
-		tint = mix(tint, vec3(1.0), source * 0.24) * 1.30;
+		float edge = 1.0 - smoothstep(mix(0.99, 0.88, UV.y), 1.0, across);
+		float source = exp(-UV.y * 16.0) * (1.0 - smoothstep(0.18, 0.42, UV.y));
+		alpha = edge * 1.75 * source;
+		tint = mix(tint, vec3(1.0), source * 0.32) * 1.45;
 	} else if (effect_kind == 1) {
 		// A hot core stays on the actual fracture, with colored light around it.
 		float core = 1.0 - smoothstep(0.25, 0.72, across);
@@ -46,11 +44,11 @@ void fragment() {
 		float distance = centered.x + centered.y;
 		float diamond = 1.0 - smoothstep(0.57, 0.70, distance);
 		float halo = 1.0 - smoothstep(0.45, 1.10, distance);
-		alpha = diamond * 0.84 + halo * 0.16;
+		alpha = (diamond * 0.84 + halo * 0.16) * 0.65;
 		tint = mix(tint, vec3(1.0), diamond * 0.28) * 1.16;
 	} else {
 		// Only a narrow halo spills onto the neighboring rock surface.
-		alpha = pow(max(1.0 - across, 0.0), 1.55) * 0.34;
+		alpha = pow(max(1.0 - across, 0.0), 1.85) * 0.42;
 		tint *= 1.12;
 	}
 	ALBEDO = tint;

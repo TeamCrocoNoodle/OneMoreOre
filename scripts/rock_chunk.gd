@@ -268,7 +268,7 @@ func configure_gem_cover(jewel: StaticBody3D, tier: int) -> void:
 		light_node.name = "HiddenGemLight"
 		mesh_instance.add_child(light_node)
 	light_node.call("clear")
-	light_node.call("configure", face_points, face_center, direction, _stone_seed)
+	light_node.call("configure", face_points, face_center, direction, _stone_seed, gem_socket_center)
 	set_process(true)
 
 

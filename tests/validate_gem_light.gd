@@ -157,6 +157,7 @@ func _validate_spatial_damage() -> void:
 	promoted.hit(0.25, promoted.mesh_instance.to_global(point_b))
 	_check(_old_cracks_remain(before_promotion, promoted.get_visible_crack_segments()), "The first cover pulse retains cracks made before the gem was discovered")
 	_check(_light_matches_cracks(promoted), "A promoted cover's light uses its existing and new visible cracks")
+	_check(_projected_sheets_follow_source(promoted), "Each promoted-cover sheet projects its complete crack edge from one internal light source")
 	_check(_halo_follows_cracks(promoted), "The fissure halo widens around the stone's actual existing and new crack traces")
 
 	var transformed := Node3D.new()
@@ -174,6 +175,7 @@ func _validate_spatial_damage() -> void:
 	var rays_before: Array[Dictionary] = cover.light_node.get("_rays").duplicate(true)
 	_check(cover.latest_impact_local.distance_to(point_a) < 0.001, "Rotated and recoiling cover maps the world strike to the visible face")
 	_check(_light_matches_cracks(cover), "Initial beam origins and luminous fissures follow the real cracks under rotation and recoil")
+	_check(_projected_sheets_follow_source(cover), "The internal source projects continuous straight sheets under rotation, nonuniform scale and recoil")
 	_check(_halo_follows_cracks(cover), "The fissure halo shares the visible crack centerlines under rotation and recoil")
 	cover.mesh_instance.position = -cover.direction * 0.093
 	cover.hit(0.2, cover.mesh_instance.to_global(point_b))
@@ -185,6 +187,7 @@ func _validate_spatial_damage() -> void:
 	_check(_ray_field_changes(rays_before, rays_after, "direction", 0.015), "Moving the impact changes the beams' fan directions")
 	_check(_rays_reference_impact(rays_after, point_b), "The new beam pulse includes geometry rooted at the latest impact")
 	_check(_light_matches_cracks(cover), "Moved beams and fissures share the visible crack geometry in world space")
+	_check(_projected_sheets_follow_source(cover), "Moved damage retains shared projected endpoints instead of opening gaps between connected crack sections")
 	_check(_halo_follows_cracks(cover), "Moving the impact updates the halo around both retained and newly created cracks")
 
 	var tangent := (point_b - point_a).normalized()
@@ -198,6 +201,7 @@ func _validate_spatial_damage() -> void:
 	_check(_visible_crack_covers(last_nearby, repeated) and _old_cracks_remain(before_move, repeated), "Repeated nearby hits keep old damage and leave the current strike covered by an actual visible crack ribbon")
 	_check(repeated.size() <= 18 and _large_crack_groups(repeated) <= 2, "Nearby hits stay within two compact crack networks instead of adding a fan or connector for every contact")
 	_check(_light_matches_cracks(cover), "Repeated pulses remain bounded and attached to the actual visible cracks")
+	_check(_projected_sheets_follow_source(cover), "Repeated hits preserve one coherent projection through all retained crack edges")
 	_check(_halo_follows_cracks(cover), "Repeated nearby damage keeps its halo centered on the accumulated visible crack traces")
 	var pulses_before_fatal: int = cover.light_node.pulse_count
 	cover.hit(cover.health, cover.mesh_instance.to_global(point_c))
@@ -322,6 +326,85 @@ func _light_has_no_visuals(light: Node3D) -> bool:
 		if child is MeshInstance3D and child.mesh != null:
 			return false
 	return true
+
+
+func _projected_sheets_follow_source(cover: Chunk) -> bool:
+	var light := cover.light_node
+	var emitter_value = light.get("_emitter_position")
+	if not emitter_value is Vector3:
+		return false
+	var emitter: Vector3 = emitter_value
+	var shafts := light.get_node_or_null("LightShafts") as MeshInstance3D
+	var sources := light.get_node_or_null("LightSources") as MeshInstance3D
+	if shafts == null or shafts.mesh == null or sources == null or sources.mesh != shafts.mesh:
+		return false
+	var arrays := shafts.mesh.surface_get_arrays(0)
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var roots: PackedFloat32Array = arrays[Mesh.ARRAY_CUSTOM0]
+	var travel: PackedFloat32Array = arrays[Mesh.ARRAY_CUSTOM1]
+	var rays: Array[Dictionary] = light.get("_rays")
+	if vertices.size() != rays.size() * 6 or roots.size() != vertices.size() * 4 or travel.size() != roots.size():
+		return false
+	var common_scale := -1.0
+	var projected_endpoints: Dictionary = {}
+	var shared_endpoints := 0
+	for ray_index in rays.size():
+		var ray := rays[ray_index]
+		var first := ray_index * 6
+		var root_a := vertices[first]
+		var root_b := vertices[first + 1]
+		var tip_a := vertices[first + 5]
+		var tip_b := vertices[first + 2]
+		if not root_a.is_finite() or not root_b.is_finite() or not tip_a.is_finite() or not tip_b.is_finite():
+			return false
+		if not ray.has("tip_a") or not ray.has("tip_b") or Vector3(ray.tip_a).distance_to(tip_a) > 0.001 or Vector3(ray.tip_b).distance_to(tip_b) > 0.001:
+			return false
+		var origin: Vector3 = ray.origin
+		var expected_direction := (origin - emitter).normalized()
+		if expected_direction.length_squared() < 0.9 or expected_direction.dot(ray.direction) < 0.9999:
+			return false
+		# The stored, actually rendered far corners must lie beyond their roots
+		# on rays from the same emitter, with one magnification for the whole net.
+		for pair: Array in [[root_a, tip_a], [root_b, tip_b]]:
+			var root_point: Vector3 = pair[0]
+			var tip_point: Vector3 = pair[1]
+			var from_source := root_point - emitter
+			var to_tip := tip_point - emitter
+			if from_source.length_squared() <= 0.000001:
+				return false
+			var factor := to_tip.dot(from_source) / from_source.length_squared()
+			if factor <= 1.01 or to_tip.cross(from_source).length() / from_source.length() > 0.001:
+				return false
+			if common_scale < 0.0:
+				common_scale = factor
+			elif absf(factor - common_scale) > 0.001:
+				return false
+			var key := Vector3i(roundi(root_point.x * 100000.0), roundi(root_point.y * 100000.0), roundi(root_point.z * 100000.0))
+			if projected_endpoints.has(key):
+				shared_endpoints += 1
+				if Vector3(projected_endpoints[key]).distance_to(tip_point) > 0.001:
+					return false
+			else:
+				projected_endpoints[key] = tip_point
+		var source_edge := root_b - root_a
+		var far_edge := tip_b - tip_a
+		if source_edge.length_squared() <= 0.00000001 or far_edge.distance_to(source_edge * common_scale) > 0.001:
+			return false
+		var sheet_normal := source_edge.cross(tip_a - root_a)
+		if sheet_normal.length_squared() <= 0.000000000001 or absf(sheet_normal.normalized().dot(tip_b - root_a)) > 0.001:
+			return false
+		# Inspect the uploaded GPU-animation inputs as well as the rest mesh.
+		# Every root stays fixed; far vertices carry their own endpoint's full
+		# displacement, so growth cannot collapse the source line or tear a seam.
+		for corner in 6:
+			var index := first + corner
+			var offset := index * 4
+			var encoded_root := Vector3(roots[offset], roots[offset + 1], roots[offset + 2])
+			var encoded_travel := Vector3(travel[offset], travel[offset + 1], travel[offset + 2])
+			var expected_root := root_b if corner in [1, 2, 4] else root_a
+			if encoded_root.distance_to(expected_root) > 0.001 or encoded_travel.distance_to(vertices[index] - expected_root) > 0.001:
+				return false
+	return common_scale > 1.0 and shared_endpoints > 0
 
 
 func _halo_follows_cracks(cover: Chunk) -> bool:

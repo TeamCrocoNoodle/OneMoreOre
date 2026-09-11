@@ -10,8 +10,8 @@ const CRACK_OFFSET := 0.012
 const GLOW_OFFSET := 0.010
 const RAY_OFFSET := 0.018
 const CRACK_CORE_RATIO := 0.78
-const CRACK_GLOW_RATIO := 2.2
-const SHEET_OPACITY := 0.30
+const CRACK_GLOW_RATIO := 3.0
+const SHEET_OPACITY := 0.26
 const TIER_COLORS: Array[Color] = [
 	Color("f3faff"), Color("64ff86"), Color("4896ff"),
 	Color("ffe15b"), Color("be65ff"), Color("ff4c61")
@@ -26,6 +26,8 @@ var _bitangent := Vector3.UP
 var _rng := RandomNumberGenerator.new()
 var _seed_value := 0
 var _latest_impact := Vector3.ZERO
+var _emitter_position := Vector3.ZERO
+var _projection_scale := 6.0
 var _crack_segments: Array[Dictionary] = []
 var _rays: Array[Dictionary] = []
 var _dust: Array[Dictionary] = []
@@ -46,8 +48,7 @@ var _broken := false
 var _configured := false
 
 
-@warning_ignore("unused_parameter")
-func configure(face_points: PackedVector3Array, face_center: Vector3, normal: Vector3, seed_value: int) -> void:
+func configure(face_points: PackedVector3Array, face_center: Vector3, normal: Vector3, seed_value: int, source_position: Vector3 = Vector3.INF) -> void:
 	_ensure_meshes()
 	clear()
 	_normal = normal.normalized() if normal.length_squared() > 0.0001 else Vector3.UP
@@ -55,6 +56,19 @@ func configure(face_points: PackedVector3Array, face_center: Vector3, normal: Ve
 	if _tangent.length_squared() < 0.1:
 		_tangent = _normal.cross(Vector3.RIGHT).normalized()
 	_bitangent = _normal.cross(_tangent).normalized()
+	var extent := 0.0
+	for point in face_points:
+		extent += point.distance_to(face_center)
+	extent = maxf(extent / maxf(float(face_points.size()), 1.0), 0.35)
+	_emitter_position = source_position if source_position != Vector3.INF else face_center - _normal * extent * 0.7
+	# Keep the gem's lateral placement, but give very shallow sockets enough
+	# optical depth that tiny cracks cannot project into enormous triangles.
+	var depth := _normal.dot(face_center - _emitter_position)
+	var minimum_depth := maxf(extent * 0.60, 0.24)
+	if depth < minimum_depth:
+		_emitter_position -= _normal * (minimum_depth - depth)
+		depth = minimum_depth
+	_projection_scale = 1.0 + clampf(extent * 3.5, 1.8, 3.1) / (depth + RAY_OFFSET)
 	_seed_value = seed_value
 	_rng.seed = seed_value
 	_configured = true
@@ -225,24 +239,21 @@ func _build_rays() -> void:
 		var impact: Vector3 = segment.impact
 		var source_t := 0.5
 		var source_point := a.lerp(b, source_t)
-		var tangent := (b - a).normalized()
-		var outward := source_point - impact
-		outward -= _normal * outward.dot(_normal)
-		outward = outward.normalized() if outward.length_squared() > 0.0000001 else tangent
-		if tangent.dot(outward) < 0.0:
-			tangent = -tangent
-		# The light leaves the length of a slit, across its edge. Traveling
-		# along the crack instead would visually collapse the line to a point.
-		var planar := _normal.cross(tangent).normalized()
-		if planar.dot(outward) < 0.0:
-			planar = -planar
-		var fan := _rng.randf_range(0.85, 1.35)
-		var ray_direction := (_normal + planar * fan).normalized()
+		var origin := source_point + _normal * RAY_OFFSET
+		var source_a := a + _normal * RAY_OFFSET
+		var source_b := b + _normal * RAY_OFFSET
+		# One buried light shines THROUGH the complete crack network. Shared
+		# endpoints stay shared at the far end too, just like adjacent sections
+		# of an open door slit. No independent sideways fans or random widening.
+		var tip_a := _emitter_position + (source_a - _emitter_position) * _projection_scale
+		var tip_b := _emitter_position + (source_b - _emitter_position) * _projection_scale
+		var advance := (tip_a + tip_b) * 0.5 - origin
 		_rays.append({
-			"origin": source_point + _normal * RAY_OFFSET,
-			"direction": ray_direction,
-			"length": _rng.randf_range(4.10, 4.80),
-			"width": _rng.randf_range(0.54, 0.74),
+			"origin": origin,
+			"direction": advance.normalized(),
+			"length": advance.length(),
+			"tip_a": tip_a,
+			"tip_b": tip_b,
 			"weight": SHEET_OPACITY * density_scale * (1.0 if bool(segment.fresh) else 0.85),
 			"source_index": int(segment.source_index),
 			"source_hit_id": int(segment.hit_id),
@@ -250,17 +261,13 @@ func _build_rays() -> void:
 			"source_b": b,
 			"source_impact": impact,
 			"source_t": source_t,
-			"tangent": tangent,
-			"outward": outward,
-			"planar": planar,
-			"fan_strength": fan,
 			"fresh": bool(segment.fresh)
 		})
 	for i in range(8):
 		_dust.append({
 			"ray": mini(int(float(i) * float(_rays.size()) / 8.0), _rays.size() - 1),
 			"phase": _rng.randf_range(0.28, 0.61),
-			"size": _rng.randf_range(0.065, 0.095),
+			"size": _rng.randf_range(0.045, 0.065),
 			"offset": Vector2(_rng.randf_range(-0.34, 0.34), _rng.randf_range(-0.25, 0.25))
 		})
 
@@ -325,18 +332,11 @@ func _draw_beams() -> void:
 	surface.set_custom_format(0, SurfaceTool.CUSTOM_RGBA_FLOAT)
 	surface.set_custom_format(1, SurfaceTool.CUSTOM_RGBA_FLOAT)
 	for ray in _rays:
-		var origin: Vector3 = ray.origin
-		var direction: Vector3 = ray.direction
-		var length := float(ray.length) * lerpf(0.98, 1.04, _damage)
-		var width := float(ray.width) * lerpf(0.94, 1.08, _damage)
 		var source_a: Vector3 = ray.source_a + _normal * RAY_OFFSET
 		var source_b: Vector3 = ray.source_b + _normal * RAY_OFFSET
-		var side := (source_b - source_a).normalized()
-		var tip := origin + direction * length
-		var tip_width := source_a.distance_to(source_b) * 0.5 + width
 		# Both root vertices sit on the real crack endpoints. The whole line
-		# opens into a widening sheet; it never swivels into a point billboard.
-		_add_beam_quad(surface, source_a, source_b, tip - side * tip_width, tip + side * tip_width, direction * length, float(ray.weight))
+		# projects outward; its edges continue the buried source-to-slit lines.
+		_add_beam_quad(surface, source_a, source_b, ray.tip_a, ray.tip_b, float(ray.weight))
 	_beam_mesh.mesh = surface.commit()
 	# Reuse the exact shaft geometry so the hot source cannot drift off its
 	# fracture or change direction independently of the wider colored beam.
@@ -369,12 +369,12 @@ func _draw_dust() -> void:
 	_dust_mesh.custom_aabb = _beam_mesh.mesh.get_aabb().grow(0.75)
 
 
-func _add_beam_quad(surface: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, advance: Vector3, alpha: float) -> void:
+func _add_beam_quad(surface: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, alpha: float) -> void:
 	var vertices := PackedVector3Array([a, b, d, a, d, c])
 	var roots := PackedVector3Array([a, b, b, a, b, a])
 	var uvs := PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 0), Vector2(1, 1), Vector2(0, 1)])
 	for i in range(6):
-		var travel := advance * uvs[i].y
+		var travel := vertices[i] - roots[i]
 		surface.set_color(Color(1.0, 1.0, 1.0, alpha))
 		surface.set_uv(uvs[i])
 		surface.set_custom(0, Color(roots[i].x, roots[i].y, roots[i].z, 0.0))

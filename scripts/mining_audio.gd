@@ -1,20 +1,26 @@
 extends Node
-## Reference-recorded mining samples with procedural swing and reward sounds.
+## Reference-recorded stone, ore, and discovery samples with procedural swing and respawn sounds.
 ## The bank is prepared once; playback performs no file loading or synthesis.
 
 const SAMPLE_RATE := 24000
 const PLAYER_COUNT := 14
 const TWO_PI := TAU
-const REVEAL_STEPS: Array[float] = [0.0, 4.0, 7.0, 12.0, 16.0]
 const HIT_SAMPLES: Array[AudioStreamWAV] = [
 	preload("res://assets/audio/mining_hit_01.wav"),
 	preload("res://assets/audio/mining_hit_02.wav"),
 	preload("res://assets/audio/mining_hit_03.wav")
 ]
 const BREAK_SAMPLE: AudioStreamWAV = preload("res://assets/audio/mining_break.wav")
+const ORE_HIT_SAMPLES: Array[AudioStreamWAV] = [
+	preload("res://assets/audio/ore_hit_01.wav"),
+	preload("res://assets/audio/ore_hit_02.wav"),
+	preload("res://assets/audio/ore_hit_03.wav")
+]
+const DISCOVERY_SAMPLE: AudioStreamWAV = preload("res://assets/audio/ore_discovery.wav")
 
 var _hits: Array[AudioStreamWAV] = []
 var _breaks: Array[AudioStreamWAV] = []
+var _ore_hits: Array[AudioStreamWAV] = []
 var _swings: Array[AudioStreamWAV] = []
 var _reveal: AudioStreamWAV
 var _discovery: AudioStreamWAV
@@ -23,6 +29,7 @@ var _players: Array[AudioStreamPlayer] = []
 var _started: Array[int] = []
 var _random := RandomNumberGenerator.new()
 var _hit_index := -1
+var _ore_hit_index := -1
 var _swing_index := 0
 var _last_swing_msec := -1000
 var _last_break_msec := -1000
@@ -32,10 +39,11 @@ func _ready() -> void:
 	_random.randomize()
 	_hits.assign(HIT_SAMPLES)
 	_breaks.assign([BREAK_SAMPLE])
+	_ore_hits.assign(ORE_HIT_SAMPLES)
 	for i in range(3):
 		_swings.append(_synthesize("swing", 0.115, 3803 + i * 71))
-	_reveal = _synthesize("reveal", 1.55, 5107)
-	_discovery = _synthesize("reveal", 0.62, 8107)
+	_reveal = DISCOVERY_SAMPLE
+	_discovery = DISCOVERY_SAMPLE
 	_respawn = _synthesize("respawn", 0.56, 7307)
 	for i in range(PLAYER_COUNT):
 		var player := AudioStreamPlayer.new()
@@ -72,19 +80,27 @@ func play_break(layer: int = 0) -> void:
 
 func play_reveal() -> void:
 	if _reveal != null:
-		_play(_reveal, -7.0, 1.0, true)
+		_play(_reveal, -7.0, 0.98, true)
 
 
 func play_discovery(special: bool, variant: int = 0) -> void:
 	if special:
 		play_reveal()
 	elif _discovery != null:
-		_play(_discovery, -10.0, 1.0 + float(variant % 5) * 0.07)
+		_play(_discovery, -9.0, 1.0 + float(clampi(variant, 0, 4)) * 0.018, true)
 
 
 func play_resonance(tier: int, damage_ratio: float) -> void:
-	if _discovery != null:
-		_play(_discovery, -19.0 + clampf(damage_ratio, 0.0, 1.0) * 4.0, pow(2.0, float(clampi(tier, 0, 5)) * 2.0 / 12.0))
+	# The existing resonance API now plays one reference-recorded ore strike.
+	if _ore_hits.is_empty():
+		return
+	if _ore_hit_index < 0:
+		_ore_hit_index = _random.randi_range(0, _ore_hits.size() - 1)
+	else:
+		_ore_hit_index = (_ore_hit_index + _random.randi_range(1, maxi(_ore_hits.size() - 1, 1))) % _ore_hits.size()
+	var volume := -10.0 + clampf(damage_ratio, 0.0, 1.0) * 2.0
+	var pitch := _random.randf_range(0.985, 1.015) * pow(2.0, float(clampi(tier, 0, 5)) * 0.6 / 12.0)
+	_play(_ore_hits[_ore_hit_index], volume, pitch)
 
 
 func play_swing() -> void:
@@ -106,7 +122,7 @@ func play_respawn() -> void:
 func _play(stream: AudioStreamWAV, volume: float, pitch: float, priority: bool = false) -> void:
 	if _players.is_empty():
 		return
-	# Reserve the last voice for gem reveals, so repeated mining cannot cut it off.
+	# Reserve the last voice for both discovery grades, so mining cannot cut off their tails.
 	var voice := _players.size() - 1
 	if not priority:
 		voice = 0
@@ -152,19 +168,6 @@ func _synthesize(kind: String, duration: float, seed_value: int) -> AudioStreamW
 				var envelope := pow(sin(PI * progress), 2.2)
 				sample = (mid_noise * 0.72 + high_noise * 0.035) * envelope
 				sample += sin(TWO_PI * (210.0 * t + 900.0 * t * t)) * 0.05 * envelope
-			"reveal":
-				# A major pentatonic glint blooms into a gentle, glassy chord.
-				for i in range(REVEAL_STEPS.size()):
-					var local_t := t - float(i) * 0.06
-					if local_t >= 0.0:
-						var frequency := 659.255 * pow(2.0, REVEAL_STEPS[i] / 12.0)
-						var envelope := minf(local_t / 0.003, 1.0) * exp(-local_t * 3.8)
-						var bell := sin(TWO_PI * frequency * local_t)
-						bell += sin(TWO_PI * frequency * 2.002 * local_t) * 0.24 * exp(-local_t * 5.0)
-						bell += sin(TWO_PI * frequency * 3.97 * local_t) * 0.075 * exp(-local_t * 13.0)
-						sample += bell * envelope * 0.23
-				sample += sin(TWO_PI * 164.814 * t) * 0.2 * minf(t / 0.009, 1.0) * exp(-t * 7.0)
-				sample += mid_noise * 0.055 * exp(-t * 5.5) * minf(t / 0.015, 1.0)
 			"respawn":
 				var progress := t / duration
 				var envelope := pow(sin(PI * progress), 2.0)

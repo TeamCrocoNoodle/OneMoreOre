@@ -19,3 +19,6 @@ mono_crash.*.json
 # Generated playtest captures and platform builds.
 artifacts/
 builds/
+
+# Offline audio preparation caches.
+__pycache__/

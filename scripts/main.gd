@@ -597,11 +597,10 @@ func _mine_at(screen_position: Vector2) -> bool:
 		light_pulse_history.append(tier)
 		if light_pulse_history.size() > 128:
 			light_pulse_history.pop_front()
-		audio.play_resonance(tier, 1.0 - body.health / body.max_health)
+		if not broken:
+			audio.play_resonance(tier, 1.0 - body.health / body.max_health)
 	effects.impact(point, normal, broken, color, body.is_gem_cover)
-	if broken:
-		audio.play_break(layer)
-	else:
+	if not broken and not body.is_gem_cover:
 		audio.play_hit(0.9, layer)
 	if broken:
 		body.set_process(false)
@@ -616,6 +615,10 @@ func _mine_at(screen_position: Vector2) -> bool:
 				var exit_point: Vector3 = point - camera.project_ray_normal(screen_position) * (contained_gem.bound_radius + 0.16)
 				if contained_gem.release_from_chunk(self, to_local(exit_point)):
 					auto_collected = _collect_gem(contained_gem, exit_point)
+		# The discovery recording includes its own contact. Ordinary fractures,
+		# or a failed gem release, still receive the stone destruction sound.
+		if not auto_collected:
+			audio.play_break(layer)
 		var fracture_started := Time.get_ticks_usec() if capture_mode else 0
 		var fragments: Array[Dictionary] = body.build_fracture_fragments()
 		effects.shed_fragments(fragments, body.mesh_instance.material_override, placement, normal, point)

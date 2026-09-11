@@ -8,22 +8,18 @@ uniform float beam_growth = 1.0;
 
 void vertex() {
 	vec3 root = CUSTOM0.xyz;
-	vec3 travel = CUSTOM1.xyz;
-	vec3 spread = VERTEX - root - travel;
-	VERTEX = root + travel * mix(0.72, 1.0, beam_growth) + spread * mix(0.65, 1.0, beam_growth);
+	VERTEX = root + CUSTOM1.xyz * mix(0.72, 1.0, beam_growth);
 }
 
 void fragment() {
 	float across = abs(UV.x * 2.0 - 1.0);
-	float edge = 1.0 - smoothstep(0.92, 1.0, across);
-	float inner_plane = 1.0 - smoothstep(0.54, 0.67, across);
-	float reach = pow(max(1.0 - UV.y, 0.0), 1.18);
-	float source = 1.0 - smoothstep(0.015, 0.20, UV.y);
-	// Color the broad volume without bleaching it against the gray stone.
-	// The separately drawn fissure and its halo provide the additive hot light.
+	// The slit masks the light into a continuous flat band. Its boundaries
+	// start crisp and develop a small penumbra with distance from the opening.
+	float edge = 1.0 - smoothstep(mix(0.99, 0.84, UV.y), 1.0, across);
+	float reach = (1.0 - smoothstep(0.45, 1.0, UV.y)) / (1.0 + UV.y * 3.0);
+	float source = 1.0 - smoothstep(0.0, 0.24, UV.y);
 	vec3 saturated = light_color.rgb * light_color.rgb;
-	vec3 tint = mix(saturated, light_color.rgb, 0.28);
-	tint = mix(tint, vec3(1.0), source * 0.44);
-	ALBEDO = tint * (0.84 + inner_plane * 0.16);
-	ALPHA = clamp(edge * reach * (0.80 + source * 0.20) * pulse_amount * COLOR.a, 0.0, 0.94);
+	vec3 tint = mix(saturated, light_color.rgb, 0.40);
+	ALBEDO = mix(tint, vec3(1.0), source * 0.22);
+	ALPHA = clamp(edge * reach * pulse_amount * COLOR.a, 0.0, 0.80);
 }
