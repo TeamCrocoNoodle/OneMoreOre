@@ -95,7 +95,7 @@ func _build_catalog() -> void:
 	# Every item is a real game Gem body with its unmodified facets and material.
 	for tier in range(6):
 		var jewel := Gem.new()
-		jewel.configure(Gem.SPECIAL if tier == 5 else Gem.COMMON, tier if tier < 5 else 0)
+		jewel.configure(tier, tier if tier < Gem.ANCIENT else 0)
 		_stage.add_child(jewel)
 		var column := tier % 3
 		var row := tier / 3

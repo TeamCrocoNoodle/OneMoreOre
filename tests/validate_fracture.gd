@@ -44,7 +44,7 @@ func _run() -> void:
 
 	var cover := _make_chunk(data, 0)
 	var jewel := Gem.new()
-	jewel.configure(Gem.SPECIAL, 0)
+	jewel.configure(Gem.ANCIENT, 0)
 	fixture.add_child(jewel)
 	_check(cover.contain_gem(jewel), "The fracture cover fixture contains a real owned gem")
 	for i in range(16):

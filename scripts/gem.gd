@@ -8,6 +8,13 @@ const GEM_SHADER = preload("res://shaders/gem.gdshader")
 
 const COMMON := 0
 const SPECIAL := 1
+const RARE := 2
+const LEGENDARY := 3
+const MYTHIC := 4
+const ANCIENT := 5
+const GRADE_NAMES := ["COMMON", "SPECIAL", "RARE", "LEGENDARY", "MYTHIC", "ANCIENT"]
+const GRADE_LABELS := ["일반", "특별", "희귀", "전설", "신화", "고대"]
+const SHAPE_VARIANT_COUNT := 6
 const EMERGENCE_DURATION := 0.40
 const LIGHT_COLORS := [Color("f3faff"), Color("64ff86"), Color("4896ff"), Color("ffe15b"), Color("be65ff"), Color("ff4c61")]
 const LIGHT_NAMES := ["white", "green", "blue", "yellow", "purple", "red"]
@@ -35,15 +42,15 @@ var _emergence_target_rotation := Quaternion.IDENTITY
 
 func configure(new_grade: int, new_variant: int = 0) -> void:
 	_stop_emergence()
-	grade = SPECIAL if new_grade == SPECIAL else COMMON
-	variant = posmod(new_variant, 5)
-	light_tier = 5 if grade == SPECIAL else variant
+	grade = clampi(new_grade, COMMON, ANCIENT)
+	variant = posmod(new_variant, SHAPE_VARIANT_COUNT)
+	light_tier = grade
 	collected = false
 	is_embedded = false
 	host_chunk = null
 	show()
 	# Ready before insertion into the tree, for the caller's placement checks.
-	bound_radius = 0.52 if grade == SPECIAL else 0.40
+	bound_radius = 0.52 if grade == ANCIENT else 0.40
 	if is_node_ready():
 		_build()
 
@@ -190,7 +197,7 @@ func _build() -> void:
 	_colliders.clear()
 	collision_layer = 0 if collected or is_embedded or is_emerging else 2
 	collision_mask = 0
-	var geometry: Dictionary = Geometry.build(variant, grade == SPECIAL)
+	var geometry: Dictionary = Geometry.build(variant, grade == ANCIENT)
 	_material = ShaderMaterial.new()
 	_material.shader = GEM_SHADER
 	var colors := _palette()
@@ -201,7 +208,7 @@ func _build() -> void:
 	_material.set_shader_parameter("crystal_radius", bound_radius)
 	_material.set_shader_parameter("hovered", 0.0)
 	facets = MeshInstance3D.new()
-	facets.name = "SpecialCrystal" if grade == SPECIAL else "CommonCrystal%d" % variant
+	facets.name = "%sCrystal%d" % [GRADE_NAMES[grade].to_pascal_case(), variant]
 	facets.mesh = geometry.mesh
 	facets.material_override = _material
 	visual.add_child(facets)
@@ -211,13 +218,14 @@ func _build() -> void:
 func _palette() -> Array[Color]:
 	# A colored body and darker mineral interior preserve the tier even in shade.
 	# Pale tinted edges replace the old alternating white and candy-color faces.
-	if grade == SPECIAL:
-		return [Color("cd5666"), Color("471d38"), Color("ffd2cc")]
-	match variant:
-		1: return [Color("4faa85"), Color("123b3d"), Color("bef3db")]
-		2: return [Color("538ec4"), Color("172b50"), Color("c1e9fa")]
-		3: return [Color("d6ae57"), Color("493321"), Color("fff1b9")]
-		4: return [Color("9c79c7"), Color("322349"), Color("e4d4ff")]
+	# Rarity owns the body and emitted-light color. Variant selects only the
+	# mineral cut, so a different silhouette cannot change a gem's grade.
+	match grade:
+		SPECIAL: return [Color("4faa85"), Color("123b3d"), Color("bef3db")]
+		RARE: return [Color("538ec4"), Color("172b50"), Color("c1e9fa")]
+		LEGENDARY: return [Color("d6ae57"), Color("493321"), Color("fff1b9")]
+		MYTHIC: return [Color("9c79c7"), Color("322349"), Color("e4d4ff")]
+		ANCIENT: return [Color("cd5666"), Color("471d38"), Color("ffd2cc")]
 	return [Color("bedee0"), Color("2f5663"), Color("edfffd")]
 
 

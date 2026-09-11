@@ -1,5 +1,5 @@
 extends Node3D
-## A camera-mounted, faceted pickaxe. setup() reparents this node to its camera.
+## A camera-mounted pickaxe whose poses stay anchored to the current cursor.
 
 signal impacted
 signal swing_started
@@ -61,7 +61,16 @@ func _ready() -> void:
 
 
 func set_target(screen_position: Vector2) -> void:
+	if screen_position != _target:
+		_has_contact_override = false
 	_target = screen_position
+
+
+func get_target_screen() -> Vector2:
+	return _target
+
+
+func clear_contact_point() -> void:
 	_has_contact_override = false
 
 
@@ -75,19 +84,28 @@ func swing() -> void:
 	if is_swinging or not is_instance_valid(_camera):
 		return
 	_refresh_rest()
-	var contact := _camera.to_local(_camera.project_position(_target, 7.6))
-	if _has_contact_override:
-		contact = _camera.to_local(_contact_override)
-		contact.z += 0.10
-	var contact_basis := Basis.from_euler(_contact_rotation)
-	_contact_position = contact - contact_basis * (PICK_TIP * _tool_scale)
-	_wind_position = _rest_position.lerp(_contact_position + Vector3(0.20, 0.70, 0.30), 0.38)
-	_wind_position.y += 0.35
-	_wind_rotation = _rest_rotation + Vector3(-0.04, -0.04, -0.42)
+	_refresh_swing_poses()
 	_elapsed = 0.0
 	_impact_sent = false
 	is_swinging = true
 	swing_started.emit()
+
+
+func _refresh_swing_poses() -> void:
+	# Rebuild around the live cursor, including wind-up and recoil. There is
+	# no screen-corner destination to travel from or return to between hits.
+	var contact_depth := 5.7
+	if _has_contact_override:
+		contact_depth = clampf(-_camera.to_local(_contact_override).z - 0.10, 1.0, 5.7)
+	# Keep the cursor tool in front of the stone instead of burying its handle
+	# during the strike. Fresh projection also prevents camera shake from
+	# dragging the tip away from the cursor between physics ray updates.
+	var contact := _camera.to_local(_camera.project_position(_target, contact_depth))
+	var contact_basis := Basis.from_euler(_contact_rotation)
+	_contact_position = contact - contact_basis * (PICK_TIP * _tool_scale)
+	_wind_rotation = _rest_rotation + Vector3(-0.04, -0.04, -0.42)
+	var wind_tip := _camera.to_local(_camera.project_position(_target, 5.7)) + Vector3(-0.18, 0.62, 0.1) * _tool_scale
+	_wind_position = wind_tip - Basis.from_euler(_wind_rotation) * (PICK_TIP * _tool_scale)
 
 
 func _process(delta: float) -> void:
@@ -96,6 +114,7 @@ func _process(delta: float) -> void:
 	_idle_time += delta
 	_refresh_rest()
 	if is_swinging:
+		_refresh_swing_poses()
 		_elapsed += delta
 		if _elapsed < 0.065:
 			var t := smoothstep(0.0, 0.065, _elapsed)
@@ -140,7 +159,9 @@ func _refresh_rest() -> void:
 		half_height = half_width / aspect
 	_tool_scale = clampf(half_width / 4.6, 0.60, 0.92)
 	scale = Vector3.ONE * _tool_scale
-	_rest_position = Vector3(half_width - 1.12 * _tool_scale, -half_height + 2.35 * _tool_scale, -5.7)
+	var cursor := _camera.to_local(_camera.project_position(_target, 5.7))
+	# Keep the striking end just above the pointer so its target stays clear.
+	_rest_position = cursor - Basis.from_euler(_rest_rotation) * (PICK_TIP * _tool_scale) + Vector3(0.13, 0.22, 0.0) * _tool_scale
 
 
 func _strike_fraction(time: float) -> float:

@@ -43,12 +43,14 @@ func _run() -> void:
 		_validate_transforms(chunk, label)
 		chunk.queue_free()
 	var game := Main.new()
+	game.showcase_on_start = true
 	game.process_mode = Node.PROCESS_MODE_DISABLED
 	root.add_child(game)
 	_check(game.showcase_covers.size() == 6, "Production seed creates six real showcase owners")
 	for kind: String in ["front", "side", "rear"]:
 		if kind != "front":
 			game = Main.new()
+			game.showcase_on_start = true
 			game.process_mode = Node.PROCESS_MODE_DISABLED
 			root.add_child(game)
 		var owner: Chunk = game.showcase_covers[5]

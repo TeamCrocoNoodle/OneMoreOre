@@ -5,7 +5,10 @@ extends SceneTree
 const Main = preload("res://scripts/main.gd")
 const Gem = preload("res://scripts/gem.gd")
 const TEST_SEED := 61477
-const EXPECTED_CHUNKS := 322
+const EXPECTED_CHUNKS := 74
+const EXPECTED_LAYER_COUNTS := [38, 24, 12]
+const STARTER_GRADES := [0, 0, 0, 1]
+const EXPECTED_LIGHT_COLORS := [Color("f3faff"), Color("64ff86"), Color("4896ff"), Color("ffe15b"), Color("be65ff"), Color("ff4c61")]
 
 var game: Main
 var failures: Array[String] = []
@@ -17,6 +20,7 @@ var traversed_layers: Array[int] = []
 var initial_gem_count := 0
 var owner_releases := 0
 var fracture_spawn_checked := false
+var starter_geometry_radius := 0.0
 
 
 func _initialize() -> void:
@@ -30,20 +34,22 @@ func _initialize() -> void:
 func _run() -> void:
 	root.size = Vector2i(1440, 1000)
 	game = load("res://scenes/main.tscn").instantiate() as Main
+	game.round_enabled = false
 	root.add_child(game)
 	await _frames(4)
+	await _validate_default_start()
 	await _validate_showcase()
 	await _validate_seeded_layouts()
 	initial_gem_count = game.gems.size()
-	_check(game.chunks.size() == EXPECTED_CHUNKS, "A large fresh rock has 322 independently mineable chunks")
+	_check(game.chunks.size() == EXPECTED_CHUNKS, "A fresh starter rock has 74 independently mineable chunks")
 	_check(initial_gem_count > 1, "The rock contains multiple discoverable gems")
 	_check(_count_gems(game) == initial_gem_count, "Seeded resets leave exactly the current gem population")
-	var layer_counts := [0, 0, 0, 0, 0, 0]
+	var layer_counts := [0, 0, 0]
 	var all_solid := true
 	for chunk in game.chunks:
 		layer_counts[chunk.layer_index] += 1
 		all_solid = all_solid and chunk.collision_layer == 1 and chunk.health > 0.0
-	_check(not layer_counts.has(0) and all_solid, "All six layers contain solid, independently damageable stone")
+	_check(layer_counts == EXPECTED_LAYER_COUNTS and all_solid, "The three starter layers contain 38, 24 and 12 solid independently damageable stones")
 	_validate_placement()
 	var center := _center()
 	var first_ray := game.ray_at(center)
@@ -81,9 +87,9 @@ func _run() -> void:
 		if not await _break_visible(_gem_target_screen(target)):
 			break
 		steps += 1
-	_check(game.gems.is_empty() and game.gems_collected_this_rock == initial_gem_count, "Breaking the six randomly placed owners automatically awards all six gems")
+	_check(game.gems.is_empty() and game.gems_collected_this_rock == initial_gem_count, "Breaking the randomly placed starter owners automatically awards every gem")
 	_check(game.collected_count == collected_before + initial_gem_count, "Each owner awards its gem once without an additional gem strike")
-	_check(owner_releases == initial_gem_count, "Excavation breaks exactly one fixed owner for each of the six gems")
+	_check(owner_releases == initial_gem_count, "Excavation breaks exactly one fixed owner for each starter gem")
 	_check(game.chunks.size() > 0, "Finding all gems leaves unrelated stone intact")
 	if not game.gems.is_empty() or game.chunks.is_empty():
 		_finish()
@@ -106,7 +112,7 @@ func _run() -> void:
 		steps += 1
 	_check(game.chunks.size() == 1 and game.completion_time < 0.0, "Even one remaining stone chunk prevents completion")
 	traversed_layers.sort()
-	_check(traversed_layers == [0, 1, 2, 3, 4, 5], "Full excavation reaches every one of the six rock layers")
+	_check(traversed_layers == [0, 1, 2], "Full excavation reaches every one of the three starter layers")
 	if game.chunks.size() != 1:
 		_finish()
 		return
@@ -117,11 +123,23 @@ func _run() -> void:
 	_check(game.mouse_down, "The final mining press remains held through completion")
 	var hits_at_completion := game.hit_count
 	var completed_rock := game.rock_number
+	var completed_seed := game.rock_seed
+	var completed_rarities := game.collected_by_rarity.duplicate()
 	_check(await _until(func(): return game.rock_number > completed_rock, 5.0), "Only full excavation starts the next rock")
 	await _frames(4)
 	_check(game.chunks.size() == EXPECTED_CHUNKS and game.gems.size() == initial_gem_count, "Respawn restores the complete rock and a fresh gem population")
+	_check(not game.showcase_mode and game.showcase_covers.is_empty() and game.rock_seed != completed_seed, "Full excavation regenerates another randomly seeded starter rather than a showcase")
+	var regenerated_grades: Array[int] = []
+	var regenerated_inner := true
+	for jewel in game.gems:
+		regenerated_grades.append(jewel.grade)
+		var owner: StaticBody3D = jewel.host_chunk.get_ref()
+		regenerated_inner = regenerated_inner and owner.layer_index > 0 and jewel.is_embedded and not jewel.visible and jewel.collision_layer == 0
+	regenerated_grades.sort()
+	_check(regenerated_grades == STARTER_GRADES and regenerated_inner, "Regeneration restores three common and one special gem hidden in inner stones")
 	_check(_count_gems(game) == initial_gem_count and game.collecting_gems.is_empty(), "Respawn contains no previous gem or collection nodes")
 	_check(game.gems_collected_this_rock == 0 and game.collected_count == collected_before + initial_gem_count, "Respawn resets per-rock progress while retaining the lifetime count")
+	_check(game.collected_by_rarity == completed_rarities, "Full-clear regeneration preserves every lifetime rarity counter")
 	_check(await _until(func(): return game.hit_count > hits_at_completion), "Holding the same mouse press automatically mines the fresh rock")
 	_send_mouse_button(MOUSE_BUTTON_LEFT, false, _center())
 	await _settle_swing()
@@ -132,11 +150,61 @@ func _run() -> void:
 	_finish()
 
 
+func _validate_default_start() -> void:
+	_check(game.rock_number == 1 and not game.showcase_mode and game.showcase_covers.is_empty(), "A normal scene starts directly with a gameplay rock, never the six-color showcase")
+	_check(game.chunks.size() == EXPECTED_CHUNKS and game.gems.size() == 4, "Default startup creates the smaller 74-stone, four-gem starter")
+	_check(game.hit_count == 0 and game.collected_count == 0 and game.gems_collected_this_rock == 0, "Random startup does not mine or award anything")
+	starter_geometry_radius = _outer_geometry_radius()
+	_check(is_equal_approx(game.active_rock_radius, 2.6) and starter_geometry_radius > 0.0, "Default startup selects the 2.6-unit gameplay radius")
+	_validate_placement()
+	var first_seed := game.rock_seed
+	var first_layout := _layout_snapshot()
+	var another := load("res://scenes/main.tscn").instantiate() as Main
+	another.round_enabled = false
+	root.add_child(another)
+	another.set_process(false)
+	another.set_physics_process(false)
+	another.set_process_input(false)
+	await _frames(2)
+	_check(another.rock_number == 1 and not another.showcase_mode and another.rock_seed != first_seed, "Two normal scene starts independently randomize their first rock seed")
+	var another_layout: Array[Dictionary] = []
+	for body in another.gems:
+		var host: StaticBody3D = body.host_chunk.get_ref()
+		another_layout.append({"host_position": host.base_position, "layer": host.layer_index, "gem_transform": body.transform, "tier": body.light_tier})
+	_check(another_layout != first_layout, "Independent normal starts change actual buried owner assignments")
+	another.queue_free()
+	await _frames(3)
+	game.camera.make_current()
+	var orientation := game.shell.quaternion
+	var hidden := true
+	for rotation: Vector3 in [Vector3(0.3, 1.1, -0.4), Vector3(1.4, -0.8, 0.7), Vector3(-0.9, 2.7, -0.6)]:
+		game.shell.quaternion = Quaternion.from_euler(rotation)
+		await _frames(2)
+		for jewel in game.gems:
+			hidden = hidden and jewel.is_embedded and not jewel.visible and not jewel.is_visible_in_tree() and jewel.collision_layer == 0
+			hidden = hidden and _masked_ray(game.camera.unproject_position(jewel.global_position), 2).is_empty()
+	_check(hidden, "Rotating the intact starter cannot reveal or select any buried gem")
+	game.shell.quaternion = orientation
+	await _frames(2)
+
+
+func _outer_geometry_radius() -> float:
+	var largest := 0.0
+	for chunk in game.chunks:
+		var mesh: Mesh = chunk.mesh_instance.mesh
+		for surface in mesh.get_surface_count():
+			var vertices: PackedVector3Array = mesh.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX]
+			for point in vertices:
+				largest = maxf(largest, game.shell.to_local(chunk.mesh_instance.to_global(point)).length())
+	return largest
+
+
 func _validate_showcase() -> void:
 	game._spawn_rock(12873, true)
 	await create_timer(0.75).timeout
 	await _frames(2)
-	_check(game.showcase_mode and game.showcase_covers.size() == game.gems.size(), "The first-rock showcase provides one stone owner for each gem")
+	_check(game.showcase_mode and game.chunks.size() == 322 and game.showcase_covers.size() == 6, "The explicitly requested showcase retains its large six-color test fixture")
+	_check(starter_geometry_radius < _outer_geometry_radius(), "The starter's actual outer stone geometry is smaller than the prior large showcase")
 	_validate_placement(true)
 	var preview_lights: Array[WeakRef] = []
 	var preview_gems: Array[WeakRef] = []
@@ -152,7 +220,7 @@ func _validate_showcase() -> void:
 		preview_lights.append(weakref(cap.light_node))
 		preview_gems.append(weakref(jewel))
 	tiers.sort()
-	_check(tiers == [0, 1, 2, 3, 4, 5], "All six final light colors are available on the first rock")
+	_check(tiers == [0, 1, 2, 3, 4, 5], "The explicitly requested showcase includes all six actual rarity grades and light colors")
 	var final_cap: StaticBody3D = game.showcase_covers[-1]
 	var final_gem: StaticBody3D = final_cap.contained_gem.get_ref()
 	var different_gem: StaticBody3D = game.gems[0]
@@ -181,6 +249,7 @@ func _validate_showcase() -> void:
 	_check(all_gems_freed and _count_gems(game) == game.gems.size() and game.collecting_gems.is_empty(), "Reset during automatic collection frees its emerging gem and every old embedded gem")
 	_check(game.effects.loose_chunks.is_empty() and game.effects.get("_fragment_pool").is_empty(), "Reset clears active fracture pieces and their reusable pool")
 	owner_releases = 0
+	traversed_layers.clear()
 
 
 func _clear_showcase_neighbors(host: StaticBody3D, jewel: StaticBody3D) -> void:
@@ -228,7 +297,7 @@ func _validate_seeded_layouts() -> void:
 	await create_timer(0.75).timeout
 	await _frames(2)
 	var different := _layout_snapshot()
-	_check(first != different, "Different rock seeds change the six gems' owner assignments")
+	_check(first != different, "Different rock seeds change the starter gems' buried owner assignments")
 	_validate_placement()
 	game._spawn_rock(TEST_SEED)
 	await create_timer(0.75).timeout
@@ -249,6 +318,7 @@ func _validate_placement(showcase: bool = false) -> void:
 	var occupied_layers: Array[int] = []
 	var common_count := 0
 	var special_count := 0
+	var grades: Array[int] = []
 	var hidden := true
 	var consistent_links := true
 	var ordinary_health := true
@@ -264,10 +334,13 @@ func _validate_placement(showcase: bool = false) -> void:
 		var angle := float(i) * 2.3999632297
 		directions.append(Vector3(cos(angle) * sqrt(1.0 - y * y), y, sin(angle) * sqrt(1.0 - y * y)))
 	for body in game.gems:
+		grades.append(body.grade)
 		if body.grade == Gem.COMMON:
 			common_count += 1
-		elif body.grade == Gem.SPECIAL:
+		elif body.grade >= Gem.SPECIAL:
 			special_count += 1
+		_check(body.grade >= Gem.COMMON and body.grade <= Gem.ANCIENT and body.light_tier == body.grade and Gem.LIGHT_COLORS[body.grade].is_equal_approx(EXPECTED_LIGHT_COLORS[body.grade]), "Each real gem grade selects its corresponding white/green/blue/yellow/purple/red light")
+		_check(_grade_material_matches(body), "The rendered crystal body color follows its actual rarity rather than its shape variant")
 		var owner: StaticBody3D = body.host_chunk.get_ref() if body.host_chunk != null else null
 		_check(is_instance_valid(owner) and game.chunks.has(owner), "Every new gem references a living stone from this rock")
 		if not is_instance_valid(owner):
@@ -314,7 +387,7 @@ func _validate_placement(showcase: bool = false) -> void:
 			if other != owner:
 				exclusions.append(other.get_rid())
 		for direction in directions:
-			var origin: Vector3 = game.shell.to_global(direction * (Main.ROCK_RADIUS + 2.0))
+			var origin: Vector3 = game.shell.to_global(direction * (game.active_rock_radius + 2.0))
 			for point in extrema:
 				var query := PhysicsRayQueryParameters3D.create(origin, game.shell.to_global(point), 3)
 				query.exclude = exclusions
@@ -326,15 +399,38 @@ func _validate_placement(showcase: bool = false) -> void:
 		if not owners.has(chunk):
 			ordinary_health = ordinary_health and not chunk.is_gem_cover and chunk.contained_gem == null and chunk.max_health >= 2.0 and chunk.max_health <= 4.0 and not is_instance_valid(chunk.light_node)
 	occupied_layers.sort()
-	_check(owners.size() == 6 and consistent_links, "Six gems have six fixed, mutually consistent ownership and light links")
-	_check(occupied_layers == ([0, 0, 0, 0, 0, 0] if showcase else [0, 1, 2, 3, 4, 5]), "Showcase uses six front owners; normal seeds distribute one owner through every depth")
+	grades.sort()
+	_check(owners.size() == (6 if showcase else 4) and consistent_links, "Every configured gem has a unique, mutually consistent ownership and light link")
+	_check(occupied_layers == ([0, 0, 0, 0, 0, 0] if showcase else [1, 1, 2, 2]), "Explicit showcase uses front owners; gameplay buries two owners in each inner layer")
 	_check(hidden, "Embedded gems are hidden, uncollected and excluded from physics selection")
-	_check(ordinary_health, "Only the six designated owners have high health or gem light nodes")
+	_check(ordinary_health, "Only designated gem owners have high health or gem light nodes")
 	_check(plane_leaks == 0 and separated, "Individually contained gem hulls remain separated without protruding into other chunks")
-	_check(common_count == Main.COMMON_GEM_COUNT and special_count == Main.SPECIAL_GEM_COUNT, "Every seed creates five common gems and one special gem")
+	_check(grades == ([0, 1, 2, 3, 4, 5] if showcase else STARTER_GRADES), "Gameplay has three COMMON and one SPECIAL; explicit showcase has one of each of the six grades")
+	_check(common_count == (1 if showcase else Main.COMMON_GEM_COUNT) and special_count == (5 if showcase else Main.SPECIAL_GEM_COUNT), "Common and noncommon counts agree with the selected gameplay or showcase composition")
 	_check(body_leaks == 0, "Each owner alone occludes its gem center and hull extrema in %d exterior rays (leaks=%d)" % [ray_count, body_leaks])
 	if not showcase:
 		_print_socket_sizes()
+
+
+func _grade_material_matches(body: StaticBody3D) -> bool:
+	var material := body.facets.material_override as ShaderMaterial
+	if material == null:
+		return false
+	var color: Color = material.get_shader_parameter("base_color")
+	match body.grade:
+		Gem.COMMON:
+			return minf(color.r, minf(color.g, color.b)) > 0.65 and maxf(color.r, maxf(color.g, color.b)) - minf(color.r, minf(color.g, color.b)) < 0.2
+		Gem.SPECIAL:
+			return color.g > color.r * 1.25 and color.g > color.b * 1.05
+		Gem.RARE:
+			return color.b > color.r * 1.25 and color.b > color.g * 1.10
+		Gem.LEGENDARY:
+			return color.r > color.b * 1.5 and color.g > color.b * 1.5
+		Gem.MYTHIC:
+			return color.b > color.g * 1.3 and color.r > color.g * 1.15
+		Gem.ANCIENT:
+			return color.r > color.g * 1.5 and color.r > color.b * 1.4
+	return false
 
 
 func _print_socket_sizes() -> void:
@@ -380,6 +476,7 @@ func _break_visible(screen: Vector2, finish_emergence: bool = true) -> bool:
 	var previous_collected := game.collected_count
 	var previous_per_rock := game.gems_collected_this_rock
 	var previous_special := game.special_collected_count
+	var previous_rarities := game.collected_by_rarity.duplicate()
 	var previous_active_gems := game.gems.size()
 	var hits_before := game.hit_count
 	var prior_fragment_batches: Array[int] = []
@@ -439,7 +536,10 @@ func _break_visible(screen: Vector2, finish_emergence: bool = true) -> bool:
 		# These assertions run in the same call stack, before any animation frame.
 		_check(newly_released == [linked_gem], "A fatal owner hit releases exactly its own gem and no neighbor's")
 		_check(linked_gem.collected and game.collected_count == previous_collected + 1 and game.gems_collected_this_rock == previous_per_rock + 1 and game.gems.size() == previous_active_gems - 1 and not game.gems.has(linked_gem), "The fatal mining call awards and removes its gem before returning, without a further gem strike")
-		_check(game.special_collected_count == previous_special + (1 if linked_gem.grade == Gem.SPECIAL else 0), "Immediate collection preserves the common versus special award count")
+		_check(game.special_collected_count == previous_special + (1 if linked_gem.grade >= Gem.SPECIAL else 0), "Immediate collection preserves the common versus noncommon award count")
+		var expected_rarities := previous_rarities.duplicate()
+		expected_rarities[linked_gem.grade] += 1
+		_check(game.collected_by_rarity == expected_rarities, "The fatal owner awards exactly one count to its actual rarity bucket")
 		_check(linked_gem.get_parent() == game and linked_gem.host_chunk == null and linked_gem.visible and linked_gem.is_emerging and linked_gem.collision_layer == 0 and _has_collection(linked_gem), "The awarded gem is safely reparented into its tracked visual collection with collision disabled")
 		_check(not game._collect_gem(linked_gem) and game.collected_count == previous_collected + 1, "Repeated collection during emergence cannot award the gem twice")
 		var remaining_hidden := true

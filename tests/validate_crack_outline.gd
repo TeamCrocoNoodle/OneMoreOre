@@ -70,7 +70,7 @@ func _run() -> void:
 		chunk.configure(data, 0)
 		chunk.set_process(false)
 		var gem := Gem.new()
-		gem.configure(Gem.SPECIAL, 5)
+		gem.configure(Gem.ANCIENT, 0)
 		fixture.add_child(gem)
 		chunk.configure_gem_cover(gem, 5)
 		for strike in 16:
@@ -84,7 +84,7 @@ func _run() -> void:
 	jitter_chunk.configure(Geometry.build_layer(2.6, 0, 4821)[0], 0)
 	jitter_chunk.set_process(false)
 	var jitter_gem := Gem.new()
-	jitter_gem.configure(Gem.SPECIAL, 5)
+	jitter_gem.configure(Gem.ANCIENT, 0)
 	fixture.add_child(jitter_gem)
 	jitter_chunk.configure_gem_cover(jitter_gem, 5)
 	var first_point: Vector3 = jitter_chunk.face_center.lerp(jitter_chunk.face_points[0], 0.5)

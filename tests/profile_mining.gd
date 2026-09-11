@@ -116,6 +116,7 @@ func _run() -> void:
 	renderer_name = RenderingServer.get_current_rendering_method()
 	var started := Time.get_ticks_usec()
 	game = ProfileGame.new()
+	game.showcase_on_start = true
 	RenderingServer.frame_post_draw.connect(_observe_warmup_frame)
 	root.add_child(game)
 	startup_ms = float(Time.get_ticks_usec() - started) / 1000.0

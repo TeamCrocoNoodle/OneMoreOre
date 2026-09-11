@@ -89,7 +89,7 @@ func _make_cover(data: Dictionary) -> Chunk:
 	fixture.add_child(chunk)
 	chunk.configure(data, 0)
 	var jewel := Gem.new()
-	jewel.configure(Gem.SPECIAL, 0)
+	jewel.configure(Gem.ANCIENT, 0)
 	fixture.add_child(jewel)
 	_check(chunk.contain_gem(jewel), "Fixture embeds a real gem in the actual solid")
 	return chunk

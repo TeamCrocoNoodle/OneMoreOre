@@ -1,5 +1,5 @@
 extends Node3D
-## The prototype contains only the rock, the pickaxe, and their physical feedback.
+## Timed mining, physical feedback, collected crystal flights, and round settlement.
 
 const Geometry = preload("res://scripts/rock_geometry.gd")
 const Chunk = preload("res://scripts/rock_chunk.gd")
@@ -8,11 +8,17 @@ const MiningAudio = preload("res://scripts/mining_audio.gd")
 const Effects = preload("res://scripts/mining_effects.gd")
 const Gem = preload("res://scripts/gem.gd")
 const GemLight = preload("res://scripts/gem_light.gd")
-const ROCK_RADIUS := 4.9
-const LAYER_COUNT := 6
-const LAYER_COUNTS := [100, 80, 60, 42, 26, 14]
-const COMMON_GEM_COUNT := 5
+const RoundModel = preload("res://scripts/mining_round.gd")
+const MiningHud = preload("res://scripts/mining_hud.gd")
+const RewardAudio = preload("res://scripts/reward_audio.gd")
+const GemFlightOverlay = preload("res://scripts/gem_flight_overlay.gd")
+const ROCK_RADIUS := 2.6
+const LAYER_COUNT := 3
+const LAYER_COUNTS := [38, 24, 12]
+const COMMON_GEM_COUNT := 3
 const SPECIAL_GEM_COUNT := 1
+const SHOWCASE_RADIUS := 4.9
+const SHOWCASE_LAYER_COUNTS := [100, 80, 60, 42, 26, 14]
 
 var camera := Camera3D.new()
 var rock_motion := Node3D.new()
@@ -23,6 +29,7 @@ var pickaxe := Pickaxe.new()
 var gems: Array[StaticBody3D] = []
 var collecting_gems: Array[Dictionary] = []
 var marker := MeshInstance3D.new()
+var ground_shadow := MeshInstance3D.new()
 var chunks: Array[StaticBody3D] = []
 var hovered: StaticBody3D
 var aim_position := Vector2.ZERO
@@ -48,10 +55,13 @@ var completion_time := -1.0
 var rock_number := 0
 var rock_seed := 0
 var showcase_mode := false
+var showcase_on_start := false
+var active_rock_radius := ROCK_RADIUS
 var showcase_covers: Array[StaticBody3D] = []
 var light_pulse_history: Array[int] = []
 var gems_collected_this_rock := 0
 var special_collected_count := 0
+var collected_by_rarity := PackedInt32Array([0, 0, 0, 0, 0, 0])
 var pending_rock_number := -1
 var hit_count := 0
 var broken_count := 0
@@ -72,9 +82,19 @@ var spawn_time := 1.0
 var spawn_tween: Tween
 var capture_gem: StaticBody3D
 var capture_seed := 12873
+var round_enabled := true
+var round_state := RoundModel.new()
+var hud: Node
+var reward_audio: Node
+var flight_overlay: Node
+var displayed_gems := PackedInt32Array([0, 0, 0, 0, 0, 0])
+var _last_warning_second := 6
+var _wait_for_mine_release := false
 
 func _ready() -> void:
 	capture_mode = "--capture-sequence" in OS.get_cmdline_user_args()
+	if capture_mode or showcase_on_start or "--mining-sandbox" in OS.get_cmdline_user_args():
+		round_enabled = false
 	rng.seed = capture_seed if capture_mode else int(Time.get_unix_time_from_system() * 1000.0) ^ Time.get_ticks_usec()
 	_create_actions()
 	_create_stage()
@@ -82,10 +102,13 @@ func _ready() -> void:
 	add_child(effects)
 	add_child(rock_motion)
 	rock_motion.add_child(shell)
-	_spawn_rock(capture_seed, true)
+	if capture_mode or showcase_on_start:
+		_spawn_rock(capture_seed, true)
+	else:
+		_spawn_rock()
 	add_child(pickaxe)
 	pickaxe.setup(camera)
-	pickaxe.impacted.connect(func(): impact_pending = true)
+	pickaxe.impacted.connect(_on_pickaxe_impact)
 	pickaxe.swing_started.connect(audio.play_swing)
 	get_viewport().size_changed.connect(_resize)
 	_resize()
@@ -98,6 +121,18 @@ func _ready() -> void:
 	Input.joy_connection_changed.connect(_controller_connection)
 	for device in Input.get_connected_joypads():
 		controller_id = device
+	if round_enabled:
+		reward_audio = RewardAudio.new()
+		add_child(reward_audio)
+		hud = MiningHud.new()
+		add_child(hud)
+		hud.next_round_requested.connect(_next_round)
+		hud.settlement_animation_finished.connect(_finish_settlement)
+		hud.cue.connect(reward_audio.play_cue)
+		hud.begin_round(round_state.round_index, round_state.wallet_gold)
+		flight_overlay = GemFlightOverlay.new()
+		add_child(flight_overlay)
+		flight_overlay.setup(camera)
 	_warm_gem_renderer.call_deferred()
 
 func _warm_gem_renderer() -> void:
@@ -242,17 +277,15 @@ func _create_stage() -> void:
 	_light(Vector3(-42, -32, 0), Color("fff1d9"), 2.2, true)
 	_light(Vector3(-18, 142, 0), Color("a1daef"), 0.30)
 	_light(Vector3(35, 30, 0), Color("7394b0"), 0.18)
-	var shadow := MeshInstance3D.new()
 	var plane := QuadMesh.new()
 	plane.size = Vector2(10.6, 1.8)
-	shadow.mesh = plane
+	ground_shadow.mesh = plane
 	var shadow_material := ShaderMaterial.new()
 	shadow_material.shader = preload("res://shaders/soft_shadow.gdshader")
-	shadow.material_override = shadow_material
-	shadow.position = Vector3(0, -5.35, -0.2)
-	shadow.rotation = camera.rotation
-	shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(shadow)
+	ground_shadow.material_override = shadow_material
+	ground_shadow.rotation = camera.rotation
+	ground_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(ground_shadow)
 	var target_mesh := TorusMesh.new()
 	target_mesh.inner_radius = 0.025
 	target_mesh.outer_radius = 0.041
@@ -286,6 +319,8 @@ func _spawn_rock(seed_override: int = -1, showcase: bool = false) -> void:
 	if spawn_tween != null and spawn_tween.is_valid():
 		spawn_tween.kill()
 	for extraction in collecting_gems:
+		if round_enabled:
+			_deliver_gem_to_hud(extraction)
 		if is_instance_valid(extraction.node):
 			extraction.node.queue_free()
 	collecting_gems.clear()
@@ -299,6 +334,7 @@ func _spawn_rock(seed_override: int = -1, showcase: bool = false) -> void:
 	showcase_covers.clear()
 	light_pulse_history.clear()
 	showcase_mode = showcase
+	active_rock_radius = SHOWCASE_RADIUS if showcase else ROCK_RADIUS
 	hovered = null
 	broken_count = 0
 	gems_collected_this_rock = 0
@@ -311,9 +347,10 @@ func _spawn_rock(seed_override: int = -1, showcase: bool = false) -> void:
 	wobble_velocity = Vector3.ZERO
 	rock_motion.rotation = Vector3.ZERO
 	squash = 0.0
-	for layer in range(LAYER_COUNT):
-		var radius := ROCK_RADIUS - float(layer) * 0.78
-		var cells: Array[Dictionary] = Geometry.build_layer(radius, layer, rock_seed, LAYER_COUNTS[layer], 0.86)
+	var layer_counts: Array = SHOWCASE_LAYER_COUNTS if showcase else LAYER_COUNTS
+	for layer in range(layer_counts.size()):
+		var radius := active_rock_radius - float(layer) * 0.78
+		var cells: Array[Dictionary] = Geometry.build_layer(radius, layer, rock_seed, layer_counts[layer], 0.86)
 		for data in cells:
 			var chunk := Chunk.new()
 			shell.add_child(chunk)
@@ -322,6 +359,9 @@ func _spawn_rock(seed_override: int = -1, showcase: bool = false) -> void:
 			chunk.set_meta("outward", data.direction)
 			chunks.append(chunk)
 	_place_gems(rock_seed)
+	ground_shadow.position = Vector3(0, -active_rock_radius * 1.092, -0.2)
+	ground_shadow.scale = Vector3.ONE * (active_rock_radius / SHOWCASE_RADIUS)
+	_resize()
 	rock_number += 1
 	completion_time = -1.0
 	if rock_number > 1:
@@ -334,40 +374,63 @@ func _spawn_rock(seed_override: int = -1, showcase: bool = false) -> void:
 func _place_gems(seed_value: int) -> void:
 	var layout_rng := RandomNumberGenerator.new()
 	layout_rng.seed = seed_value ^ 0x5F3759DF
-	# Each gem belongs to one stone volume. Shuffle the occupied layers so a
-	# rarity never implies a particular depth in a randomly generated rock.
-	var bands: Array[int] = [0, 1, 2, 3, 4, 5]
+	# The regular ore starts with four finds below the intact outside layer.
+	# Shuffle their depths so the green gem does not have a predictable slot.
+	var bands: Array[int] = []
+	var grades: Array[int] = []
+	if showcase_mode:
+		grades.assign([Gem.COMMON, Gem.SPECIAL, Gem.RARE, Gem.LEGENDARY, Gem.MYTHIC, Gem.ANCIENT])
+	else:
+		for i in COMMON_GEM_COUNT + SPECIAL_GEM_COUNT:
+			grades.append(Gem.COMMON if i < COMMON_GEM_COUNT else Gem.SPECIAL)
+			bands.append(1 + i % (LAYER_COUNT - 1))
 	for i in range(bands.size() - 1, 0, -1):
 		var j := layout_rng.randi_range(0, i)
 		var swap := bands[i]
 		bands[i] = bands[j]
 		bands[j] = swap
-	for i in range(COMMON_GEM_COUNT + SPECIAL_GEM_COUNT):
+	for i in grades.size():
 		var jewel := Gem.new()
-		jewel.configure(Gem.COMMON if i < COMMON_GEM_COUNT else Gem.SPECIAL, i % COMMON_GEM_COUNT)
+		var shape := i % 5 if showcase_mode else layout_rng.randi_range(0, 5)
+		jewel.configure(grades[i], shape)
 		jewel.rotation = Vector3(layout_rng.randf_range(-0.5, 0.5), layout_rng.randf_range(-PI, PI), layout_rng.randf_range(-0.5, 0.5))
 		shell.add_child(jewel)
 		gems.append(jewel)
 	if showcase_mode:
 		_place_showcase_gems()
 		return
+	var occupied: Array[StaticBody3D] = []
 	for i in range(gems.size()):
 		var candidates: Array[StaticBody3D] = []
 		var largest_socket := 0.0
 		for chunk in chunks:
-			if chunk.layer_index == bands[i]:
+			if chunk.layer_index == bands[i] and not occupied.has(chunk):
 				largest_socket = maxf(largest_socket, chunk.gem_socket_radius)
 		for chunk in chunks:
-			if chunk.layer_index == bands[i] and chunk.gem_socket_radius >= largest_socket * 0.72:
+			if chunk.layer_index == bands[i] and not occupied.has(chunk) and chunk.gem_socket_radius >= largest_socket * 0.72:
 				candidates.append(chunk)
 		assert(not candidates.is_empty(), "Every depth needs a solid stone that can contain a gem")
+		# Prefer separated directions across depths as well as distinct hosts,
+		# so one excavation tunnel is unlikely to reveal every find.
+		var spaced: Array[StaticBody3D] = []
+		for candidate in candidates:
+			var separated := true
+			for other in occupied:
+				if Vector3(candidate.direction).dot(other.direction) > 0.80:
+					separated = false
+					break
+			if separated:
+				spaced.append(candidate)
+		if not spaced.is_empty():
+			candidates = spaced
 		var host: StaticBody3D = candidates[layout_rng.randi_range(0, candidates.size() - 1)]
 		var contained: bool = host.contain_gem(gems[i])
 		assert(contained, "The selected stone must contain its gem")
+		occupied.append(host)
 
 func _place_showcase_gems() -> void:
 	# Six front stones contain one gem each for testing all the light tiers.
-	# R and subsequent rocks distribute the host stones over all six depths.
+	# Only an explicit debug/capture request uses this large visible-host layout.
 	var slots := [Vector2(-0.42, 0.30), Vector2(0.0, 0.38), Vector2(0.42, 0.30), Vector2(-0.42, -0.28), Vector2(0.0, -0.38), Vector2(0.42, -0.28)]
 	showcase_covers.resize(gems.size())
 	var used: Array[StaticBody3D] = []
@@ -412,11 +475,32 @@ func _resize() -> void:
 	var aspect := viewport_size.x / maxf(viewport_size.y, 1)
 	# KEEP_HEIGHT retains landscape composition; portrait increases height to fit the rock.
 	camera.keep_aspect = Camera3D.KEEP_HEIGHT
-	camera.size = maxf(12.0, 11.6 / aspect)
+	var framing := 12.0 if showcase_mode else 9.2
+	var width := 11.6 if showcase_mode else 7.0
+	camera.size = maxf(framing, width / aspect)
 	if aim_position != Vector2.ZERO:
 		aim_position = aim_position.clamp(Vector2.ZERO, viewport_size)
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F11:
+		var fullscreen := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if fullscreen else DisplayServer.WINDOW_MODE_FULLSCREEN)
+		return
+	if round_enabled:
+		if not _round_allows_mining():
+			return
+		if event is InputEventMouseButton or event is InputEventMouseMotion or event is InputEventScreenTouch or event is InputEventScreenDrag or event is InputEventPanGesture:
+			if is_instance_valid(hud) and hud.is_pointer_blocked(event.position):
+				if not event is InputEventPanGesture:
+					aim_position = event.position
+					using_controller = false
+				if event is InputEventMouseButton and not event.pressed:
+					mouse_down = false
+					dragging = false
+				if event is InputEventScreenTouch and not event.pressed:
+					touch_id = -1
+					touch_rotating = false
+				return
 	if event is InputEventMouseMotion:
 		using_controller = false
 		aim_position = event.position
@@ -465,10 +549,8 @@ func _input(event: InputEvent) -> void:
 		if event.physical_keycode == KEY_R:
 			_reset_rock()
 		elif event.physical_keycode == KEY_G:
-			_spawn_rock(capture_seed, true)
-		elif event.physical_keycode == KEY_F11:
-			var fullscreen := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
-			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if fullscreen else DisplayServer.WINDOW_MODE_FULLSCREEN)
+			if not round_enabled:
+				_spawn_rock(capture_seed, true)
 	if event.is_action_pressed("mine"):
 		_request_swing()
 
@@ -480,6 +562,9 @@ func _notification(what: int) -> void:
 		touch_id = -1
 		touch_rotating = false
 		touch_time = 0.0
+		if round_enabled:
+			impact_pending = false
+			pending_rock_number = -1
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		focused = true
 
@@ -491,25 +576,38 @@ func _controller_connection(device: int, connected: bool) -> void:
 		using_controller = false
 
 func _orbit(amount: Vector2) -> void:
-	if completion_time >= 0.0:
+	if completion_time >= 0.0 or not _round_allows_mining():
 		return
 	shell.quaternion = Quaternion(Vector3.UP, amount.x) * Quaternion(Vector3.RIGHT, amount.y) * shell.quaternion
 	idle_time = 0.0
 
 func _request_swing() -> void:
-	if (not focused and not capture_mode) or completion_time >= 0.0 or spawn_time < 0.68 or swing_cooldown > 0.0 or pickaxe.is_swinging or dragging or touch_rotating:
+	if not _round_allows_mining() or _wait_for_mine_release or (not focused and not capture_mode) or completion_time >= 0.0 or spawn_time < 0.68 or swing_cooldown > 0.0 or pickaxe.is_swinging or dragging or touch_rotating:
+		return
+	if _aim_over_hud(aim_position):
 		return
 	pending_aim = aim_position
 	pending_rock_number = rock_number
 	pickaxe.set_target(pending_aim)
 	var contact := ray_at(pending_aim)
 	if not contact.is_empty():
+		_start_round()
 		pickaxe.set_contact_point(contact.position)
+	else:
+		pickaxe.clear_contact_point()
 	pickaxe.swing()
 	swing_cooldown = 0.30
 	idle_time = 0.0
 
+func _on_pickaxe_impact() -> void:
+	# The tool follows the cursor during the swing. Mine where its tip struck,
+	# while retaining the original rock number so a reset cannot inherit a hit.
+	pending_aim = pickaxe.get_target_screen()
+	impact_pending = true
+
 func _process(delta: float) -> void:
+	if _wait_for_mine_release and not Input.is_action_pressed("mine") and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and touch_id < 0:
+		_wait_for_mine_release = false
 	elapsed += delta
 	spawn_time += delta
 	idle_time += delta
@@ -526,8 +624,7 @@ func _process(delta: float) -> void:
 			aim_position = aim_position.clamp(Vector2.ONE * 30.0, get_viewport().get_visible_rect().size - Vector2.ONE * 30.0)
 		if mouse_down or Input.is_action_pressed("mine") or (touch_id >= 0 and touch_time >= 0.18 and not touch_rotating):
 			_request_swing()
-	if not pickaxe.is_swinging:
-		pickaxe.set_target(aim_position)
+	pickaxe.set_target(aim_position)
 	hit_stop = maxf(0.0, hit_stop - delta)
 	if hit_stop <= 0.0:
 		wobble_velocity += (-wobble * 170.0 - wobble_velocity * 15.0) * delta
@@ -535,7 +632,7 @@ func _process(delta: float) -> void:
 		rock_motion.rotation = wobble
 		if completion_time < 0.0:
 			rock_motion.position.y = sin(elapsed * 1.2) * 0.055
-			if idle_time > 3.0:
+			if idle_time > 3.0 and _round_allows_mining():
 				shell.rotate_y(delta * 0.055)
 	squash = move_toward(squash, 0.0, delta * 0.5)
 	if completion_time < 0.0 and spawn_time > 0.68:
@@ -545,17 +642,31 @@ func _process(delta: float) -> void:
 	_update_collections(delta)
 	if completion_time >= 0.0:
 		completion_time += delta
-		if completion_time > 2.4:
+		if completion_time > 2.4 and _round_allows_mining():
 			_spawn_rock()
+	if round_enabled and is_instance_valid(hud):
+		hud.set_timer(round_state.remaining, RoundModel.DURATION, round_state.phase != RoundModel.Phase.READY and focused)
+		if round_state.phase == RoundModel.Phase.DRAINING and collecting_gems.is_empty():
+			_begin_settlement()
 	if capture_mode:
 		_capture_tick(delta)
 
 func _physics_process(_delta: float) -> void:
+	_advance_round(_delta)
+	if not _round_allows_mining() or (round_enabled and not focused):
+		impact_pending = false
+		marker.hide()
+		return
 	if impact_pending:
 		impact_pending = false
 		if pending_rock_number == rock_number:
 			_mine_at(pending_aim)
-	var result := ray_at(aim_position)
+	var result := {} if _aim_over_hud(aim_position) else ray_at(aim_position)
+	pickaxe.set_target(aim_position)
+	if result.is_empty():
+		pickaxe.clear_contact_point()
+	else:
+		pickaxe.set_contact_point(result.position)
 	var next_hover: StaticBody3D = result.get("collider") as StaticBody3D
 	if next_hover != hovered:
 		if is_instance_valid(hovered) and hovered.has_method("set_hovered"):
@@ -574,8 +685,13 @@ func ray_at(screen_position: Vector2) -> Dictionary:
 	var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 40.0, 3)
 	return get_world_3d().direct_space_state.intersect_ray(query)
 
+func _aim_over_hud(screen_position: Vector2) -> bool:
+	return round_enabled and is_instance_valid(hud) and hud.is_pointer_blocked(screen_position)
+
 func _mine_at(screen_position: Vector2) -> bool:
-	if completion_time >= 0.0 or spawn_time < 0.68:
+	if not _round_allows_mining() or (round_enabled and not focused) or completion_time >= 0.0 or spawn_time < 0.68:
+		return false
+	if _aim_over_hud(screen_position):
 		return false
 	var result := ray_at(screen_position)
 	if result.is_empty():
@@ -585,6 +701,7 @@ func _mine_at(screen_position: Vector2) -> bool:
 		return _collect_gem(body)
 	if not body.has_method("hit"):
 		return false
+	_start_round()
 	hit_count += 1
 	var point: Vector3 = result.position
 	var normal: Vector3 = result.normal
@@ -604,6 +721,8 @@ func _mine_at(screen_position: Vector2) -> bool:
 	if not broken and not body.is_gem_cover:
 		audio.play_hit(0.9, layer)
 	if broken:
+		if round_enabled and not body.is_gem_cover and round_state.record_stone():
+			hud.set_stones(round_state.ordinary_stones)
 		body.set_process(false)
 		if is_instance_valid(body.light_node):
 			# Extinguish the fissures in this same impact. The light remains
@@ -645,13 +764,18 @@ func _mine_at(screen_position: Vector2) -> bool:
 	return true
 
 func _collect_gem(jewel: StaticBody3D, discovery_position: Vector3 = Vector3.INF) -> bool:
-	if not gems.has(jewel) or not jewel.begin_collection():
+	if not _round_allows_mining() or not gems.has(jewel) or not jewel.begin_collection():
 		return false
-	var special: bool = jewel.grade == Gem.SPECIAL
+	_start_round()
+	if round_enabled:
+		round_state.record_gem(jewel.grade)
+	var special: bool = jewel.grade >= Gem.SPECIAL
 	var location := jewel.global_position
 	gems.erase(jewel)
 	gems_collected_this_rock += 1
 	collected_count += 1
+	collected_by_rarity[jewel.grade] += 1
+	# Retain the aggregate enhanced-reward count; rarity totals remain exact.
 	if special:
 		special_collected_count += 1
 	audio.play_discovery(special, jewel.variant)
@@ -659,7 +783,8 @@ func _collect_gem(jewel: StaticBody3D, discovery_position: Vector3 = Vector3.INF
 	camera_shake = 0.10 if special else 0.045
 	if jewel.get_parent() != self:
 		jewel.reparent(self)
-	collecting_gems.append({"node": jewel, "start": jewel.position, "age": 0.0, "life": 1.65 if special else 1.15, "special": special, "emerging": jewel.is_emerging})
+	collecting_gems.append({"node": jewel, "start": jewel.position, "age": 0.0, "life": 0.70 if round_enabled else (1.65 if special else 1.15), "special": special, "emerging": jewel.is_emerging,
+		"tier": jewel.grade, "delivered": false, "flight_started": false})
 	hovered = null
 	if controller_id >= 0 and using_controller:
 		Input.start_joy_vibration(controller_id, 0.45 if special else 0.2, 0.65 if special else 0.35, 0.18 if special else 0.10)
@@ -673,6 +798,12 @@ func _update_collections(delta: float) -> void:
 		# The award has already happened. Let the presentation finish before
 		# moving this non-interactive visual into its collection flight.
 		if jewel.is_emerging:
+			continue
+		if round_enabled:
+			_update_gem_flight(extraction, delta)
+			if bool(extraction.delivered):
+				jewel.queue_free()
+				collecting_gems.remove_at(i)
 			continue
 		if extraction.emerging:
 			extraction.emerging = false
@@ -697,7 +828,100 @@ func _check_exhausted() -> void:
 		marker.hide()
 
 func _reset_rock() -> void:
+	if _round_allows_mining():
+		_spawn_rock()
+
+func _round_allows_mining() -> bool:
+	return not round_enabled or round_state.phase in [RoundModel.Phase.READY, RoundModel.Phase.MINING]
+
+func _start_round() -> void:
+	if round_enabled:
+		round_state.start()
+
+func _advance_round(delta: float) -> void:
+	if not round_enabled or not focused:
+		return
+	if round_state.advance(delta):
+		mouse_down = false
+		dragging = false
+		touch_id = -1
+		touch_rotating = false
+		impact_pending = false
+		pending_rock_number = -1
+		marker.hide()
+		pickaxe.hide()
+		if is_instance_valid(hovered):
+			hovered.set_hovered(false)
+		hovered = null
+		reward_audio.play_cue("timeout", 0)
+	elif round_state.phase == RoundModel.Phase.MINING:
+		var second := ceili(round_state.remaining)
+		if second >= 1 and second <= 5 and second != _last_warning_second:
+			_last_warning_second = second
+			reward_audio.play_cue("countdown", 5 - second)
+
+func _update_gem_flight(extraction: Dictionary, delta: float) -> void:
+	var jewel: StaticBody3D = extraction.node
+	var viewport_size := get_viewport().get_visible_rect().size
+	if not extraction.flight_started:
+		extraction.flight_started = true
+		extraction["start_uv"] = camera.unproject_position(jewel.global_position) / viewport_size
+		extraction["start_rotation"] = jewel.quaternion
+		extraction["start_scale"] = jewel.scale
+		extraction.age = 0.0
+		flight_overlay.adopt(jewel)
+	extraction.age += delta
+	var progress := clampf(float(extraction.age) / float(extraction.life), 0.0, 1.0)
+	var travel := smoothstep(0.0, 1.0, progress)
+	var start: Vector2 = extraction.start_uv * viewport_size
+	var target: Vector2 = hud.gem_target_screen(int(extraction.tier))
+	var screen := start.lerp(target, travel) + Vector2(0, -viewport_size.y * 0.12) * sin(progress * PI)
+	# Move the actual discovered model in front of the scene on its journey.
+	# Orthographic projection preserves its on-screen size at this handoff.
+	jewel.global_position = camera.project_position(screen, 3.0)
+	var target_scale: float = hud.gem_target_diameter_screen() * camera.size / maxf(viewport_size.y * jewel.bound_radius * 2.0, 1.0)
+	jewel.scale = Vector3(extraction.start_scale).lerp(Vector3.ONE * target_scale, travel)
+	jewel.quaternion = Quaternion(extraction.start_rotation) * Quaternion(Vector3.BACK, sin(progress * PI) * 0.45)
+	if progress >= 1.0:
+		_deliver_gem_to_hud(extraction)
+
+func _deliver_gem_to_hud(extraction: Dictionary) -> void:
+	if bool(extraction.get("delivered", false)):
+		return
+	extraction["delivered"] = true
+	if is_instance_valid(flight_overlay) and is_instance_valid(extraction.node):
+		flight_overlay.release(extraction.node)
+	var tier := int(extraction.tier)
+	displayed_gems[tier] += 1
+	if is_instance_valid(hud):
+		hud.pulse_gem(tier, displayed_gems[tier])
+
+func _begin_settlement() -> void:
+	if not round_enabled or round_state.phase != RoundModel.Phase.DRAINING or not collecting_gems.is_empty():
+		return
+	# Flights are only presentation. The report always uses break-time cargo.
+	hud.set_gem_counts(round_state.gem_counts)
+	hud.show_settlement(round_state.begin_settlement())
+
+func _finish_settlement() -> void:
+	if round_enabled and round_state.commit_settlement():
+		hud.set_wallet(round_state.wallet_gold)
+
+func _next_round() -> void:
+	if not round_enabled or not round_state.new_round():
+		return
+	mouse_down = false
+	dragging = false
+	touch_id = -1
+	touch_rotating = false
+	impact_pending = false
+	pending_rock_number = -1
+	_wait_for_mine_release = true
+	_last_warning_second = 6
+	displayed_gems.fill(0)
 	_spawn_rock()
+	pickaxe.show()
+	hud.begin_round(round_state.round_index, round_state.wallet_gold)
 
 func _capture_tick(delta: float) -> void:
 	# Move between three parts of one cap while demonstrating all six colors.

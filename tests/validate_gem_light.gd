@@ -134,7 +134,7 @@ func _make_chunk() -> Chunk:
 
 func _make_gem(tier: int) -> Gem:
 	var jewel := Gem.new()
-	jewel.configure(Gem.SPECIAL if tier == 5 else Gem.COMMON, tier)
+	jewel.configure(tier, tier)
 	fixture.add_child(jewel)
 	return jewel
 

@@ -11,6 +11,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var game := Game.new()
+	game.showcase_on_start = true
 	root.add_child(game)
 	await process_frame
 	game.set_process(false)

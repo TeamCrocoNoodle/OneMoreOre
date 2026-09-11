@@ -87,6 +87,7 @@ func _new_case() -> void:
 		await process_frame
 	game = Main.new()
 	game.capture_seed = SEED
+	game.showcase_on_start = true
 	root.add_child(game)
 	game.set_process(false)
 	game.set_physics_process(false)
