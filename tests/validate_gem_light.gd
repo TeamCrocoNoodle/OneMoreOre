@@ -173,7 +173,7 @@ func _validate_spatial_damage() -> void:
 		cover.hit(0.002, cover.mesh_instance.to_global(last_nearby))
 	var repeated: Array[Dictionary] = cover.get_visible_crack_segments().duplicate(true)
 	_check(cover.impact_count == 130 and cover.latest_impact_local.distance_to(last_nearby) < 0.001, "Every repeated nearby strike updates the latest impact")
-	_check(_crack_distance(last_nearby, repeated) < 0.001 and _old_cracks_remain(before_move, repeated), "Repeated nearby hits keep old damage and connect the current strike to it")
+	_check(_visible_crack_covers(last_nearby, repeated) and _old_cracks_remain(before_move, repeated), "Repeated nearby hits keep old damage and leave the current strike covered by an actual visible crack ribbon")
 	_check(repeated.size() <= 656 and _large_crack_groups(repeated) <= 2, "Nearby hits reuse bounded crack networks instead of creating an unbounded fan per hit")
 	_check(_light_matches_cracks(cover), "Repeated pulses remain bounded and attached to the actual visible cracks")
 	var pulses_before_fatal: int = cover.light_node.pulse_count
@@ -248,6 +248,15 @@ func _crack_distance(point: Vector3, segments: Array[Dictionary]) -> float:
 	for segment in segments:
 		closest = minf(closest, _point_segment_distance(point, segment.a, segment.b))
 	return closest
+
+
+func _visible_crack_covers(point: Vector3, segments: Array[Dictionary]) -> bool:
+	for segment in segments:
+		# Width is the rendered half-width. Contact already inside that ribbon
+		# should deepen it without adding a nearly coincident new centerline.
+		if _point_segment_distance(point, segment.a, segment.b) <= float(segment.width) + 0.001:
+			return true
+	return false
 
 
 func _point_segment_distance(point: Vector3, a: Vector3, b: Vector3) -> float:

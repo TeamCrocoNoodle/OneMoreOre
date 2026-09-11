@@ -16,6 +16,7 @@ var hit_count_at_signal := -1
 var traversed_layers: Array[int] = []
 var initial_gem_count := 0
 var owner_releases := 0
+var fracture_spawn_checked := false
 
 
 func _initialize() -> void:
@@ -180,6 +181,7 @@ func _validate_showcase() -> void:
 		all_gems_freed = all_gems_freed and previous.get_ref() == null
 	_check(all_lights_freed, "Reset clears both attached and detached lights from the previous rock")
 	_check(all_gems_freed and _count_gems(game) == game.gems.size(), "Reset during emergence frees the emerging gem and every old embedded gem")
+	_check(game.effects.loose_chunks.is_empty() and game.effects.get("_fragment_pool").is_empty(), "Reset clears active fracture pieces and their reusable pool")
 	owner_releases = 0
 
 
@@ -380,6 +382,11 @@ func _break_visible(screen: Vector2, finish_emergence: bool = true) -> bool:
 		return false
 	var previous_stone := game.chunks.size()
 	var previous_collected := game.collected_count
+	var prior_fragment_batches: Array[int] = []
+	if stone and not fracture_spawn_checked:
+		for fragment in game.effects.loose_chunks:
+			if not prior_fragment_batches.has(int(fragment.batch_id)):
+				prior_fragment_batches.append(int(fragment.batch_id))
 	var linked_gem: StaticBody3D = body.contained_gem.get_ref() as StaticBody3D if stone and body.contained_gem != null else null
 	var original_max_health: float = body.max_health if stone else 0.0
 	var embedded_before: Array[StaticBody3D] = []
@@ -409,6 +416,18 @@ func _break_visible(screen: Vector2, finish_emergence: bool = true) -> bool:
 			break
 	if stone:
 		_check(body.collision_layer == 0 and body.destroyed and game.chunks.size() == previous_stone - 1, "Breaking one chunk disables its collision and removes exactly that chunk")
+		if not fracture_spawn_checked:
+			var new_fragments := 0
+			var distinct_meshes: Array[Mesh] = []
+			var valid_fragments := true
+			for fragment in game.effects.loose_chunks:
+				if not prior_fragment_batches.has(int(fragment.batch_id)):
+					new_fragments += 1
+					var mesh: Mesh = fragment.node.mesh
+					valid_fragments = valid_fragments and mesh != body.mesh_instance.mesh and not distinct_meshes.has(mesh) and fragment.node.has_meta("fracture_fragment")
+					distinct_meshes.append(mesh)
+			_check(new_fragments >= 2 and new_fragments <= 18 and valid_fragments, "A real mining impact replaces its broken stone with multiple distinct crack-shaped meshes")
+			fracture_spawn_checked = true
 		var newly_released: Array[StaticBody3D] = []
 		for jewel in embedded_before:
 			if not jewel.is_embedded:

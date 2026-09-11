@@ -63,6 +63,10 @@ var capture_stage := 0
 var capture_clock := 0.0
 var capture_saved_tier := -1
 var capture_impact_points: Array[Vector3] = []
+var capture_fracture_center := Vector3.ZERO
+var capture_fracture_count := 0
+var capture_plain_count := 0
+var capture_plain: StaticBody3D
 var spawn_time := 1.0
 var spawn_tween: Tween
 var capture_gem: StaticBody3D
@@ -212,6 +216,7 @@ func _light(angles: Vector3, color: Color, energy: float, shadows: bool = false)
 	add_child(light)
 
 func _spawn_rock(seed_override: int = -1, showcase: bool = false) -> void:
+	effects.clear_fragments()
 	for remnant in effects.get_children():
 		if remnant.has_meta("gem_light_pulse") or remnant.get_script() == preload("res://scripts/gem_light.gd"):
 			remnant.hide()
@@ -547,7 +552,18 @@ func _mine_at(screen_position: Vector2) -> bool:
 				var exit_point: Vector3 = point - camera.project_ray_normal(screen_position) * (contained_gem.bound_radius + 0.16)
 				contained_gem.release_from_chunk(shell, shell.to_local(exit_point))
 		audio.play_break(layer)
-		effects.shed_chunk(body.mesh_instance.mesh, body.mesh_instance.material_override, placement, normal)
+		var fracture_started := Time.get_ticks_usec() if capture_mode else 0
+		var fragments: Array[Dictionary] = body.build_fracture_fragments()
+		effects.shed_fragments(fragments, body.mesh_instance.material_override, placement, normal, point)
+		if capture_mode:
+			print("FRACTURE_CAPTURE pieces=", fragments.size(), " build_and_spawn_ms=", float(Time.get_ticks_usec() - fracture_started) / 1000.0)
+			capture_fracture_center = placement * body.face_center
+			if body == capture_plain:
+				capture_plain_count = fragments.size()
+				_capture_fracture_motion("fracture_plain")
+			elif capture_stage == 4:
+				capture_fracture_count = fragments.size()
+				_capture_fracture_motion("fracture_gem")
 		chunks.erase(body)
 		body.queue_free()
 		broken_count += 1
@@ -641,6 +657,8 @@ func _capture_tick(delta: float) -> void:
 		capture_clock = 0.0
 	elif capture_stage == 3 and capture_clock > 0.85:
 		var cap: StaticBody3D = showcase_covers[5]
+		capture_fracture_center = cap.mesh_instance.to_global(cap.face_center)
+		_capture("fracture_gem_00_before")
 		aim_position = _capture_cap_target(cap)
 		_request_swing()
 		capture_stage = 4
@@ -672,8 +690,12 @@ func _capture_tick(delta: float) -> void:
 		capture_stage = 8
 		capture_clock = 0.0
 	elif capture_stage == 8 and capture_clock > 1.8:
-		get_window().size = Vector2i(600, 900)
-		capture_stage = 9
+		capture_plain = _capture_plain_target()
+		if capture_plain == null:
+			push_error("No ordinary front stone for fracture capture")
+			get_tree().quit(1)
+			return
+		capture_stage = 11
 		capture_clock = 0.0
 	elif capture_stage == 9 and capture_clock > 0.75:
 		_capture("lights_10_portrait")
@@ -696,11 +718,54 @@ func _capture_tick(delta: float) -> void:
 			push_error("Impact capture did not strike three distinct positions: " + str(capture_impact_points))
 			get_tree().quit(1)
 			return
-		print("LIGHT_CAPTURE_OK tiers=", observed, " hits=", hit_count, " gems=", collected_count, " still_embedded=", sealed_gems, " impact_positions=", capture_impact_points)
+		if capture_fracture_count < 2 or capture_plain_count < 2:
+			push_error("Both ordinary and gem stones must separate into multiple crack fragments")
+			get_tree().quit(1)
+			return
+		print("LIGHT_CAPTURE_OK tiers=", observed, " hits=", hit_count, " gems=", collected_count, " still_embedded=", sealed_gems, " impact_positions=", capture_impact_points, " fragments_gem/plain=", capture_fracture_count, "/", capture_plain_count)
 		get_tree().quit()
+	elif capture_stage == 11 and capture_clock > 0.60:
+		capture_fracture_center = capture_plain.mesh_instance.to_global(capture_plain.face_center)
+		if capture_plain.health <= 1.0:
+			_capture("fracture_plain_00_before")
+		aim_position = _capture_cap_target(capture_plain)
+		_request_swing()
+		capture_stage = 12
+		capture_clock = 0.0
+	elif capture_stage == 12 and capture_clock > 0.40:
+		capture_stage = 11 if is_instance_valid(capture_plain) else 13
+		capture_clock = 0.0
+	elif capture_stage == 13 and capture_clock > 1.0:
+		get_window().size = Vector2i(600, 900)
+		capture_stage = 9
+		capture_clock = 0.0
 	if elapsed > 65.0:
 		push_error("Light capture timed out")
 		get_tree().quit(1)
+
+func _capture_plain_target() -> StaticBody3D:
+	var best: StaticBody3D
+	var best_distance := INF
+	var center := get_viewport().get_visible_rect().size * 0.5
+	for chunk in chunks:
+		if chunk.is_gem_cover or chunk.layer_index != 0 or chunk.health < 3.0:
+			continue
+		var screen := camera.unproject_position(chunk.mesh_instance.to_global(chunk.face_center))
+		if ray_at(screen).get("collider") != chunk:
+			continue
+		var distance := screen.distance_squared_to(center)
+		if distance < best_distance:
+			best = chunk
+			best_distance = distance
+	return best
+
+func _capture_fracture_motion(prefix: String) -> void:
+	await get_tree().create_timer(0.04).timeout
+	_capture(prefix + "_01_opening")
+	await get_tree().create_timer(0.10).timeout
+	_capture(prefix + "_02_separating")
+	await get_tree().create_timer(0.22).timeout
+	_capture(prefix + "_03_falling")
 
 func _capture_cap_target(cap: StaticBody3D) -> Vector2:
 	var edge := int(float(cap.impact_count % 3) * float(cap.face_points.size()) / 3.0)
@@ -717,5 +782,11 @@ func _capture(label: String) -> void:
 		var center := camera.unproject_position(cap.mesh_instance.to_global(cap.face_center))
 		var pixel_scale := Vector2(screenshot.get_size()) / get_viewport().get_visible_rect().size
 		var region := Rect2i(Vector2i(center * pixel_scale) - Vector2i(200, 180), Vector2i(400, 360))
+		region = region.intersection(Rect2i(Vector2i.ZERO, screenshot.get_size()))
+		screenshot.get_region(region).save_png("res://artifacts/" + label + "_detail.png")
+	elif label.begins_with("fracture_"):
+		var center := camera.unproject_position(capture_fracture_center)
+		var pixel_scale := Vector2(screenshot.get_size()) / get_viewport().get_visible_rect().size
+		var region := Rect2i(Vector2i(center * pixel_scale) - Vector2i(230, 200), Vector2i(460, 400))
 		region = region.intersection(Rect2i(Vector2i.ZERO, screenshot.get_size()))
 		screenshot.get_region(region).save_png("res://artifacts/" + label + "_detail.png")

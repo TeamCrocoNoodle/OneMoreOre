@@ -5,6 +5,7 @@ extends StaticBody3D
 ## remains available to the caller for debris before the caller frees the node.
 const STONE_SHADER := preload("res://shaders/stone.gdshader")
 const GemLight := preload("res://scripts/gem_light.gd")
+const Fracture := preload("res://scripts/rock_fracture.gd")
 const GEM_COVER_HEALTH := 16.0
 const MAX_CRACK_NETWORKS := 16
 const MAX_CRACK_CONNECTORS := 32
@@ -28,6 +29,7 @@ var impact_count: int = 0
 var gem_socket_center := Vector3.ZERO
 var gem_socket_radius: float = 0.0
 var contained_gem: WeakRef
+var _fracture_cache: Dictionary = {}
 
 var _material: ShaderMaterial
 var _shape: CollisionShape3D
@@ -337,6 +339,23 @@ func get_visible_crack_segments() -> Array[Dictionary]:
 	return _crack_segments.duplicate(true)
 
 
+func build_fracture_fragments() -> Array[Dictionary]:
+	if not destroyed:
+		return []
+	if _fracture_cache.is_empty():
+		_fracture_cache = Fracture.build(mesh_instance.mesh, face_points, face_center, direction, get_visible_crack_segments())
+	var fragments: Array[Dictionary] = _fracture_cache["fragments"]
+	return fragments
+
+
+func get_fracture_boundaries() -> Array[Dictionary]:
+	if not destroyed:
+		return []
+	build_fracture_fragments()
+	var boundaries: Array[Dictionary] = _fracture_cache["boundaries"]
+	return boundaries.duplicate(true)
+
+
 func _clamp_to_face(point: Vector3) -> Vector3:
 	var planar_offset := point - face_center
 	planar_offset -= direction * planar_offset.dot(direction)
@@ -370,7 +389,11 @@ func _record_impact(world_point: Vector3, damage: float) -> void:
 	if nearest_index >= 0 and (nearest_distance <= reuse_distance or _crack_networks.size() >= MAX_CRACK_NETWORKS):
 		var network: Dictionary = _crack_networks[nearest_index]
 		network["hits"] = float(network["hits"]) + maxf(damage, 0.15)
-		if nearest_distance > 0.0001:
+		# Recoil can move repeated contacts by less than a visible ribbon's
+		# half-width. That contact is already cracked; another microscopic
+		# connector would add graph slivers without any visible new damage.
+		var covered_distance := maxf(0.008, float(network["width"]))
+		if nearest_distance > covered_distance:
 			_add_crack_connector(latest_impact_local, network["origin"])
 	else:
 		_crack_networks.append({

@@ -2,11 +2,17 @@ extends Node3D
 ## Bounded CPU particle batches work in the Compatibility renderer on every target.
 
 const CAPACITY := 300
+const FRAGMENT_CAPACITY := 80
+const FRAGMENT_LIFETIME := 1.05
+const FRAGMENT_OPEN_TIME := 0.09
+const FRAGMENT_FLOOR_Y := -5.2
 var batches: Array[MultiMeshInstance3D] = []
 var particles: Array[Dictionary] = []
 var loose_chunks: Array[Dictionary] = []
 var rings: Array[Dictionary] = []
 var rng := RandomNumberGenerator.new()
+var _fragment_pool: Array[MeshInstance3D] = []
+var _fragment_batch_id := 0
 
 func _ready() -> void:
 	rng.seed = 90421
@@ -49,16 +55,125 @@ func impact(point: Vector3, normal: Vector3, broken: bool, stone_color: Color, g
 		_spawn(2, point + _random_direction() * 0.12, normal * 0.6 + _random_direction() * 0.65, stone_color.lightened(0.08 if gem_cover else 0.22), dust_size, rng.randf_range(0.22, 0.42))
 	_ring(point + normal * 0.06, normal, broken)
 
-func shed_chunk(mesh: Mesh, material: Material, placement: Transform3D, outward: Vector3) -> void:
-	if loose_chunks.size() >= 18:
-		loose_chunks.pop_front().node.queue_free()
+func shed_fragments(fragments: Array[Dictionary], material: Material, placement: Transform3D, outward: Vector3, impact_point: Vector3) -> void:
+	if fragments.is_empty():
+		return
+	var valid_fragments: Array[Dictionary] = []
+	var center_sum := Vector3.ZERO
+	var area_sum := 0.0
+	for fragment in fragments:
+		if not (fragment.get("mesh") is Mesh) or not (fragment.get("center") is Vector3):
+			continue
+		var area := maxf(float(fragment.get("area", 0.0)), 0.0001)
+		center_sum += (placement * Vector3(fragment.center)) * area
+		area_sum += area
+		valid_fragments.append(fragment)
+	if valid_fragments.is_empty():
+		return
+	var plate_center := center_sum / area_sum
+	var average_area := area_sum / float(valid_fragments.size())
+	var normal := outward.normalized() if outward.length_squared() > 0.0001 else Vector3.UP
+	var cut_material: Material = material.duplicate() if material != null else null
+	if cut_material is ShaderMaterial:
+		# The original plate may still carry its final-hit flash. Debris retains its
+		# stone color and the geometry's pale cut faces, without a permanent flash.
+		cut_material.set_shader_parameter("hit_flash", 0.0)
+		cut_material.set_shader_parameter("hovered", 0.0)
+	_fragment_batch_id += 1
+	for i in range(mini(valid_fragments.size(), FRAGMENT_CAPACITY)):
+		var fragment := valid_fragments[i]
+		while loose_chunks.size() >= FRAGMENT_CAPACITY:
+			_recycle_fragment(loose_chunks.pop_front())
+		var node := _acquire_fragment_node()
+		var center: Vector3 = fragment.center
+		var area := maxf(float(fragment.get("area", 0.0)), 0.0001)
+		var initial_transform := placement * Transform3D(Basis.IDENTITY, center)
+		var world_center := initial_transform.origin
+		var from_center := world_center - plate_center
+		from_center -= normal * from_center.dot(normal)
+		var from_impact := world_center - impact_point
+		from_impact -= normal * from_impact.dot(normal)
+		var radial := from_center.normalized() * 0.78 + from_impact.normalized() * 0.22
+		if radial.length_squared() < 0.0001:
+			radial = normal.cross(Vector3.UP)
+			if radial.length_squared() < 0.1:
+				radial = normal.cross(Vector3.RIGHT)
+			radial = radial.rotated(normal, TAU * float(i) / float(valid_fragments.size()))
+		radial = radial.normalized()
+		var weight_factor := clampf(sqrt(average_area / area), 0.78, 1.35)
+		var velocity := radial * rng.randf_range(2.8, 4.6) * weight_factor
+		velocity += normal * rng.randf_range(1.7, 2.8) + Vector3.UP * rng.randf_range(0.55, 1.25)
+		var spin_axis := (normal.cross(radial) + _random_direction() * 0.48).normalized()
+		var polygon: PackedVector3Array = fragment.get("polygon", PackedVector3Array())
+		node.mesh = fragment.mesh
+		node.material_override = cut_material
+		node.global_transform = initial_transform
+		node.set_meta("fracture_fragment", true)
+		node.set_meta("fracture_batch", _fragment_batch_id)
+		node.set_meta("source_center", center)
+		node.set_meta("source_area", area)
+		node.set_meta("source_polygon", polygon)
+		loose_chunks.append({
+			"node": node,
+			"velocity": velocity,
+			"spin": spin_axis * rng.randf_range(3.4, 6.4),
+			"rotation": Quaternion.IDENTITY,
+			"age": 0.0,
+			"life": FRAGMENT_LIFETIME * rng.randf_range(0.91, 1.08),
+			"position": world_center,
+			"base_basis": placement.basis,
+			"initial_transform": initial_transform,
+			"opening_vector": radial * rng.randf_range(0.10, 0.17) + normal * 0.024,
+			"source_center": center,
+			"source_area": area,
+			"source_polygon": polygon,
+			"impact_point": impact_point,
+			"outward": normal,
+			"batch_id": _fragment_batch_id,
+			"floor_clearance": clampf(sqrt(area) * 0.18, 0.035, 0.24)
+		})
+
+
+func clear_fragments() -> void:
+	for fragment in loose_chunks:
+		var node: MeshInstance3D = fragment.node
+		if is_instance_valid(node):
+			node.hide()
+			node.queue_free()
+	loose_chunks.clear()
+	for node in _fragment_pool:
+		if is_instance_valid(node):
+			node.queue_free()
+	_fragment_pool.clear()
+	_fragment_batch_id = 0
+
+
+func _acquire_fragment_node() -> MeshInstance3D:
+	while not _fragment_pool.is_empty():
+		var pooled := _fragment_pool.pop_back() as MeshInstance3D
+		if is_instance_valid(pooled) and not pooled.is_queued_for_deletion():
+			pooled.show()
+			return pooled
 	var node := MeshInstance3D.new()
-	node.mesh = mesh
-	node.material_override = material
+	node.name = "StoneFragment"
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(node)
-	node.global_transform = placement
-	loose_chunks.append({"node": node, "velocity": outward * rng.randf_range(2.5, 4.5) + Vector3.UP * 2.3, "spin": _random_direction() * rng.randf_range(3.0, 6.0), "age": 0.0, "life": 1.2})
+	return node
+
+
+func _recycle_fragment(fragment: Dictionary) -> void:
+	var node: MeshInstance3D = fragment.node
+	if not is_instance_valid(node) or node.is_queued_for_deletion():
+		return
+	node.hide()
+	node.mesh = null
+	node.material_override = null
+	for key in node.get_meta_list():
+		node.remove_meta(key)
+	if _fragment_pool.size() < FRAGMENT_CAPACITY:
+		_fragment_pool.append(node)
+	else:
+		node.queue_free()
 
 func gem_burst(point: Vector3, special: bool = true, tier: int = -1) -> void:
 	for i in range(100 if special else 32):
@@ -128,18 +243,29 @@ func _process(delta: float) -> void:
 		batches[kind].multimesh.visible_instance_count = counts[kind]
 	for i in range(loose_chunks.size() - 1, -1, -1):
 		var p: Dictionary = loose_chunks[i]
-		p.age += delta
-		if p.age >= p.life:
-			p.node.queue_free()
+		if not is_instance_valid(p.node):
 			loose_chunks.remove_at(i)
 			continue
-		p.velocity.y -= 12.0 * delta
-		p.node.position += p.velocity * delta
-		p.node.rotate(p.spin.normalized(), p.spin.length() * delta)
-		if p.node.position.y < -5.2:
-			p.node.position.y = -5.2
-			p.velocity *= Vector3(0.65, -0.35, 0.65)
-		p.node.scale = Vector3.ONE * (1.0 - smoothstep(0.55, 1.2, p.age))
+		p.age += delta
+		if p.age >= p.life:
+			_recycle_fragment(p)
+			loose_chunks.remove_at(i)
+			continue
+		p.velocity.y -= 13.5 * delta
+		p.position += p.velocity * delta
+		var opening := 1.0 - pow(1.0 - clampf(float(p.age) / FRAGMENT_OPEN_TIME, 0.0, 1.0), 3.0)
+		var separation := Vector3(p.opening_vector) * opening
+		var floor_height := FRAGMENT_FLOOR_Y + float(p.floor_clearance) - separation.y
+		if p.position.y < floor_height:
+			p.position.y = floor_height
+			if p.velocity.y < 0.0:
+				p.velocity *= Vector3(0.62, -0.32, 0.62)
+				p.spin *= 0.64
+		var spin: Vector3 = p.spin
+		p.rotation = (Quaternion(spin.normalized(), spin.length() * delta) * Quaternion(p.rotation)).normalized()
+		var size := 1.0 - smoothstep(float(p.life) * 0.61, float(p.life), float(p.age))
+		var basis := (Basis(Quaternion(p.rotation)) * Basis(p.base_basis)).scaled(Vector3.ONE * maxf(size, 0.001))
+		p.node.global_transform = Transform3D(basis, Vector3(p.position) + separation)
 	for i in range(rings.size() - 1, -1, -1):
 		var p: Dictionary = rings[i]
 		p.age += delta
