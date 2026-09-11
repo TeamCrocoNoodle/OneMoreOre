@@ -7,6 +7,11 @@ const Pickaxe = preload("res://scripts/pickaxe.gd")
 const MiningAudio = preload("res://scripts/mining_audio.gd")
 const Effects = preload("res://scripts/mining_effects.gd")
 const Gem = preload("res://scripts/gem.gd")
+const ROCK_RADIUS := 4.9
+const LAYER_COUNT := 6
+const LAYER_COUNTS := [100, 80, 60, 42, 26, 14]
+const COMMON_GEM_COUNT := 5
+const SPECIAL_GEM_COUNT := 1
 
 var camera := Camera3D.new()
 var rock_motion := Node3D.new()
@@ -14,7 +19,8 @@ var shell := Node3D.new()
 var effects := Effects.new()
 var audio := MiningAudio.new()
 var pickaxe := Pickaxe.new()
-var gem: StaticBody3D
+var gems: Array[StaticBody3D] = []
+var collecting_gems: Array[Dictionary] = []
 var marker := MeshInstance3D.new()
 var chunks: Array[StaticBody3D] = []
 var hovered: StaticBody3D
@@ -37,29 +43,38 @@ var hit_stop := 0.0
 var wobble := Vector3.ZERO
 var wobble_velocity := Vector3.ZERO
 var squash := 0.0
-var reveal_time := -1.0
+var completion_time := -1.0
 var rock_number := 0
+var rock_seed := 0
+var gem_cover_radius := 0.0
+var gems_collected_this_rock := 0
+var special_collected_count := 0
+var pending_rock_number := -1
 var hit_count := 0
 var broken_count := 0
 var collected_count := 0
 var focused := true
-var camera_rest := Vector3(0, 1.35, 11.5)
+var camera_rest := Vector3(0, 2.0, 18.0)
 var rng := RandomNumberGenerator.new()
 var capture_mode := false
 var capture_stage := 0
 var capture_clock := 0.0
 var capture_hit_clock := 0.0
 var spawn_time := 1.0
+var spawn_tween: Tween
+var capture_gem: StaticBody3D
+var capture_seed := 12873
 
 func _ready() -> void:
-	rng.seed = 1729
+	capture_mode = "--capture-sequence" in OS.get_cmdline_user_args()
+	rng.seed = capture_seed if capture_mode else int(Time.get_unix_time_from_system() * 1000.0) ^ Time.get_ticks_usec()
 	_create_actions()
 	_create_stage()
 	add_child(audio)
 	add_child(effects)
 	add_child(rock_motion)
 	rock_motion.add_child(shell)
-	_spawn_rock()
+	_spawn_rock(capture_seed if capture_mode else -1)
 	add_child(pickaxe)
 	pickaxe.setup(camera)
 	pickaxe.impacted.connect(func(): impact_pending = true)
@@ -68,7 +83,6 @@ func _ready() -> void:
 	_resize()
 	aim_position = get_viewport().get_visible_rect().size * Vector2(0.48, 0.46)
 	pickaxe.set_target(aim_position)
-	capture_mode = "--capture-sequence" in OS.get_cmdline_user_args()
 	if capture_mode:
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://artifacts"))
 	Input.joy_connection_changed.connect(_controller_connection)
@@ -150,7 +164,7 @@ func _create_stage() -> void:
 	camera.position = camera_rest
 	camera.look_at(Vector3(0, -0.08, 0))
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.size = 8.3
+	camera.size = 12.0
 	camera.near = 0.05
 	camera.far = 60.0
 	camera.current = true
@@ -159,12 +173,12 @@ func _create_stage() -> void:
 	_light(Vector3(35, 30, 0), Color("7394b0"), 0.18)
 	var shadow := MeshInstance3D.new()
 	var plane := QuadMesh.new()
-	plane.size = Vector2(6.0, 1.1)
+	plane.size = Vector2(10.6, 1.8)
 	shadow.mesh = plane
 	var shadow_material := ShaderMaterial.new()
 	shadow_material.shader = preload("res://shaders/soft_shadow.gdshader")
 	shadow.material_override = shadow_material
-	shadow.position = Vector3(0, -3.0, -0.2)
+	shadow.position = Vector3(0, -5.35, -0.2)
 	shadow.rotation = camera.rotation
 	shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(shadow)
@@ -187,49 +201,103 @@ func _light(angles: Vector3, color: Color, energy: float, shadows: bool = false)
 	light.light_color = color
 	light.light_energy = energy
 	light.shadow_enabled = shadows
-	light.directional_shadow_max_distance = 24.0
-	light.shadow_bias = 0.035
+	light.directional_shadow_max_distance = 34.0
+	light.shadow_bias = 0.08
 	light.shadow_normal_bias = 0.8
 	add_child(light)
 
-func _spawn_rock() -> void:
-	if is_instance_valid(gem) and gem.get_parent() != shell:
-		gem.queue_free()
+func _spawn_rock(seed_override: int = -1) -> void:
+	if spawn_tween != null and spawn_tween.is_valid():
+		spawn_tween.kill()
+	for extraction in collecting_gems:
+		if is_instance_valid(extraction.node):
+			extraction.node.queue_free()
+	collecting_gems.clear()
 	for child in shell.get_children():
+		if child is CollisionObject3D:
+			child.collision_layer = 0
+		child.hide()
 		child.queue_free()
 	chunks.clear()
+	gems.clear()
 	hovered = null
 	broken_count = 0
+	gems_collected_this_rock = 0
+	impact_pending = false
+	rock_seed = seed_override if seed_override >= 0 else int(rng.randi())
 	shell.rotation = Vector3(0.12, 0.24, -0.06)
 	rock_motion.scale = Vector3.ONE
 	rock_motion.position = Vector3.ZERO
-	for layer in range(3):
-		var radius := 2.62 - float(layer) * 0.59
-		var cells: Array[Dictionary] = Geometry.build_layer(radius, layer, 461 + rock_number * 37)
+	wobble = Vector3.ZERO
+	wobble_velocity = Vector3.ZERO
+	rock_motion.rotation = Vector3.ZERO
+	squash = 0.0
+	gem_cover_radius = ROCK_RADIUS
+	for layer in range(LAYER_COUNT):
+		var radius := ROCK_RADIUS - float(layer) * 0.78
+		var cells: Array[Dictionary] = Geometry.build_layer(radius, layer, rock_seed, LAYER_COUNTS[layer], 0.86)
 		for data in cells:
+			if layer == 0:
+				# Inscribed radius of the complete backing skirt, including its widest cells.
+				for boundary: Vector3 in data.footprint_directions:
+					gem_cover_radius = minf(gem_cover_radius, float(data.backing_radius) * boundary.dot(data.direction))
 			var chunk := Chunk.new()
 			shell.add_child(chunk)
 			chunk.configure(data, layer)
 			chunk.set_meta("stone_color", data.color)
 			chunk.set_meta("outward", data.direction)
 			chunks.append(chunk)
-	gem = Gem.new()
-	shell.add_child(gem)
-	gem.rotation_degrees = Vector3(8, 18, -12)
+	_place_gems(rock_seed)
 	rock_number += 1
-	reveal_time = -1.0
+	completion_time = -1.0
 	if rock_number > 1:
 		audio.play_respawn()
 		spawn_time = 0.0
 		rock_motion.scale = Vector3.ONE * 0.01
-		create_tween().tween_property(rock_motion, "scale", Vector3.ONE, 0.65).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		spawn_tween = create_tween()
+		spawn_tween.tween_property(rock_motion, "scale", Vector3.ONE, 0.65).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+func _place_gems(seed_value: int) -> void:
+	var layout_rng := RandomNumberGenerator.new()
+	layout_rng.seed = seed_value ^ 0x5F3759DF
+	# Shuffle depth bands as well as directions; no grade is assigned a fixed depth.
+	var bands: Array[float] = [1.25, 1.8, 2.3, 2.75, 3.2, 3.65]
+	for i in range(bands.size() - 1, 0, -1):
+		var j := layout_rng.randi_range(0, i)
+		var swap := bands[i]
+		bands[i] = bands[j]
+		bands[j] = swap
+	for i in range(COMMON_GEM_COUNT + SPECIAL_GEM_COUNT):
+		var jewel := Gem.new()
+		jewel.configure(Gem.COMMON if i < COMMON_GEM_COUNT else Gem.SPECIAL, i % COMMON_GEM_COUNT)
+		var location := Vector3.ZERO
+		var placed := false
+		for attempt in range(256):
+			var y := layout_rng.randf_range(-1.0, 1.0)
+			var angle := layout_rng.randf_range(0.0, TAU)
+			var radial := sqrt(1.0 - y * y)
+			var direction := Vector3(radial * cos(angle), y, radial * sin(angle))
+			var depth := minf(bands[i] + layout_rng.randf_range(-0.12, 0.12), gem_cover_radius - jewel.bound_radius - 0.12)
+			location = direction * depth
+			placed = true
+			for other in gems:
+				if location.distance_to(other.position) < jewel.bound_radius + other.bound_radius + 0.28:
+					placed = false
+					break
+			if placed:
+				break
+		assert(placed, "Could not place a non-overlapping buried gem")
+		jewel.position = location
+		jewel.rotation = Vector3(layout_rng.randf_range(-0.5, 0.5), layout_rng.randf_range(-PI, PI), layout_rng.randf_range(-0.5, 0.5))
+		shell.add_child(jewel)
+		gems.append(jewel)
 
 func _resize() -> void:
 	var viewport_size := get_viewport().get_visible_rect().size
 	var aspect := viewport_size.x / maxf(viewport_size.y, 1)
 	# KEEP_HEIGHT retains landscape composition; portrait increases height to fit the rock.
 	camera.keep_aspect = Camera3D.KEEP_HEIGHT
-	camera.size = maxf(8.3, 7.2 / aspect)
+	camera.size = maxf(12.0, 11.6 / aspect)
 	if aim_position != Vector2.ZERO:
 		aim_position = aim_position.clamp(Vector2.ZERO, viewport_size)
 
@@ -306,15 +374,16 @@ func _controller_connection(device: int, connected: bool) -> void:
 		using_controller = false
 
 func _orbit(amount: Vector2) -> void:
-	if reveal_time >= 0.0:
+	if completion_time >= 0.0:
 		return
 	shell.quaternion = Quaternion(Vector3.UP, amount.x) * Quaternion(Vector3.RIGHT, amount.y) * shell.quaternion
 	idle_time = 0.0
 
 func _request_swing() -> void:
-	if not focused or reveal_time >= 0.0 or swing_cooldown > 0.0 or pickaxe.is_swinging or dragging or touch_rotating:
+	if not focused or completion_time >= 0.0 or spawn_time < 0.68 or swing_cooldown > 0.0 or pickaxe.is_swinging or dragging or touch_rotating:
 		return
 	pending_aim = aim_position
+	pending_rock_number = rock_number
 	pickaxe.set_target(pending_aim)
 	var contact := ray_at(pending_aim)
 	if not contact.is_empty():
@@ -347,21 +416,19 @@ func _process(delta: float) -> void:
 		wobble_velocity += (-wobble * 170.0 - wobble_velocity * 15.0) * delta
 		wobble += wobble_velocity * delta
 		rock_motion.rotation = wobble
-		if reveal_time < 0.0:
+		if completion_time < 0.0:
 			rock_motion.position.y = sin(elapsed * 1.2) * 0.055
 			if idle_time > 3.0:
 				shell.rotate_y(delta * 0.055)
 	squash = move_toward(squash, 0.0, delta * 0.5)
-	if reveal_time < 0.0 and spawn_time > 0.68:
+	if completion_time < 0.0 and spawn_time > 0.68:
 		rock_motion.scale = Vector3(1.0 + squash * 0.4, 1.0 - squash, 1.0 + squash * 0.4)
 	camera_shake = move_toward(camera_shake, 0.0, delta * 0.8)
 	camera.position = camera_rest + Vector3(sin(elapsed * 143.0), sin(elapsed * 117.0), 0) * camera_shake
-	if reveal_time >= 0.0:
-		reveal_time += delta
-		gem.rotation.y += delta * 1.3
-		gem.position = Vector3(0, 0.25 + sin(elapsed * 2.0) * 0.08, 2.1)
-		gem.scale = Vector3.ONE * (1.0 + smoothstep(0.0, 0.7, reveal_time) * 0.55)
-		if reveal_time > 2.8:
+	_update_collections(delta)
+	if completion_time >= 0.0:
+		completion_time += delta
+		if completion_time > 2.4:
 			_spawn_rock()
 	if capture_mode:
 		_capture_tick(delta)
@@ -369,7 +436,8 @@ func _process(delta: float) -> void:
 func _physics_process(_delta: float) -> void:
 	if impact_pending:
 		impact_pending = false
-		_mine_at(pending_aim)
+		if pending_rock_number == rock_number:
+			_mine_at(pending_aim)
 	var result := ray_at(aim_position)
 	var next_hover: StaticBody3D = result.get("collider") as StaticBody3D
 	if next_hover != hovered:
@@ -378,7 +446,7 @@ func _physics_process(_delta: float) -> void:
 		hovered = next_hover
 		if is_instance_valid(hovered) and hovered.has_method("set_hovered"):
 			hovered.set_hovered(true)
-	marker.visible = not result.is_empty() and reveal_time < 0.0 and not dragging and touch_id < 0
+	marker.visible = not result.is_empty() and completion_time < 0.0 and not dragging and touch_id < 0
 	if marker.visible:
 		marker.position = result.position + result.normal * 0.025
 		marker.quaternion = Quaternion(Vector3.UP, result.normal.normalized())
@@ -390,15 +458,14 @@ func ray_at(screen_position: Vector2) -> Dictionary:
 	return get_world_3d().direct_space_state.intersect_ray(query)
 
 func _mine_at(screen_position: Vector2) -> bool:
-	if reveal_time >= 0.0:
+	if completion_time >= 0.0 or spawn_time < 0.68:
 		return false
 	var result := ray_at(screen_position)
 	if result.is_empty():
 		return false
 	var body: StaticBody3D = result.collider
-	if body == gem:
-		_reveal_gem()
-		return true
+	if gems.has(body):
+		return _collect_gem(body)
 	if not body.has_method("hit"):
 		return false
 	hit_count += 1
@@ -416,6 +483,7 @@ func _mine_at(screen_position: Vector2) -> bool:
 		chunks.erase(body)
 		body.queue_free()
 		broken_count += 1
+		_check_exhausted()
 	camera_shake = 0.075 if broken else 0.035
 	hit_stop = 0.055 if broken else 0.025
 	squash = 0.045 if broken else 0.022
@@ -424,41 +492,59 @@ func _mine_at(screen_position: Vector2) -> bool:
 		Input.start_joy_vibration(controller_id, 0.28 if broken else 0.1, 0.52 if broken else 0.25, 0.10 if broken else 0.055)
 	return true
 
-func _reveal_gem() -> void:
-	reveal_time = 0.0
+func _collect_gem(jewel: StaticBody3D) -> bool:
+	if not gems.has(jewel) or not jewel.begin_collection():
+		return false
+	var special: bool = jewel.grade == Gem.SPECIAL
+	var location := jewel.global_position
+	gems.erase(jewel)
+	gems_collected_this_rock += 1
 	collected_count += 1
-	audio.play_reveal()
-	effects.gem_burst(Vector3(0, 0.1, 1.4))
-	camera_shake = 0.12
-	marker.hide()
-	var shown := 0
-	for chunk in chunks:
-		if is_instance_valid(chunk):
-			if shown < 16 and chunk.global_position.z > -0.5:
-				effects.shed_chunk(chunk.mesh_instance.mesh, chunk.mesh_instance.material_override, chunk.mesh_instance.global_transform, chunk.global_position.normalized() * 1.4)
-				shown += 1
-			chunk.collision_layer = 0
-			chunk.hide()
-			chunk.queue_free()
-	chunks.clear()
+	if special:
+		special_collected_count += 1
+	audio.play_discovery(special, jewel.variant)
+	effects.gem_burst(location, special)
+	camera_shake = 0.10 if special else 0.045
+	jewel.reparent(self)
+	collecting_gems.append({"node": jewel, "start": location, "age": 0.0, "life": 1.65 if special else 1.15, "special": special})
 	hovered = null
-	gem.reparent(rock_motion)
-	gem.collision_layer = 0
-	# Reparenting keeps the extracted gem independent of the rock's current rotation.
-	gem.rotation = Vector3(0.12, 0.0, -0.16)
 	if controller_id >= 0 and using_controller:
-		Input.start_joy_vibration(controller_id, 0.5, 0.7, 0.22)
+		Input.start_joy_vibration(controller_id, 0.45 if special else 0.2, 0.65 if special else 0.35, 0.18 if special else 0.10)
+	_check_exhausted()
+	return true
+
+func _update_collections(delta: float) -> void:
+	for i in range(collecting_gems.size() - 1, -1, -1):
+		var extraction: Dictionary = collecting_gems[i]
+		extraction.age += delta
+		var jewel: StaticBody3D = extraction.node
+		if extraction.age >= extraction.life:
+			jewel.queue_free()
+			collecting_gems.remove_at(i)
+			continue
+		var age: float = extraction.age
+		var approach := smoothstep(0.0, 0.24, age)
+		jewel.position = extraction.start + camera.global_basis.z * approach * 2.2 + Vector3.UP * age * 1.1
+		jewel.rotation.y += delta * 2.4
+		var grow := 1.0 + sin(minf(age / 0.45, 1.0) * PI) * 0.35
+		var shrink := 1.0 - smoothstep(extraction.life - 0.35, extraction.life, age)
+		jewel.scale = Vector3.ONE * maxf(0.001, grow * shrink)
+
+func _check_exhausted() -> void:
+	# A find never removes unmined stone. Both excavation and collection must finish.
+	if completion_time < 0.0 and chunks.is_empty() and gems.is_empty():
+		completion_time = 0.0
+		marker.hide()
 
 func _reset_rock() -> void:
-	if is_instance_valid(gem) and gem.get_parent() != shell:
-		gem.queue_free()
 	_spawn_rock()
 
 func _capture_tick(delta: float) -> void:
 	# Reproducible rendered interaction, available only through the explicit CLI flag.
 	capture_clock += delta
+	idle_time = 0.0
 	if capture_stage == 0 and capture_clock > 1.0:
-		_capture("01_intact")
+		_capture("large_01_intact")
 		capture_stage = 1
 		capture_clock = 0.0
 	elif capture_stage == 1 and capture_clock > 0.25:
@@ -467,56 +553,87 @@ func _capture_tick(delta: float) -> void:
 		capture_stage = 2
 		capture_clock = 0.0
 	elif capture_stage == 2 and capture_clock > 0.43:
-		_capture("02_first_hit")
+		_capture("large_02_first_hit")
+		_capture_retarget(false)
 		capture_stage = 3
 		capture_clock = 0.0
-	elif capture_stage == 3:
+	elif capture_stage == 3 or capture_stage == 6:
+		aim_position = camera.unproject_position(capture_gem.global_position)
 		capture_hit_clock += delta
-		if capture_hit_clock > 0.38:
+		if capture_hit_clock > 0.40 and not pickaxe.is_swinging:
 			capture_hit_clock = 0.0
-			_request_swing()
-		if broken_count >= 1:
-			capture_stage = 30
-			capture_clock = 0.0
-	elif capture_stage == 30 and capture_clock > 0.45:
-		_capture("03_open_shell")
-		capture_stage = 4
+			var result := ray_at(aim_position)
+			if result.get("collider") == capture_gem:
+				capture_stage += 1
+				capture_clock = 0.0
+			else:
+				_request_swing()
+	elif (capture_stage == 4 or capture_stage == 7) and capture_clock > 1.1:
+		_capture("large_03_common_found" if capture_stage == 4 else "large_05_special_found")
+		capture_stage *= 10
 		capture_clock = 0.0
-	elif capture_stage == 4:
-		capture_hit_clock += delta
-		if capture_hit_clock > 0.38:
-			capture_hit_clock = 0.0
-			_request_swing()
-		if reveal_time >= 0.6:
-			_capture("04_gem")
-			capture_stage = 5
+	elif (capture_stage == 40 or capture_stage == 70) and capture_clock > 0.25:
+		aim_position = camera.unproject_position(capture_gem.global_position)
+		_request_swing()
+		capture_stage = 5 if capture_stage == 40 else 8
+		capture_clock = 0.0
+	elif capture_stage == 5 and capture_clock > 0.40:
+		if gems.has(capture_gem):
+			capture_stage = 3
 			capture_clock = 0.0
-	elif capture_stage == 5 and capture_clock > 3.0:
-		_capture("05_fresh_rock")
+			return
+		_capture("large_04_common_collected")
+		capture_stage = 50
+		capture_clock = 0.0
+	elif capture_stage == 50 and capture_clock > 1.0:
+		_capture_retarget(true)
 		capture_stage = 6
 		capture_clock = 0.0
-	elif capture_stage == 6 and capture_clock > 0.3:
-		get_window().size = Vector2i(1280, 720)
-		capture_stage = 7
-		capture_clock = 0.0
-	elif capture_stage == 7 and capture_clock > 0.7:
-		_capture("06_wide")
-		capture_stage = 8
-		capture_clock = 0.0
-	elif capture_stage == 8 and capture_clock > 0.3:
-		get_window().size = Vector2i(600, 900)
+	elif capture_stage == 8 and capture_clock > 0.40:
+		if gems.has(capture_gem):
+			capture_stage = 6
+			capture_clock = 0.0
+			return
+		_capture("large_06_special_collected")
 		capture_stage = 9
 		capture_clock = 0.0
-	elif capture_stage == 9 and capture_clock > 0.7:
-		_capture("07_portrait")
+	elif capture_stage == 9 and capture_clock > 1.6:
+		get_window().size = Vector2i(1280, 720)
 		capture_stage = 10
 		capture_clock = 0.0
-	elif capture_stage == 10 and capture_clock > 0.3:
-		print("CAPTURE_OK hits=", hit_count, " gems=", collected_count)
+	elif capture_stage == 10 and capture_clock > 0.7:
+		_capture("large_07_wide")
+		capture_stage = 11
+		capture_clock = 0.0
+	elif capture_stage == 11 and capture_clock > 0.3:
+		get_window().size = Vector2i(600, 900)
+		capture_stage = 12
+		capture_clock = 0.0
+	elif capture_stage == 12 and capture_clock > 0.7:
+		_capture("large_08_portrait")
+		capture_stage = 13
+		capture_clock = 0.0
+	elif capture_stage == 13 and capture_clock > 0.3:
+		if collected_count != 2 or special_collected_count != 1 or chunks.is_empty():
+			push_error("Capture did not demonstrate two independent discoveries")
+			get_tree().quit(1)
+			return
+		print("CAPTURE_OK hits=", hit_count, " gems=", collected_count, " remaining_stone=", chunks.size())
 		get_tree().quit()
-	if elapsed > 40.0:
+	if elapsed > 85.0:
 		push_error("Capture sequence timed out")
 		get_tree().quit(1)
+
+func _capture_retarget(special: bool) -> void:
+	var candidates: Array[StaticBody3D] = []
+	for jewel in gems:
+		if (jewel.grade == Gem.SPECIAL) == special:
+			candidates.append(jewel)
+	candidates.sort_custom(func(a: StaticBody3D, b: StaticBody3D): return a.position.length() > b.position.length())
+	capture_gem = candidates[0]
+	shell.quaternion = Quaternion(capture_gem.position.normalized(), camera.position.normalized())
+	aim_position = camera.unproject_position(capture_gem.global_position)
+	capture_hit_clock = 0.0
 
 func _capture(label: String) -> void:
 	await RenderingServer.frame_post_draw

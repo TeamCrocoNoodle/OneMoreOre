@@ -59,11 +59,12 @@ func shed_chunk(mesh: Mesh, material: Material, placement: Transform3D, outward:
 	node.global_transform = placement
 	loose_chunks.append({"node": node, "velocity": outward * rng.randf_range(2.5, 4.5) + Vector3.UP * 2.3, "spin": _random_direction() * rng.randf_range(3.0, 6.0), "age": 0.0, "life": 1.2})
 
-func gem_burst(point: Vector3) -> void:
-	for i in range(100):
+func gem_burst(point: Vector3, special: bool = true) -> void:
+	for i in range(100 if special else 32):
 		var direction := _random_direction()
-		_spawn(1 if i % 2 else 0, point, direction * rng.randf_range(2.0, 8.0), [Color("7ffff0"), Color("d7fff5"), Color("fbd27e")][i % 3], rng.randf_range(0.025, 0.10), rng.randf_range(0.6, 1.6))
-	_ring(point, Vector3.FORWARD, true)
+		var palette := [Color("ffce64"), Color("fff1c0"), Color("f5a6ff")] if special else [Color("7ffff0"), Color("d7fff5"), Color("bdf7ea")]
+		_spawn(1 if i % 2 else 0, point, direction * rng.randf_range(2.0, 8.0 if special else 4.5), palette[i % 3], rng.randf_range(0.025, 0.10), rng.randf_range(0.6, 1.6))
+	_ring(point, Vector3.FORWARD, special)
 
 func _spawn(kind: int, point: Vector3, velocity: Vector3, color: Color, size: float, life: float) -> void:
 	if particles.size() >= 480:
@@ -103,8 +104,8 @@ func _process(delta: float) -> void:
 		var kind: int = p.kind
 		p.velocity.y -= delta * (9.0 if kind == 0 else 1.5 if kind == 1 else -0.45)
 		p.position += p.velocity * delta
-		if p.position.y < -3.05 and kind == 0:
-			p.position.y = -3.05
+		if p.position.y < -5.4 and kind == 0:
+			p.position.y = -5.4
 			p.velocity = p.velocity * Vector3(0.6, -0.3, 0.6)
 		var t: float = p.age / p.life
 		var size: float = p.size * (1.0 - t * t)
@@ -131,8 +132,8 @@ func _process(delta: float) -> void:
 		p.velocity.y -= 12.0 * delta
 		p.node.position += p.velocity * delta
 		p.node.rotate(p.spin.normalized(), p.spin.length() * delta)
-		if p.node.position.y < -2.8:
-			p.node.position.y = -2.8
+		if p.node.position.y < -5.2:
+			p.node.position.y = -5.2
 			p.velocity *= Vector3(0.65, -0.35, 0.65)
 		p.node.scale = Vector3.ONE * (1.0 - smoothstep(0.55, 1.2, p.age))
 	for i in range(rings.size() - 1, -1, -1):

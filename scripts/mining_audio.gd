@@ -11,6 +11,7 @@ var _hits: Array[AudioStreamWAV] = []
 var _breaks: Array[AudioStreamWAV] = []
 var _swings: Array[AudioStreamWAV] = []
 var _reveal: AudioStreamWAV
+var _discovery: AudioStreamWAV
 var _respawn: AudioStreamWAV
 var _players: Array[AudioStreamPlayer] = []
 var _started: Array[int] = []
@@ -31,6 +32,7 @@ func _ready() -> void:
 	for i in range(3):
 		_swings.append(_synthesize("swing", 0.115, 3803 + i * 71))
 	_reveal = _synthesize("reveal", 1.55, 5107)
+	_discovery = _synthesize("reveal", 0.62, 8107)
 	_respawn = _synthesize("respawn", 0.56, 7307)
 	for i in range(PLAYER_COUNT):
 		var player := AudioStreamPlayer.new()
@@ -66,6 +68,13 @@ func play_break(layer: int = 0) -> void:
 func play_reveal() -> void:
 	if _reveal != null:
 		_play(_reveal, -7.0, 1.0, true)
+
+
+func play_discovery(special: bool, variant: int = 0) -> void:
+	if special:
+		play_reveal()
+	elif _discovery != null:
+		_play(_discovery, -10.0, 1.0 + float(variant % 5) * 0.07)
 
 
 func play_swing() -> void:

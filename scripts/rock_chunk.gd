@@ -38,7 +38,12 @@ func configure(data: Dictionary, p_layer_index: int) -> void:
 	face_points = data["face_points"]
 	face_center = data.get("face_center", _average_points(face_points))
 	_rng.seed = data.get("seed", 1)
-	max_health = 3.0 + float(layer_index)
+	# Larger rocks contain hundreds of pieces: depth adds modest resistance
+	# while every individual plate still breaks in a short, satisfying burst.
+	var toughness := 3.0 if layer_index >= 2 else 2.0
+	if _rng.randi_range(0, 4) == 0:
+		toughness += 1.0
+	max_health = clampf(float(data.get("health", toughness)), 2.0, 4.0)
 	health = max_health
 	collision_layer = 1
 	collision_mask = 0
