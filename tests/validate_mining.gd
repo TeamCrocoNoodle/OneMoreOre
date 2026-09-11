@@ -446,6 +446,7 @@ func _break_visible(screen: Vector2, finish_emergence: bool = true) -> bool:
 			if finish_emergence:
 				_check(await _until(func(): return not linked_gem.is_emerging), "The released gem finishes its outward emergence animation")
 				_check(linked_gem.collision_layer == 2 and linked_gem.scale.is_equal_approx(Vector3.ONE) and not linked_gem.is_embedded, "Only the fully emerged, full-size gem becomes selectable")
+				_check(linked_gem.global_basis.z.normalized().dot(game.camera.global_basis.z.normalized()) > 0.8, "An emerged crystal presents its broad front face to the orthographic camera")
 	else:
 		_check(game.chunks.size() == previous_stone, "Collecting a gem preserves every remaining stone chunk")
 		_check(body.collision_layer == 0 and not game.gems.has(body) and game.collected_count == previous_collected + 1, "Collected gem is removed from selection and awarded exactly once")

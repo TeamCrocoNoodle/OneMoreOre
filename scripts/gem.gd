@@ -1,7 +1,10 @@
 extends StaticBody3D
-## Opaque cut crystals; the rock itself always occludes an undiscovered gem.
+## Faceted mineral crystals with opaque optical depth, fitted inside their owner.
 
 signal emerged
+
+const Geometry = preload("res://scripts/gem_geometry.gd")
+const GEM_SHADER = preload("res://shaders/gem.gdshader")
 
 const COMMON := 0
 const SPECIAL := 1
@@ -20,7 +23,7 @@ var bound_radius: float = 0.38
 var visual := Node3D.new()
 var facets: MeshInstance3D
 
-var _material: StandardMaterial3D
+var _material: ShaderMaterial
 var _colliders: Array[CollisionShape3D] = []
 var _reveal_tween: Tween
 var _emergence_start_position := Vector3.ZERO
@@ -40,7 +43,7 @@ func configure(new_grade: int, new_variant: int = 0) -> void:
 	host_chunk = null
 	show()
 	# Ready before insertion into the tree, for the caller's placement checks.
-	bound_radius = 0.52 if grade == SPECIAL else _common_dimensions().w
+	bound_radius = 0.52 if grade == SPECIAL else 0.40
 	if is_node_ready():
 		_build()
 
@@ -55,8 +58,7 @@ func set_hovered(hovered: bool) -> void:
 	if not is_instance_valid(_material):
 		return
 	var highlight := hovered and not collected and not is_embedded and not is_emerging
-	_material.albedo_color = Color(1.12, 1.12, 1.08) if highlight else Color.WHITE
-	_material.roughness = 0.17 if highlight else (0.20 if grade == SPECIAL else 0.25)
+	_material.set_shader_parameter("hovered", 1.0 if highlight else 0.0)
 
 
 func begin_collection() -> bool:
@@ -110,11 +112,26 @@ func release_from_chunk(parent: Node3D, target_position: Vector3) -> bool:
 	_emergence_target_position = target_position
 	_emergence_start_scale = scale
 	_emergence_start_rotation = quaternion
-	_emergence_target_rotation = quaternion * Quaternion(Vector3.UP, 0.56) * Quaternion(Vector3.FORWARD, -0.10)
+	_emergence_target_rotation = _presentation_rotation(parent, target_position - position)
 	_reveal_tween = create_tween()
 	_reveal_tween.tween_method(_animate_emergence, 0.0, 1.0, EMERGENCE_DURATION)
 	_reveal_tween.tween_callback(_finish_emergence)
 	return true
+
+
+func _presentation_rotation(parent: Node3D, travel: Vector3) -> Quaternion:
+	# A buried crystal keeps its random pose. As it comes out, present its broad
+	# cut face so a thin side cannot hide the new shape and its internal facets.
+	var toward_view := travel.normalized()
+	var camera := get_viewport().get_camera_3d()
+	if is_instance_valid(camera):
+		toward_view = (parent.global_basis.inverse() * camera.global_basis.z).normalized()
+	var up := (parent.global_basis.inverse() * Vector3.UP).normalized()
+	var right := up.cross(toward_view).normalized()
+	if toward_view.length_squared() < 0.5 or right.length_squared() < 0.5:
+		return quaternion
+	up = toward_view.cross(right).normalized()
+	return Basis(right, up, toward_view).get_rotation_quaternion() * Quaternion(Vector3.UP, -0.22) * Quaternion(Vector3.BACK, -0.06)
 
 
 func _animate_emergence(progress: float) -> void:
@@ -170,136 +187,35 @@ func _build() -> void:
 	_colliders.clear()
 	collision_layer = 0 if collected or is_embedded or is_emerging else 2
 	collision_mask = 0
-	_material = StandardMaterial3D.new()
-	_material.vertex_color_use_as_albedo = true
-	_material.roughness = 0.20 if grade == SPECIAL else 0.25
-	_material.metallic = 0.32 if grade == SPECIAL else 0.16
-	_material.diffuse_mode = BaseMaterial3D.DIFFUSE_TOON
-	_material.specular_mode = BaseMaterial3D.SPECULAR_TOON
-	_material.cull_mode = BaseMaterial3D.CULL_BACK
-	# No light, transparency, bloom halo, or depth override can reveal a buried gem.
-	_material.emission_enabled = false
-	var surface := SurfaceTool.new()
-	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	if grade == SPECIAL:
-		_build_special(surface)
-	else:
-		_build_common(surface)
+	var geometry: Dictionary = Geometry.build(variant, grade == SPECIAL)
+	_material = ShaderMaterial.new()
+	_material.shader = GEM_SHADER
+	var colors := _palette()
+	_material.set_shader_parameter("base_color", colors[0])
+	_material.set_shader_parameter("deep_color", colors[1])
+	_material.set_shader_parameter("edge_color", colors[2])
+	bound_radius = geometry.bound_radius
+	_material.set_shader_parameter("crystal_radius", bound_radius)
+	_material.set_shader_parameter("hovered", 0.0)
 	facets = MeshInstance3D.new()
-	facets.name = "SpecialCrown" if grade == SPECIAL else "CommonCut%d" % variant
-	facets.mesh = surface.commit()
+	facets.name = "SpecialCrystal" if grade == SPECIAL else "CommonCrystal%d" % variant
+	facets.mesh = geometry.mesh
 	facets.material_override = _material
 	visual.add_child(facets)
-	# Measure the finished geometry, so placement never relies on a loose estimate.
-	bound_radius = 0.0
-	var vertices: PackedVector3Array = facets.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
-	for vertex in vertices:
-		bound_radius = maxf(bound_radius, vertex.length())
+	_add_convex(geometry.collider_points)
 
 
-func _common_dimensions() -> Vector4:
-	# Width, table height, lower tip height, and conservative placement radius.
+func _palette() -> Array[Color]:
+	# A colored body and darker mineral interior preserve the tier even in shade.
+	# Pale tinted edges replace the old alternating white and candy-color faces.
+	if grade == SPECIAL:
+		return [Color("cd5666"), Color("471d38"), Color("ffd2cc")]
 	match variant:
-		1: return Vector4(0.305, 0.300, -0.390, 0.390)
-		2: return Vector4(0.370, 0.215, -0.335, 0.380)
-		3: return Vector4(0.345, 0.275, -0.360, 0.370)
-		4: return Vector4(0.310, 0.315, -0.400, 0.400)
-	return Vector4(0.335, 0.255, -0.380, 0.380)
-
-
-func _common_palette() -> Array[Color]:
-	match variant:
-		1:
-			return [Color("a6ffc2"), Color("28cf80"), Color("14885d"), Color("62ef97"), Color("d1ffe0"), Color("21af74"), Color("69dfab"), Color("16715c")]
-		2:
-			return [Color("a7d0ff"), Color("387ce5"), Color("224ba6"), Color("649dff"), Color("e0efff"), Color("2963ce"), Color("87b8ff"), Color("24418e")]
-		3:
-			return [Color("fff0a7"), Color("f3b635"), Color("b76c20"), Color("ffd867"), Color("fff6d2"), Color("de8c27"), Color("ffc775"), Color("a45d28")]
-		4:
-			return [Color("dbbcff"), Color("9d65e4"), Color("6740a9"), Color("bf86f7"), Color("f0e0ff"), Color("884bd0"), Color("c6a1ef"), Color("543a92")]
-	return [Color("ffffff"), Color("d1e7f0"), Color("8ca9bb"), Color("e6f5ff"), Color("ffffff"), Color("bbd5e3"), Color("e6f0f5"), Color("718fa9")]
-
-
-func _build_common(surface: SurfaceTool) -> void:
-	var dimensions := _common_dimensions()
-	var colors := _common_palette()
-	var table := _ring(dimensions.x * 0.51, dimensions.y, 8, PI / 8.0)
-	var upper := _ring(dimensions.x, 0.055, 8, PI / 8.0)
-	var lower := _ring(dimensions.x * 0.975, 0.010, 8, PI / 8.0)
-	var top := Vector3(0.0, dimensions.y + 0.025, 0.0)
-	var bottom := Vector3(0.0, dimensions.z, 0.0)
-	var bounds := PackedVector3Array([top, bottom])
-	bounds.append_array(table)
-	bounds.append_array(upper)
-	bounds.append_array(lower)
-	for i in range(8):
-		var j := (i + 1) % 8
-		_triangle(surface, top, table[i], table[j], colors[(i + 4) % 8].lightened(0.12))
-		_triangle(surface, table[i], upper[i], upper[j], colors[i])
-		_triangle(surface, table[i], upper[j], table[j], colors[i].lightened(0.08))
-		_triangle(surface, upper[i], lower[i], lower[j], colors[(i + 4) % 8].lightened(0.10))
-		_triangle(surface, upper[i], lower[j], upper[j], colors[(i + 4) % 8].lightened(0.10))
-		_triangle(surface, lower[i], bottom, lower[j], colors[(i + 2) % 8].darkened(0.06))
-	_add_convex(bounds)
-
-
-func _build_special(surface: SurfaceTool) -> void:
-	var colors: Array[Color] = [Color("ffc4cf"), Color("ff3657"), Color("be2449"), Color("f87d94"), Color("e84377"), Color("ffe1de"), Color("ff667b"), Color("a82248")]
-	var top := Vector3(0.0, 0.52, 0.0)
-	var bottom := Vector3(0.0, -0.50, 0.0)
-	var top_crown := _ring(0.19, 0.295, 8, PI / 8.0)
-	var upper := _ring(0.34, 0.065, 8, PI / 8.0)
-	var lower := _ring(0.34, -0.035, 8, PI / 8.0)
-	var bottom_crown := _ring(0.16, -0.315, 8, PI / 8.0)
-	var bounds := PackedVector3Array([top, bottom])
-	for ring in [top_crown, upper, lower, bottom_crown]:
-		bounds.append_array(ring)
-	for i in range(8):
-		var j := (i + 1) % 8
-		_triangle(surface, top, top_crown[i], top_crown[j], colors[(i + 5) % 8])
-		_triangle(surface, top_crown[i], upper[i], upper[j], colors[i])
-		_triangle(surface, top_crown[i], upper[j], top_crown[j], colors[i].lightened(0.12))
-		_triangle(surface, upper[i], lower[i], lower[j], Color("ffb0bf").darkened(float(i % 3) * 0.09))
-		_triangle(surface, upper[i], lower[j], upper[j], Color("ffb0bf").darkened(float(i % 3) * 0.09))
-		_triangle(surface, lower[i], bottom_crown[i], bottom_crown[j], colors[(i + 1) % 8])
-		_triangle(surface, lower[i], bottom_crown[j], lower[j], colors[(i + 1) % 8].darkened(0.07))
-		_triangle(surface, bottom_crown[i], bottom, bottom_crown[j], colors[(i + 3) % 8])
-	_add_convex(bounds)
-	# Six solid satellite facets form a small star crown, without a floating halo.
-	# Each shard has its own exact convex collider rather than filling the notches.
-	for i in range(6):
-		var angle := TAU * float(i) / 6.0
-		var radial := Vector3(cos(angle), 0.0, sin(angle))
-		var direction := 1.0 if i % 2 == 0 else -1.0
-		var start := radial * 0.20 + Vector3.UP * (-0.08 * direction)
-		var end := radial * 0.455 + Vector3.UP * (0.19 * direction)
-		_add_crown_shard(surface, start, end, colors, i)
-
-
-func _add_crown_shard(surface: SurfaceTool, start: Vector3, end: Vector3, colors: Array[Color], index: int) -> void:
-	var axis := (end - start).normalized()
-	var tangent := axis.cross(Vector3.UP).normalized()
-	var bitangent := axis.cross(tangent).normalized()
-	var center := start.lerp(end, 0.47)
-	var ring := PackedVector3Array()
-	for i in range(4):
-		var angle := TAU * float(i) / 4.0 + PI * 0.25
-		ring.append(center + (tangent * cos(angle) + bitangent * sin(angle)) * 0.078)
-	var bounds := PackedVector3Array([start, end])
-	bounds.append_array(ring)
-	for i in range(4):
-		var j := (i + 1) % 4
-		_triangle(surface, start, ring[i], ring[j], colors[(index + i + 1) % 8].darkened(0.10), center)
-		_triangle(surface, end, ring[j], ring[i], colors[(index + i + 5) % 8].lightened(0.08), center)
-	_add_convex(bounds)
-
-
-func _ring(radius: float, height: float, count: int, phase: float) -> PackedVector3Array:
-	var ring := PackedVector3Array()
-	for i in range(count):
-		var angle := TAU * float(i) / float(count) + phase
-		ring.append(Vector3(cos(angle) * radius, height, sin(angle) * radius))
-	return ring
+		1: return [Color("4faa85"), Color("123b3d"), Color("bef3db")]
+		2: return [Color("538ec4"), Color("172b50"), Color("c1e9fa")]
+		3: return [Color("d6ae57"), Color("493321"), Color("fff1b9")]
+		4: return [Color("9c79c7"), Color("322349"), Color("e4d4ff")]
+	return [Color("bedee0"), Color("2f5663"), Color("edfffd")]
 
 
 func _add_convex(points: PackedVector3Array) -> void:
@@ -311,18 +227,3 @@ func _add_convex(points: PackedVector3Array) -> void:
 	collider.disabled = collected or is_embedded or is_emerging
 	_colliders.append(collider)
 	add_child(collider)
-
-
-func _triangle(surface: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, color: Color, center: Vector3 = Vector3.ZERO) -> void:
-	var normal := (b - a).cross(c - a).normalized()
-	if normal.dot((a + b + c) / 3.0 - center) < 0.0:
-		var temporary := b
-		b = c
-		c = temporary
-		normal = -normal
-	surface.set_color(color)
-	surface.set_normal(normal)
-	# Clockwise winding is the outward face in Godot.
-	surface.add_vertex(a)
-	surface.add_vertex(c)
-	surface.add_vertex(b)
