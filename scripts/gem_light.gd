@@ -5,6 +5,10 @@ extends Node3D
 signal pulse_finished
 
 const LIGHT_SHADER := preload("res://shaders/gem_light.gdshader")
+const CRACK_OFFSET := 0.012
+const RAY_OFFSET := 0.018
+const CRACK_CORE_RATIO := 0.78
+const MAX_RAYS := 10
 const TIER_COLORS: Array[Color] = [
 	Color("f3faff"), Color("64ff86"), Color("4896ff"),
 	Color("ffe15b"), Color("be65ff"), Color("ff4c61")
@@ -13,12 +17,12 @@ const TIER_COLORS: Array[Color] = [
 var current_tier: int = -1
 var pulse_count: int = 0
 
-var _face_points := PackedVector3Array()
-var _center := Vector3.ZERO
 var _normal := Vector3.FORWARD
 var _tangent := Vector3.RIGHT
 var _bitangent := Vector3.UP
 var _rng := RandomNumberGenerator.new()
+var _seed_value := 0
+var _latest_impact := Vector3.ZERO
 var _crack_segments: Array[Dictionary] = []
 var _rays: Array[Dictionary] = []
 var _dust: Array[Dictionary] = []
@@ -35,19 +39,48 @@ var _broken := false
 var _configured := false
 
 
+@warning_ignore("unused_parameter")
 func configure(face_points: PackedVector3Array, face_center: Vector3, normal: Vector3, seed_value: int) -> void:
 	_ensure_meshes()
 	clear()
-	_face_points = face_points.duplicate()
-	_center = face_center
 	_normal = normal.normalized() if normal.length_squared() > 0.0001 else Vector3.UP
 	_tangent = _normal.cross(Vector3.UP).normalized()
 	if _tangent.length_squared() < 0.1:
 		_tangent = _normal.cross(Vector3.RIGHT).normalized()
 	_bitangent = _normal.cross(_tangent).normalized()
+	_seed_value = seed_value
 	_rng.seed = seed_value
-	_build_paths()
 	_configured = true
+
+
+func set_cracks(segments: Array[Dictionary], latest_impact: Vector3) -> void:
+	# Stone owns the fracture geometry. This module only illuminates its current
+	# visible centerlines; it never invents another crack or perimeter seam.
+	_crack_segments.clear()
+	_rays.clear()
+	_dust.clear()
+	_latest_impact = latest_impact
+	for source_index in range(segments.size()):
+		var source := segments[source_index]
+		if not (source.get("a") is Vector3) or not (source.get("b") is Vector3):
+			continue
+		var a: Vector3 = source.a
+		var b: Vector3 = source.b
+		var width := maxf(float(source.get("width", 0.0)), 0.0)
+		if a.distance_squared_to(b) <= 0.00000001 or width <= 0.0:
+			continue
+		var segment := source.duplicate(true)
+		segment["source_index"] = source_index
+		segment["width"] = width
+		segment["weight"] = clampf(float(source.get("weight", 1.0)), 0.0, 1.0)
+		segment["hit_id"] = int(source.get("hit_id", 0))
+		segment["impact"] = source.get("impact", latest_impact)
+		_crack_segments.append(segment)
+	_build_rays()
+	if is_instance_valid(_beam_mesh):
+		_beam_mesh.mesh = null
+		_crack_mesh.mesh = null
+		_dust_mesh.mesh = null
 
 
 func pulse(tier: int, damage_ratio: float, broken: bool = false) -> void:
@@ -62,10 +95,10 @@ func pulse(tier: int, damage_ratio: float, broken: bool = false) -> void:
 	for material in [_beam_material, _crack_material, _dust_material]:
 		material.set_shader_parameter("light_color", TIER_COLORS[current_tier])
 	_draw_cracks()
-	visible = true
-	_beam_mesh.visible = true
-	_crack_mesh.visible = true
-	_dust_mesh.visible = true
+	visible = not _crack_segments.is_empty()
+	_beam_mesh.visible = not _rays.is_empty()
+	_crack_mesh.visible = not _crack_segments.is_empty()
+	_dust_mesh.visible = not _dust.is_empty()
 	_update_visuals()
 	set_process(true)
 
@@ -76,11 +109,18 @@ func clear() -> void:
 	_elapsed = 0.0
 	_damage = 0.0
 	_broken = false
+	_latest_impact = Vector3.ZERO
+	_crack_segments.clear()
+	_rays.clear()
+	_dust.clear()
 	visible = false
 	set_process(false)
 	if is_instance_valid(_beam_material):
 		for material in [_beam_material, _crack_material, _dust_material]:
 			material.set_shader_parameter("pulse_amount", 0.0)
+		_beam_mesh.mesh = null
+		_crack_mesh.mesh = null
+		_dust_mesh.mesh = null
 
 
 func _ready() -> void:
@@ -129,39 +169,73 @@ func _make_mesh(mesh_name: String, material: Material) -> MeshInstance3D:
 	return instance
 
 
-func _build_paths() -> void:
-	_crack_segments.clear()
-	_rays.clear()
-	_dust.clear()
-	if _face_points.size() < 3:
+func _build_rays() -> void:
+	if _crack_segments.is_empty():
 		return
-	var branch_count := mini(5, _face_points.size())
-	for branch in range(branch_count):
-		var edge_index := int(float(branch) / float(branch_count) * float(_face_points.size()))
-		var edge_point := _face_points[edge_index].lerp(_face_points[(edge_index + 1) % _face_points.size()], _rng.randf_range(0.22, 0.72))
-		var travel := edge_point - _center
-		var outward := travel.normalized()
-		var sideways := _normal.cross(outward).normalized()
-		var start := _center + travel * _rng.randf_range(0.04, 0.13)
-		var previous := start
-		for step in range(4):
-			var progress := float(step + 1) / 4.0
-			var point := start.lerp(edge_point, progress)
-			if step < 3:
-				point += sideways * _rng.randf_range(-0.045, 0.045)
-			_crack_segments.append({"a": previous, "b": point, "progress": float(step) / 4.0, "branch": branch})
-			if step == 1 or step == 3:
-				var origin := previous.lerp(point, _rng.randf_range(0.38, 0.76)) + _normal * 0.018
-				var fan := _rng.randf_range(0.85, 1.35)
-				var ray_direction := (_normal + outward * fan + sideways * _rng.randf_range(-0.26, 0.26)).normalized()
-				_rays.append({"origin": origin, "direction": ray_direction, "length": _rng.randf_range(2.35, 2.95), "width": _rng.randf_range(0.24, 0.39), "weight": _rng.randf_range(0.80, 1.0), "branch": branch})
-			previous = point
-		# A short section of the seam also glows, so the rays have an obvious source.
-		var seam_a := _face_points[edge_index].lerp(edge_point, 0.70)
-		var seam_b := edge_point.lerp(_face_points[(edge_index + 1) % _face_points.size()], 0.36)
-		_crack_segments.append({"a": seam_a, "b": seam_b, "progress": 0.70, "branch": branch})
+	var nearest_impact := INF
+	for segment in _crack_segments:
+		var impact: Vector3 = segment.impact
+		nearest_impact = minf(nearest_impact, impact.distance_to(_latest_impact))
+	var fresh_indices: Array[int] = []
+	var older_indices: Array[int] = []
+	var fresh_hit_id := 0
+	for i in range(_crack_segments.size()):
+		var impact: Vector3 = _crack_segments[i].impact
+		# A repeated strike can extend an older site without changing its hit ID.
+		var fresh := impact.distance_to(_latest_impact) <= nearest_impact + 0.025
+		_crack_segments[i]["fresh"] = fresh
+		if fresh:
+			fresh_indices.append(i)
+			fresh_hit_id = maxi(fresh_hit_id, int(_crack_segments[i].hit_id))
+		else:
+			older_indices.append(i)
+	_rng.seed = _seed_value + fresh_hit_id * 104729
+	var ray_count := mini(MAX_RAYS, _crack_segments.size())
+	var fresh_count := mini(fresh_indices.size(), maxi(int(ceil(float(ray_count) * 0.7)), ray_count - older_indices.size()))
+	var chosen := _spaced_indices(fresh_indices, fresh_count)
+	chosen.append_array(_spaced_indices(older_indices, ray_count - fresh_count))
+	for selected in chosen:
+		var segment := _crack_segments[selected]
+		var a: Vector3 = segment.a
+		var b: Vector3 = segment.b
+		var impact: Vector3 = segment.impact
+		var source_t := _rng.randf_range(0.24, 0.78)
+		var source_point := a.lerp(b, source_t)
+		var tangent := (b - a).normalized()
+		var outward := source_point - impact
+		outward -= _normal * outward.dot(_normal)
+		outward = outward.normalized() if outward.length_squared() > 0.0000001 else tangent
+		if tangent.dot(outward) < 0.0:
+			tangent = -tangent
+		var planar := (tangent * 0.72 + outward * 0.28).normalized()
+		var fan := _rng.randf_range(0.85, 1.35)
+		var ray_direction := (_normal + planar * fan).normalized()
+		_rays.append({
+			"origin": source_point + _normal * RAY_OFFSET,
+			"direction": ray_direction,
+			"length": _rng.randf_range(2.35, 2.95),
+			"width": _rng.randf_range(0.24, 0.39),
+			"weight": _rng.randf_range(0.88, 1.0) if bool(segment.fresh) else _rng.randf_range(0.45, 0.62),
+			"source_index": int(segment.source_index),
+			"source_hit_id": int(segment.hit_id),
+			"source_a": a,
+			"source_b": b,
+			"source_impact": impact,
+			"source_t": source_t,
+			"tangent": tangent,
+			"outward": outward,
+			"fan_strength": fan,
+			"fresh": bool(segment.fresh)
+		})
 	for i in range(12):
 		_dust.append({"ray": i % maxi(_rays.size(), 1), "phase": _rng.randf_range(0.0, 0.65), "size": _rng.randf_range(0.022, 0.048), "offset": Vector2(_rng.randf_range(-0.08, 0.08), _rng.randf_range(-0.08, 0.08))})
+
+
+func _spaced_indices(candidates: Array[int], count: int) -> Array[int]:
+	var chosen: Array[int] = []
+	for i in range(mini(count, candidates.size())):
+		chosen.append(candidates[int((float(i) + 0.5) * float(candidates.size()) / float(count))])
+	return chosen
 
 
 func _update_visuals() -> void:
@@ -179,20 +253,18 @@ func _update_visuals() -> void:
 
 func _draw_cracks() -> void:
 	if _crack_segments.is_empty():
+		_crack_mesh.mesh = null
 		return
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var growth := clampf(0.44 + _damage * 0.68, 0.0, 1.0)
-	var width := lerpf(0.014, 0.040, _damage)
 	for segment in _crack_segments:
-		var start: float = segment.progress
-		if start >= growth:
-			continue
-		var a: Vector3 = segment.a + _normal * 0.012
-		var b: Vector3 = segment.b + _normal * 0.012
-		b = a.lerp(b, clampf((growth - start) * 4.0, 0.0, 1.0))
-		var side := _normal.cross(b - a).normalized() * width * (1.0 - start * 0.35)
-		_add_quad(surface, a - side, a + side, b - side * 0.72, b + side * 0.72, 1.0)
+		var a: Vector3 = segment.a + _normal * CRACK_OFFSET
+		var b: Vector3 = segment.b + _normal * CRACK_OFFSET
+		# Width is the stone renderer's complete visible half-width, including
+		# weight and growth. Applying either again would misalign the two ribbons.
+		var side := _normal.cross(b - a).normalized() * float(segment.width) * CRACK_CORE_RATIO
+		var intensity := 1.0 if bool(segment.fresh) else 0.65
+		_add_quad(surface, a - side, a + side, b - side, b + side, intensity)
 	_crack_mesh.mesh = surface.commit()
 
 

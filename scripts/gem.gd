@@ -1,8 +1,11 @@
 extends StaticBody3D
 ## Opaque cut crystals; the rock itself always occludes an undiscovered gem.
 
+signal emerged
+
 const COMMON := 0
 const SPECIAL := 1
+const EMERGENCE_DURATION := 0.40
 const LIGHT_COLORS := [Color("f3faff"), Color("64ff86"), Color("4896ff"), Color("ffe15b"), Color("be65ff"), Color("ff4c61")]
 const LIGHT_NAMES := ["white", "green", "blue", "yellow", "purple", "red"]
 
@@ -10,19 +13,32 @@ var grade: int = COMMON
 var variant: int = 0
 var light_tier: int = 0
 var collected: bool = false
+var is_embedded: bool = false
+var is_emerging: bool = false
+var host_chunk: WeakRef
 var bound_radius: float = 0.38
 var visual := Node3D.new()
 var facets: MeshInstance3D
 
 var _material: StandardMaterial3D
 var _colliders: Array[CollisionShape3D] = []
+var _reveal_tween: Tween
+var _emergence_start_position := Vector3.ZERO
+var _emergence_target_position := Vector3.ZERO
+var _emergence_start_scale := Vector3.ONE
+var _emergence_start_rotation := Quaternion.IDENTITY
+var _emergence_target_rotation := Quaternion.IDENTITY
 
 
 func configure(new_grade: int, new_variant: int = 0) -> void:
+	_stop_emergence()
 	grade = SPECIAL if new_grade == SPECIAL else COMMON
 	variant = posmod(new_variant, 5)
 	light_tier = 5 if grade == SPECIAL else variant
 	collected = false
+	is_embedded = false
+	host_chunk = null
+	show()
 	# Ready before insertion into the tree, for the caller's placement checks.
 	bound_radius = 0.52 if grade == SPECIAL else _common_dimensions().w
 	if is_node_ready():
@@ -38,22 +54,110 @@ func _ready() -> void:
 func set_hovered(hovered: bool) -> void:
 	if not is_instance_valid(_material):
 		return
-	var highlight := hovered and not collected
+	var highlight := hovered and not collected and not is_embedded and not is_emerging
 	_material.albedo_color = Color(1.12, 1.12, 1.08) if highlight else Color.WHITE
 	_material.roughness = 0.17 if highlight else (0.20 if grade == SPECIAL else 0.25)
 
 
 func begin_collection() -> bool:
-	if collected:
+	if collected or is_embedded or is_emerging:
 		return false
+	_stop_emergence()
 	collected = true
-	# The layer change takes effect immediately, including consecutive raycasts.
-	collision_layer = 0
-	collision_mask = 0
-	for collider in _colliders:
-		collider.set_deferred("disabled", true)
+	host_chunk = null
+	_set_mining_enabled(false)
 	set_hovered(false)
 	return true
+
+
+func embed_in_chunk(host: StaticBody3D) -> bool:
+	if collected or is_emerging or not is_instance_valid(host) or host == self or host.get("destroyed") == true:
+		return false
+	if is_embedded:
+		return host_chunk != null and host_chunk.get_ref() == host
+	_stop_emergence()
+	host_chunk = weakref(host)
+	is_embedded = true
+	# The owning stone has already fitted this entire body inside its solid mesh.
+	# Preserve that local transform, including its smaller fitted collider.
+	hide()
+	_set_mining_enabled(false)
+	set_hovered(false)
+	return true
+
+
+func release_from_chunk(parent: Node3D, target_position: Vector3) -> bool:
+	if not is_embedded or collected or host_chunk == null:
+		return false
+	var host := host_chunk.get_ref() as StaticBody3D
+	if not is_instance_valid(host) or host.get("destroyed") != true:
+		return false
+	if not is_instance_valid(parent) or parent == self or is_ancestor_of(parent):
+		return false
+	if not is_inside_tree() or not parent.is_inside_tree() or not target_position.is_finite():
+		return false
+	_stop_emergence()
+	# Reparent before creating the bound tween: moving between parents enters and
+	# exits the tree, and the actual internal starting world transform must survive.
+	if get_parent() != parent:
+		reparent(parent, true)
+	is_embedded = false
+	host_chunk = null
+	is_emerging = true
+	_set_mining_enabled(false)
+	show()
+	_emergence_start_position = position
+	_emergence_target_position = target_position
+	_emergence_start_scale = scale
+	_emergence_start_rotation = quaternion
+	_emergence_target_rotation = quaternion * Quaternion(Vector3.UP, 0.56) * Quaternion(Vector3.FORWARD, -0.10)
+	_reveal_tween = create_tween()
+	_reveal_tween.tween_method(_animate_emergence, 0.0, 1.0, EMERGENCE_DURATION)
+	_reveal_tween.tween_callback(_finish_emergence)
+	return true
+
+
+func _animate_emergence(progress: float) -> void:
+	if not is_emerging or collected or is_embedded:
+		return
+	var travel := 1.0 - pow(1.0 - progress, 3.0)
+	position = _emergence_start_position.lerp(_emergence_target_position, travel)
+	position += Vector3.UP * sin(progress * PI) * 0.12
+	quaternion = _emergence_start_rotation.slerp(_emergence_target_rotation, smoothstep(0.0, 1.0, progress))
+	scale = _emergence_start_scale.lerp(Vector3.ONE, travel) + Vector3.ONE * sin(progress * PI) * 0.045
+
+
+func _finish_emergence() -> void:
+	_reveal_tween = null
+	if not is_emerging or collected or is_embedded:
+		return
+	position = _emergence_target_position
+	quaternion = _emergence_target_rotation
+	scale = Vector3.ONE
+	is_emerging = false
+	_set_mining_enabled(true)
+	emerged.emit()
+
+
+func _stop_emergence() -> void:
+	if _reveal_tween != null:
+		_reveal_tween.kill()
+		_reveal_tween = null
+	is_emerging = false
+
+
+func _set_mining_enabled(enabled: bool) -> void:
+	# Collision layer changes immediately; shape updates defer safely if a caller
+	# is resolving a physics hit. The visible model and collider share this body.
+	collision_layer = 2 if enabled else 0
+	collision_mask = 0
+	for collider in _colliders:
+		collider.set_deferred("disabled", not enabled)
+
+
+func _exit_tree() -> void:
+	# No timer, external signal connection, or unbound tween survives a reset.
+	_stop_emergence()
 
 
 func _build() -> void:
@@ -64,7 +168,7 @@ func _build() -> void:
 		remove_child(collider)
 		collider.queue_free()
 	_colliders.clear()
-	collision_layer = 0 if collected else 2
+	collision_layer = 0 if collected or is_embedded or is_emerging else 2
 	collision_mask = 0
 	_material = StandardMaterial3D.new()
 	_material.vertex_color_use_as_albedo = true
@@ -204,7 +308,7 @@ func _add_convex(points: PackedVector3Array) -> void:
 	shape.margin = 0.002
 	var collider := CollisionShape3D.new()
 	collider.shape = shape
-	collider.disabled = collected
+	collider.disabled = collected or is_embedded or is_emerging
 	_colliders.append(collider)
 	add_child(collider)
 

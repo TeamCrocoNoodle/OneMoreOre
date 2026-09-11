@@ -46,7 +46,6 @@ var squash := 0.0
 var completion_time := -1.0
 var rock_number := 0
 var rock_seed := 0
-var gem_cover_radius := 0.0
 var showcase_mode := false
 var showcase_covers: Array[StaticBody3D] = []
 var light_pulse_history: Array[int] = []
@@ -63,6 +62,7 @@ var capture_mode := false
 var capture_stage := 0
 var capture_clock := 0.0
 var capture_saved_tier := -1
+var capture_impact_points: Array[Vector3] = []
 var spawn_time := 1.0
 var spawn_tween: Tween
 var capture_gem: StaticBody3D
@@ -244,15 +244,10 @@ func _spawn_rock(seed_override: int = -1, showcase: bool = false) -> void:
 	wobble_velocity = Vector3.ZERO
 	rock_motion.rotation = Vector3.ZERO
 	squash = 0.0
-	gem_cover_radius = ROCK_RADIUS
 	for layer in range(LAYER_COUNT):
 		var radius := ROCK_RADIUS - float(layer) * 0.78
 		var cells: Array[Dictionary] = Geometry.build_layer(radius, layer, rock_seed, LAYER_COUNTS[layer], 0.86)
 		for data in cells:
-			if layer == 0:
-				# Inscribed radius of the complete backing skirt, including its widest cells.
-				for boundary: Vector3 in data.footprint_directions:
-					gem_cover_radius = minf(gem_cover_radius, float(data.backing_radius) * boundary.dot(data.direction))
 			var chunk := Chunk.new()
 			shell.add_child(chunk)
 			chunk.configure(data, layer)
@@ -260,8 +255,6 @@ func _spawn_rock(seed_override: int = -1, showcase: bool = false) -> void:
 			chunk.set_meta("outward", data.direction)
 			chunks.append(chunk)
 	_place_gems(rock_seed)
-	if showcase_mode:
-		_place_showcase_gems()
 	rock_number += 1
 	completion_time = -1.0
 	if rock_number > 1:
@@ -274,8 +267,9 @@ func _spawn_rock(seed_override: int = -1, showcase: bool = false) -> void:
 func _place_gems(seed_value: int) -> void:
 	var layout_rng := RandomNumberGenerator.new()
 	layout_rng.seed = seed_value ^ 0x5F3759DF
-	# Shuffle depth bands as well as directions; no grade is assigned a fixed depth.
-	var bands: Array[float] = [1.25, 1.8, 2.3, 2.75, 3.2, 3.65]
+	# Each gem belongs to one stone volume. Shuffle the occupied layers so a
+	# rarity never implies a particular depth in a randomly generated rock.
+	var bands: Array[int] = [0, 1, 2, 3, 4, 5]
 	for i in range(bands.size() - 1, 0, -1):
 		var j := layout_rng.randi_range(0, i)
 		var swap := bands[i]
@@ -284,31 +278,29 @@ func _place_gems(seed_value: int) -> void:
 	for i in range(COMMON_GEM_COUNT + SPECIAL_GEM_COUNT):
 		var jewel := Gem.new()
 		jewel.configure(Gem.COMMON if i < COMMON_GEM_COUNT else Gem.SPECIAL, i % COMMON_GEM_COUNT)
-		var location := Vector3.ZERO
-		var placed := false
-		for attempt in range(256):
-			var y := layout_rng.randf_range(-1.0, 1.0)
-			var angle := layout_rng.randf_range(0.0, TAU)
-			var radial := sqrt(1.0 - y * y)
-			var direction := Vector3(radial * cos(angle), y, radial * sin(angle))
-			var depth := minf(bands[i] + layout_rng.randf_range(-0.12, 0.12), gem_cover_radius - jewel.bound_radius - 0.12)
-			location = direction * depth
-			placed = true
-			for other in gems:
-				if location.distance_to(other.position) < jewel.bound_radius + other.bound_radius + 0.28:
-					placed = false
-					break
-			if placed:
-				break
-		assert(placed, "Could not place a non-overlapping buried gem")
-		jewel.position = location
 		jewel.rotation = Vector3(layout_rng.randf_range(-0.5, 0.5), layout_rng.randf_range(-PI, PI), layout_rng.randf_range(-0.5, 0.5))
 		shell.add_child(jewel)
 		gems.append(jewel)
+	if showcase_mode:
+		_place_showcase_gems()
+		return
+	for i in range(gems.size()):
+		var candidates: Array[StaticBody3D] = []
+		var largest_socket := 0.0
+		for chunk in chunks:
+			if chunk.layer_index == bands[i]:
+				largest_socket = maxf(largest_socket, chunk.gem_socket_radius)
+		for chunk in chunks:
+			if chunk.layer_index == bands[i] and chunk.gem_socket_radius >= largest_socket * 0.72:
+				candidates.append(chunk)
+		assert(not candidates.is_empty(), "Every depth needs a solid stone that can contain a gem")
+		var host: StaticBody3D = candidates[layout_rng.randi_range(0, candidates.size() - 1)]
+		var contained: bool = host.contain_gem(gems[i])
+		assert(contained, "The selected stone must contain its gem")
 
 func _place_showcase_gems() -> void:
-	# Six spread-out front caps make every rarity immediately testable on the first rock.
-	# R and subsequent rocks retain the fully buried random layouts.
+	# Six front stones contain one gem each for testing all the light tiers.
+	# R and subsequent rocks distribute the host stones over all six depths.
 	var slots := [Vector2(-0.42, 0.30), Vector2(0.0, 0.38), Vector2(0.42, 0.30), Vector2(-0.42, -0.28), Vector2(0.0, -0.38), Vector2(0.42, -0.28)]
 	showcase_covers.resize(gems.size())
 	var used: Array[StaticBody3D] = []
@@ -325,14 +317,7 @@ func _place_showcase_gems() -> void:
 				continue
 			if _face_inradius(chunk) < jewel.bound_radius + 0.07:
 				continue
-			var candidate: Vector3 = chunk.position + chunk.face_center - chunk.direction * (jewel.bound_radius + 0.13)
-			var spaced := true
-			for other in used:
-				var placed: StaticBody3D = other.cover_gem.get_ref()
-				if candidate.distance_to(placed.position) < jewel.bound_radius + placed.bound_radius + 0.28:
-					spaced = false
-					break
-			if not spaced:
+			if chunk.gem_socket_radius <= 0.1:
 				continue
 			var score: float = chunk.direction.dot(local_direction)
 			if score > best_score:
@@ -341,8 +326,8 @@ func _place_showcase_gems() -> void:
 		assert(best != null, "No sufficiently wide stone cap for light showcase")
 		if best == null:
 			continue
-		jewel.position = best.position + best.face_center - best.direction * (jewel.bound_radius + 0.13)
-		best.configure_gem_cover(jewel, jewel.light_tier)
+		var contained: bool = best.contain_gem(jewel)
+		assert(contained, "The showcase stone must contain its gem")
 		showcase_covers[i] = best
 		used.append(best)
 
@@ -509,8 +494,6 @@ func _physics_process(_delta: float) -> void:
 		if is_instance_valid(hovered) and hovered.has_method("set_hovered"):
 			hovered.set_hovered(false)
 		hovered = next_hover
-		if is_instance_valid(hovered) and chunks.has(hovered):
-			_prepare_gem_cover(hovered, aim_position)
 		if is_instance_valid(hovered) and hovered.has_method("set_hovered"):
 			hovered.set_hovered(true)
 	marker.visible = not result.is_empty() and completion_time < 0.0 and not dragging and touch_id < 0
@@ -524,21 +507,6 @@ func ray_at(screen_position: Vector2) -> Dictionary:
 	var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 40.0, 3)
 	return get_world_3d().direct_space_state.intersect_ray(query)
 
-func _prepare_gem_cover(chunk: StaticBody3D, screen_position: Vector2) -> bool:
-	if chunk.is_gem_cover:
-		return true
-	var origin := camera.project_ray_origin(screen_position)
-	var direction := camera.project_ray_normal(screen_position)
-	var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 40.0, 3, [chunk.get_rid()])
-	var behind := get_world_3d().direct_space_state.intersect_ray(query)
-	if behind.is_empty() or not gems.has(behind.collider):
-		return false
-	var front := ray_at(screen_position)
-	if front.get("collider") != chunk or Vector3(behind.position).distance_to(front.position) > 2.1:
-		return false
-	chunk.configure_gem_cover(behind.collider, behind.collider.light_tier)
-	return true
-
 func _mine_at(screen_position: Vector2) -> bool:
 	if completion_time >= 0.0 or spawn_time < 0.68:
 		return false
@@ -550,7 +518,6 @@ func _mine_at(screen_position: Vector2) -> bool:
 		return _collect_gem(body)
 	if not body.has_method("hit"):
 		return false
-	_prepare_gem_cover(body, screen_position)
 	hit_count += 1
 	var point: Vector3 = result.position
 	var normal: Vector3 = result.normal
@@ -573,6 +540,12 @@ func _mine_at(screen_position: Vector2) -> bool:
 			departing_light.set_meta("gem_light_pulse", true)
 			# Finish the outward flash after the solid cap detaches.
 			departing_light.pulse_finished.connect(departing_light.queue_free, CONNECT_ONE_SHOT)
+		if body.cover_gem != null:
+			var contained_gem: StaticBody3D = body.cover_gem.get_ref()
+			if is_instance_valid(contained_gem) and contained_gem.is_embedded:
+				# Emerge through the freshly struck opening, including side/back hits.
+				var exit_point: Vector3 = point - camera.project_ray_normal(screen_position) * (contained_gem.bound_radius + 0.16)
+				contained_gem.release_from_chunk(shell, shell.to_local(exit_point))
 		audio.play_break(layer)
 		effects.shed_chunk(body.mesh_instance.mesh, body.mesh_instance.material_override, placement, normal)
 		chunks.erase(body)
@@ -592,9 +565,6 @@ func _collect_gem(jewel: StaticBody3D) -> bool:
 		return false
 	var special: bool = jewel.grade == Gem.SPECIAL
 	var location := jewel.global_position
-	for chunk in chunks:
-		if chunk.is_gem_cover and chunk.cover_gem != null and chunk.cover_gem.get_ref() == jewel:
-			chunk.release_gem_cover()
 	gems.erase(jewel)
 	gems_collected_this_rock += 1
 	collected_count += 1
@@ -638,23 +608,32 @@ func _reset_rock() -> void:
 	_spawn_rock()
 
 func _capture_tick(delta: float) -> void:
-	# Real pickaxe strikes on the red cap demonstrate the full ascending sequence.
+	# Move between three parts of one cap while demonstrating all six colors.
 	capture_clock += delta
 	idle_time = 0.0
 	if capture_stage == 0 and capture_clock > 1.1:
 		_capture("lights_00_intact")
 		capture_gem = gems[5]
+		if not capture_gem.is_embedded or capture_gem.visible or capture_gem.collision_layer != 0 or capture_gem.get_parent() != showcase_covers[5].mesh_instance:
+			push_error("Capture gem must start sealed inside its owning stone")
+			get_tree().quit(1)
+			return
 		capture_stage = 1
 		capture_clock = 0.0
 	elif capture_stage == 1 and capture_clock > 0.60:
 		var cap: StaticBody3D = showcase_covers[5]
-		aim_position = camera.unproject_position(cap.to_global(cap.face_center))
+		if cap.impact_count >= 1 and cap.impact_count <= 3:
+			_capture("impacts_%02d_settled_cracks" % cap.impact_count)
+		aim_position = _capture_cap_target(cap)
 		_request_swing()
 		capture_stage = 2
 		capture_clock = 0.0
 	elif capture_stage == 2 and capture_clock > 0.30:
 		var cap: StaticBody3D = showcase_covers[5]
 		var tier: int = cap.get_revealed_tier()
+		if cap.impact_count >= 1 and cap.impact_count <= 3:
+			_capture("impacts_%02d_light" % cap.impact_count)
+			capture_impact_points.append(cap.latest_impact_local)
 		if tier > capture_saved_tier:
 			_capture("lights_%02d_%s" % [tier + 1, Gem.LIGHT_NAMES[tier]])
 			capture_saved_tier = tier
@@ -662,15 +641,23 @@ func _capture_tick(delta: float) -> void:
 		capture_clock = 0.0
 	elif capture_stage == 3 and capture_clock > 0.85:
 		var cap: StaticBody3D = showcase_covers[5]
-		aim_position = camera.unproject_position(cap.to_global(cap.face_center))
+		aim_position = _capture_cap_target(cap)
 		_request_swing()
 		capture_stage = 4
 		capture_clock = 0.0
 	elif capture_stage == 4 and capture_clock > 0.30:
 		_capture("lights_07_cap_break")
+		if capture_gem.is_embedded or capture_gem.get_parent() != shell or not capture_gem.visible:
+			push_error("Breaking the owning stone must release its contained gem")
+			get_tree().quit(1)
+			return
 		capture_stage = 5
 		capture_clock = 0.0
 	elif capture_stage == 5 and capture_clock > 1.1:
+		if capture_gem.is_emerging or capture_gem.collision_layer != 2:
+			push_error("The emerged gem must become collectible")
+			get_tree().quit(1)
+			return
 		aim_position = camera.unproject_position(capture_gem.global_position)
 		_capture("lights_08_exposed_gem")
 		capture_stage = 6
@@ -697,16 +684,38 @@ func _capture_tick(delta: float) -> void:
 		for tier in light_pulse_history:
 			if not observed.has(tier):
 				observed.append(tier)
-		if observed != [0, 1, 2, 3, 4, 5] or special_collected_count != 1:
+		var sealed_gems := 0
+		for jewel in gems:
+			if jewel.is_embedded:
+				sealed_gems += 1
+		if observed != [0, 1, 2, 3, 4, 5] or special_collected_count != 1 or sealed_gems != 5:
 			push_error("Light capture did not demonstrate all six tiers and extraction: " + str(observed))
 			get_tree().quit(1)
 			return
-		print("LIGHT_CAPTURE_OK tiers=", observed, " hits=", hit_count, " gems=", collected_count)
+		if capture_impact_points.size() != 3 or capture_impact_points[0].distance_to(capture_impact_points[1]) < 0.15 or capture_impact_points[1].distance_to(capture_impact_points[2]) < 0.15 or capture_impact_points[0].distance_to(capture_impact_points[2]) < 0.15:
+			push_error("Impact capture did not strike three distinct positions: " + str(capture_impact_points))
+			get_tree().quit(1)
+			return
+		print("LIGHT_CAPTURE_OK tiers=", observed, " hits=", hit_count, " gems=", collected_count, " still_embedded=", sealed_gems, " impact_positions=", capture_impact_points)
 		get_tree().quit()
 	if elapsed > 65.0:
 		push_error("Light capture timed out")
 		get_tree().quit(1)
 
+func _capture_cap_target(cap: StaticBody3D) -> Vector2:
+	var edge := int(float(cap.impact_count % 3) * float(cap.face_points.size()) / 3.0)
+	var edge_midpoint: Vector3 = (cap.face_points[edge] + cap.face_points[(edge + 1) % cap.face_points.size()]) * 0.5
+	var target: Vector3 = cap.face_center.lerp(edge_midpoint, 0.52)
+	return camera.unproject_position(cap.mesh_instance.to_global(target))
+
 func _capture(label: String) -> void:
 	await RenderingServer.frame_post_draw
-	get_viewport().get_texture().get_image().save_png("res://artifacts/" + label + ".png")
+	var screenshot := get_viewport().get_texture().get_image()
+	screenshot.save_png("res://artifacts/" + label + ".png")
+	if label.begins_with("impacts_"):
+		var cap: StaticBody3D = showcase_covers[5]
+		var center := camera.unproject_position(cap.mesh_instance.to_global(cap.face_center))
+		var pixel_scale := Vector2(screenshot.get_size()) / get_viewport().get_visible_rect().size
+		var region := Rect2i(Vector2i(center * pixel_scale) - Vector2i(200, 180), Vector2i(400, 360))
+		region = region.intersection(Rect2i(Vector2i.ZERO, screenshot.get_size()))
+		screenshot.get_region(region).save_png("res://artifacts/" + label + "_detail.png")

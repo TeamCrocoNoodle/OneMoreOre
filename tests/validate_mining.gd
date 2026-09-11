@@ -15,8 +15,7 @@ var impact_was_deferred := false
 var hit_count_at_signal := -1
 var traversed_layers: Array[int] = []
 var initial_gem_count := 0
-var cover_promotions := 0
-var cover_exposures := 0
+var owner_releases := 0
 
 
 func _initialize() -> void:
@@ -78,12 +77,14 @@ func _run() -> void:
 	# Deliberately find every gem before excavating the rest of the rock.
 	while not game.gems.is_empty() and steps < 150:
 		var target: StaticBody3D = game.gems[0]
-		if not await _break_visible(game.camera.unproject_position(target.global_position)):
+		if target.is_emerging:
+			await _until(func(): return not target.is_emerging)
+		if not await _break_visible(_gem_target_screen(target)):
 			break
 		steps += 1
 	_check(game.gems.is_empty() and game.gems_collected_this_rock == initial_gem_count, "Every randomly placed gem can be reached through ordinary mining rays")
 	_check(game.collected_count == collected_before + initial_gem_count, "Each exposed gem awards exactly one collection")
-	_check(cover_promotions > 0 and cover_exposures > 0, "Random excavation encounters and removes real high-health gem covers")
+	_check(owner_releases == initial_gem_count, "Excavation breaks exactly one fixed owner for each of the six gems")
 	_check(game.chunks.size() > 0, "Finding all gems leaves unrelated stone intact")
 	if not game.gems.is_empty() or game.chunks.is_empty():
 		_finish()
@@ -136,33 +137,85 @@ func _validate_showcase() -> void:
 	game._spawn_rock(12873, true)
 	await create_timer(0.75).timeout
 	await _frames(2)
-	_check(game.showcase_mode and game.showcase_covers.size() == game.gems.size(), "The first-rock showcase provides one stone cap for each gem")
+	_check(game.showcase_mode and game.showcase_covers.size() == game.gems.size(), "The first-rock showcase provides one stone owner for each gem")
+	_validate_placement(true)
 	var preview_lights: Array[WeakRef] = []
+	var preview_gems: Array[WeakRef] = []
 	var tiers: Array[int] = []
 	for cap in game.showcase_covers:
-		var jewel: StaticBody3D = cap.cover_gem.get_ref()
-		var screen: Vector2 = game.camera.unproject_position(jewel.global_position)
-		var visible := game.ray_at(screen)
-		var behind := _ray_without(screen, cap)
-		_check(not visible.is_empty() and visible.collider == cap, "Every showcase gem is initially hidden by its selected front cap")
-		_check(not behind.is_empty() and behind.collider == jewel, "Excluding a showcase cap exposes its gem rather than another stone")
-		_check(cap.health == 16.0 and cap.max_health == 16.0, "Showcase caps have their high health before any hit")
-		_check(not cap.light_node.visible and cap.light_node.pulse_count == 0, "Unstruck showcase caps give away no beam color")
+		var jewel: StaticBody3D = cap.contained_gem.get_ref()
+		var visible := game.ray_at(_gem_target_screen(jewel))
+		_check(not visible.is_empty() and visible.collider == cap, "Every showcase owner is reachable from its selected front face")
+		_check(_masked_ray(game.camera.unproject_position(jewel.global_position), 2).is_empty(), "Even a gem-only ray cannot select a buried showcase gem")
+		_check(cap.health == 16.0 and cap.max_health == 16.0, "Showcase owners have their high health before any hit")
+		_check(not cap.light_node.visible and cap.light_node.pulse_count == 0, "Unstruck showcase owners give away no beam color")
 		tiers.append(jewel.light_tier)
 		preview_lights.append(weakref(cap.light_node))
+		preview_gems.append(weakref(jewel))
 	tiers.sort()
 	_check(tiers == [0, 1, 2, 3, 4, 5], "All six final light colors are available on the first rock")
 	var final_cap: StaticBody3D = game.showcase_covers[-1]
-	var final_gem: StaticBody3D = final_cap.cover_gem.get_ref()
+	var final_gem: StaticBody3D = final_cap.contained_gem.get_ref()
+	var different_gem: StaticBody3D = game.gems[0]
+	var different_transform: Transform3D = different_gem.transform
+	var different_parent: Node = different_gem.get_parent()
+	_check(not final_cap.contain_gem(different_gem), "A populated owner refuses a second gem")
+	final_cap.configure_gem_cover(different_gem, different_gem.light_tier)
+	_check(final_cap.contained_gem.get_ref() == final_gem and final_cap.cover_gem.get_ref() == final_gem and different_gem.get_parent() == different_parent and different_gem.transform == different_transform, "Rejected reassignment preserves both gems and the fixed light link")
+	_check(not final_gem.release_from_chunk(game.shell, Vector3.ZERO), "A live owner cannot release its gem early")
+	_check(not game._collect_gem(final_gem), "Main rejects direct collection of an embedded gem")
+	await _clear_showcase_neighbors(final_cap, final_gem)
 	var departing: WeakRef = weakref(final_cap.light_node)
-	_check(await _break_visible(game.camera.unproject_position(final_gem.global_position)), "A showcase cap is removable through the normal mining path")
-	_check(departing.get_ref() != null and departing.get_ref().get_parent() == game.effects, "The cover's final light flash survives its stone detachment")
+	_check(await _break_visible(_gem_target_screen(final_gem), false), "A showcase owner breaks through the normal mining path")
+	_check(final_gem.is_emerging and final_gem.visible and final_gem.collision_layer == 0, "The newly freed gem begins its protected emergence animation")
+	_check(departing.get_ref() != null and departing.get_ref().get_parent() == game.effects, "The owner's final light flash survives stone detachment")
+	# Reset during emergence, while both the gem tween and detached light exist.
 	game._spawn_rock(TEST_SEED, false)
 	await _frames(3)
 	var all_lights_freed := true
+	var all_gems_freed := true
 	for previous in preview_lights:
 		all_lights_freed = all_lights_freed and previous.get_ref() == null
+	for previous in preview_gems:
+		all_gems_freed = all_gems_freed and previous.get_ref() == null
 	_check(all_lights_freed, "Reset clears both attached and detached lights from the previous rock")
+	_check(all_gems_freed and _count_gems(game) == game.gems.size(), "Reset during emergence frees the emerging gem and every old embedded gem")
+	owner_releases = 0
+
+
+func _clear_showcase_neighbors(host: StaticBody3D, jewel: StaticBody3D) -> void:
+	var removed := 0
+	while removed < 3:
+		var nearest: StaticBody3D
+		var nearest_distance := INF
+		var screen := Vector2.ZERO
+		for candidate in game.chunks:
+			if candidate.is_gem_cover or candidate.layer_index != 0:
+				continue
+			var candidate_screen: Vector2 = game.camera.unproject_position(candidate.mesh_instance.to_global(candidate.face_center))
+			var ray := game.ray_at(candidate_screen)
+			if ray.is_empty() or ray.collider != candidate:
+				continue
+			var distance: float = candidate.global_position.distance_to(host.global_position)
+			if distance < nearest_distance:
+				nearest = candidate
+				nearest_distance = distance
+				screen = candidate_screen
+		if nearest == null:
+			break
+		var original_health: float = nearest.health
+		nearest.configure_gem_cover(jewel, jewel.light_tier)
+		_check(not nearest.is_gem_cover and nearest.health == original_health and not is_instance_valid(nearest.light_node), "An ordinary neighbor cannot adopt or emit light for another owner's embedded gem")
+		if not await _break_visible(screen):
+			break
+		removed += 1
+		var owners_unchanged := true
+		for other in game.gems:
+			var owner: StaticBody3D = other.host_chunk.get_ref() if other.host_chunk != null else null
+			owners_unchanged = owners_unchanged and is_instance_valid(owner) and owner.is_gem_cover and owner.cover_gem.get_ref() == other and owner.health == 16.0 and owner.light_node.pulse_count == 0
+		_check(owners_unchanged, "Mining an unrelated neighboring stone cannot promote it or trigger any gem owner's light")
+		_check(jewel.is_embedded and not jewel.visible and jewel.collision_layer == 0 and jewel.get_parent() == host.mesh_instance, "Removing neighboring stone leaves the gem hidden inside its own untouched owner")
+	_check(removed == 3, "Three real neighboring stones can be cleared without releasing the showcase gem")
 
 
 func _validate_seeded_layouts() -> void:
@@ -175,33 +228,36 @@ func _validate_seeded_layouts() -> void:
 	await create_timer(0.75).timeout
 	await _frames(2)
 	var different := _layout_snapshot()
-	_check(first != different, "Different rock seeds change internal gem locations")
+	_check(first != different, "Different rock seeds change the six gems' owner assignments")
 	_validate_placement()
 	game._spawn_rock(TEST_SEED)
 	await create_timer(0.75).timeout
 	await _frames(2)
-	_check(_layout_snapshot() == first, "Repeating a seed exactly reproduces its gem layout")
+	_check(_layout_snapshot() == first, "Repeating a seed exactly reproduces owner assignment and fitted gem transforms")
 
 
-func _layout_snapshot() -> Array[Vector3]:
-	var positions: Array[Vector3] = []
+func _layout_snapshot() -> Array[Dictionary]:
+	var layout: Array[Dictionary] = []
 	for body in game.gems:
-		positions.append(body.position)
-	return positions
+		var host: StaticBody3D = body.host_chunk.get_ref()
+		layout.append({"host_position": host.base_position, "layer": host.layer_index, "gem_transform": body.transform, "tier": body.light_tier})
+	return layout
 
 
-func _validate_placement() -> void:
-	var positions: Array[Vector3] = []
-	var bounds: Array[float] = []
-	var inside := true
-	var fully_covered := true
-	var separated := true
-	var off_center := true
-	var correct_layers := true
+func _validate_placement(showcase: bool = false) -> void:
+	var owners: Array[StaticBody3D] = []
+	var occupied_layers: Array[int] = []
 	var common_count := 0
 	var special_count := 0
-	var leak_count := 0
+	var hidden := true
+	var consistent_links := true
+	var ordinary_health := true
+	var plane_leaks := 0
+	var body_leaks := 0
 	var ray_count := 0
+	var positions: Array[Vector3] = []
+	var bounds: Array[float] = []
+	var separated := true
 	var directions: Array[Vector3] = [Vector3.RIGHT, Vector3.LEFT, Vector3.UP, Vector3.DOWN, Vector3.FORWARD, Vector3.BACK]
 	for i in range(24):
 		var y := 1.0 - 2.0 * (float(i) + 0.5) / 24.0
@@ -212,56 +268,106 @@ func _validate_placement() -> void:
 			common_count += 1
 		elif body.grade == Gem.SPECIAL:
 			special_count += 1
+		var owner: StaticBody3D = body.host_chunk.get_ref() if body.host_chunk != null else null
+		_check(is_instance_valid(owner) and game.chunks.has(owner), "Every new gem references a living stone from this rock")
+		if not is_instance_valid(owner):
+			continue
+		_check(not owners.has(owner), "Each gem has a distinct stone owner")
+		owners.append(owner)
+		occupied_layers.append(owner.layer_index)
+		consistent_links = consistent_links and owner.contained_gem.get_ref() == body and owner.cover_gem.get_ref() == body and owner.is_gem_cover and owner.cover_tier == body.light_tier and body.get_parent() == owner.mesh_instance
+		hidden = hidden and body.is_embedded and not body.is_emerging and not body.visible and body.collision_layer == 0 and not body.collected
+		_check(owner.health == 16.0 and owner.max_health == 16.0 and not owner.light_node.visible and owner.light_node.pulse_count == 0, "A gem's fixed owner starts at 16 HP with no light leak")
+		var points := _gem_visual_points(body)
+		var planes: Array[Plane] = owner.get_containment_planes()
+		_check(not points.is_empty() and planes.size() >= 4, "Containment is checked against actual gem vertices and the rendered owner's hull planes")
+		var worst_distance := -INF
+		for point in points:
+			var local_point: Vector3 = owner.mesh_instance.to_local(game.shell.to_global(point))
+			for plane in planes:
+				worst_distance = maxf(worst_distance, plane.distance_to(local_point))
+		if worst_distance > 0.0002:
+			plane_leaks += 1
+		_check(worst_distance <= 0.0002, "Every rotated and fitted gem vertex lies inside its own rendered stone (max plane distance %.6f)" % worst_distance)
+		var fitted_scale: Vector3 = body.scale
+		_check(fitted_scale.x > 0.0 and fitted_scale.x <= 1.00001 and fitted_scale.is_equal_approx(Vector3.ONE * fitted_scale.x), "Embedding uniformly fits the gem without enlarging it")
 		var center: Vector3 = game.shell.to_local(body.global_position)
-		var points := _gem_hull_points(body)
-		_check(not points.is_empty(), "Each hidden gem has an actual convex collision hull")
+		var radius := 0.0
 		if points.is_empty():
 			continue
-		var radius := 0.0
-		var extrema: Array[Vector3] = [points[0], points[0], points[0], points[0], points[0], points[0]]
+		var extrema: Array[Vector3] = [points[0], points[0], points[0], points[0], points[0], points[0], center]
 		for point in points:
 			radius = maxf(radius, point.distance_to(center))
-			inside = inside and point.length() < Main.ROCK_RADIUS - 0.15
 			for axis in range(3):
 				if point[axis] < extrema[axis * 2][axis]:
 					extrema[axis * 2] = point
 				if point[axis] > extrema[axis * 2 + 1][axis]:
 					extrema[axis * 2 + 1] = point
-		off_center = off_center and center.length() > 0.2
-		fully_covered = fully_covered and center.length() + radius <= game.gem_cover_radius - 0.11
-		correct_layers = correct_layers and body.collision_layer == 2
 		for i in range(positions.size()):
-			separated = separated and center.distance_to(positions[i]) >= radius + bounds[i] + 0.01
+			separated = separated and center.distance_to(positions[i]) > radius + bounds[i]
 		positions.append(center)
 		bounds.append(radius)
-		extrema.append(center)
+		# Excluding every neighboring chunk proves the owning solid alone encloses
+		# the gem, even after all unrelated stone has been excavated.
+		var exclusions: Array[RID] = []
+		for other in game.chunks:
+			if other != owner:
+				exclusions.append(other.get_rid())
 		for direction in directions:
 			var origin: Vector3 = game.shell.to_global(direction * (Main.ROCK_RADIUS + 2.0))
 			for point in extrema:
 				var query := PhysicsRayQueryParameters3D.create(origin, game.shell.to_global(point), 3)
+				query.exclude = exclusions
 				var result: Dictionary = game.get_world_3d().direct_space_state.intersect_ray(query)
 				ray_count += 1
-				if result.is_empty() or not game.chunks.has(result.collider):
-					leak_count += 1
-	_check(inside, "Every gem hull lies safely inside the outer rock volume")
-	_check(fully_covered, "Every gem's full bound stays inside the closed stone backing with clearance")
-	_check(separated, "Random gem hull bounds do not overlap")
-	_check(off_center, "Gem placement does not reserve the exact center")
-	_check(correct_layers, "Uncollected gems use only the gem selection layer")
-	_check(common_count == Main.COMMON_GEM_COUNT and special_count == Main.SPECIAL_GEM_COUNT, "Every seed creates the configured common and special gem populations")
-	_check(leak_count == 0, "Fresh stone occludes all gem centers and hull extrema from %d exterior rays (leaks=%d)" % [ray_count, leak_count])
+				if result.is_empty() or result.collider != owner:
+					body_leaks += 1
+	for chunk in game.chunks:
+		if not owners.has(chunk):
+			ordinary_health = ordinary_health and not chunk.is_gem_cover and chunk.contained_gem == null and chunk.max_health >= 2.0 and chunk.max_health <= 4.0 and not is_instance_valid(chunk.light_node)
+	occupied_layers.sort()
+	_check(owners.size() == 6 and consistent_links, "Six gems have six fixed, mutually consistent ownership and light links")
+	_check(occupied_layers == ([0, 0, 0, 0, 0, 0] if showcase else [0, 1, 2, 3, 4, 5]), "Showcase uses six front owners; normal seeds distribute one owner through every depth")
+	_check(hidden, "Embedded gems are hidden, uncollected and excluded from physics selection")
+	_check(ordinary_health, "Only the six designated owners have high health or gem light nodes")
+	_check(plane_leaks == 0 and separated, "Individually contained gem hulls remain separated without protruding into other chunks")
+	_check(common_count == Main.COMMON_GEM_COUNT and special_count == Main.SPECIAL_GEM_COUNT, "Every seed creates five common gems and one special gem")
+	_check(body_leaks == 0, "Each owner alone occludes its gem center and hull extrema in %d exterior rays (leaks=%d)" % [ray_count, body_leaks])
+	if not showcase:
+		_print_socket_sizes()
 
 
-func _gem_hull_points(body: StaticBody3D) -> Array[Vector3]:
+func _print_socket_sizes() -> void:
+	var sizes: Array[String] = []
+	for layer in range(Main.LAYER_COUNT):
+		var radii: Array[float] = []
+		for chunk in game.chunks:
+			if chunk.layer_index == layer:
+				radii.append(chunk.gem_socket_radius)
+		radii.sort()
+		sizes.append("%d:%.3f/%.3f/%.3f" % [layer, radii[0], radii[radii.size() / 2], radii[-1]])
+	print("SOCKET_RADIUS layer:min/median/max ", ", ".join(sizes))
+
+
+func _gem_visual_points(body: StaticBody3D) -> Array[Vector3]:
 	var points: Array[Vector3] = []
-	for child in body.get_children():
-		if child is CollisionShape3D and child.shape is ConvexPolygonShape3D:
-			for point in child.shape.points:
-				points.append(game.shell.to_local(child.to_global(point)))
+	var mesh: Mesh = body.facets.mesh
+	for surface_index in range(mesh.get_surface_count()):
+		var vertices: PackedVector3Array = mesh.surface_get_arrays(surface_index)[Mesh.ARRAY_VERTEX]
+		for point in vertices:
+			points.append(game.shell.to_local(body.facets.to_global(point)))
 	return points
 
 
-func _break_visible(screen: Vector2) -> bool:
+func _gem_target_screen(body: StaticBody3D) -> Vector2:
+	if body.is_embedded and body.host_chunk != null:
+		var owner: StaticBody3D = body.host_chunk.get_ref()
+		if is_instance_valid(owner):
+			return game.camera.unproject_position(owner.mesh_instance.to_global(owner.face_center))
+	return game.camera.unproject_position(body.global_position)
+
+
+func _break_visible(screen: Vector2, finish_emergence: bool = true) -> bool:
 	var ray := game.ray_at(screen)
 	if ray.is_empty():
 		_check(false, "An excavation target must remain reachable by a physics ray")
@@ -269,64 +375,64 @@ func _break_visible(screen: Vector2) -> bool:
 	var body: StaticBody3D = ray.collider
 	var stone := game.chunks.has(body)
 	var gem := game.gems.has(body)
-	_check(stone or gem, "Only remaining stone or uncollected gems can intercept mining rays")
+	_check(stone or gem, "Only remaining stone or emerged gems can intercept mining rays")
 	if not stone and not gem:
 		return false
 	var previous_stone := game.chunks.size()
 	var previous_collected := game.collected_count
-	var following := _ray_without(screen, body)
-	var linked_gem: StaticBody3D = body.cover_gem.get_ref() as StaticBody3D if stone and body.cover_gem != null else null
-	var originally_ordinary: bool = stone and body.max_health <= 4.0
-	var previous_damage: float = maxf(body.max_health - body.health, 0.0) if stone else 0.0
+	var linked_gem: StaticBody3D = body.contained_gem.get_ref() as StaticBody3D if stone and body.contained_gem != null else null
+	var original_max_health: float = body.max_health if stone else 0.0
+	var embedded_before: Array[StaticBody3D] = []
+	for jewel in game.gems:
+		if jewel.is_embedded:
+			embedded_before.append(jewel)
 	var strikes := 0
-	if stone:
-		if not traversed_layers.has(body.layer_index):
-			traversed_layers.append(body.layer_index)
-	# Designation happens on the first real strike. Read health after that hit,
-	# so promoting a 2-4 HP stone to a 16 HP cover cannot fool this helper.
+	if stone and not traversed_layers.has(body.layer_index):
+		traversed_layers.append(body.layer_index)
 	while strikes < 32:
+		var pulses_before: int = body.light_node.pulse_count if is_instance_valid(linked_gem) else 0
 		if not game._mine_at(screen):
 			_check(false, "A reachable body's mining hits must be accepted")
 			return false
 		strikes += 1
-		if stone and strikes == 1:
-			if body.is_gem_cover:
-				linked_gem = body.cover_gem.get_ref() as StaticBody3D
-				if originally_ordinary:
-					cover_promotions += 1
-					_check(body.max_health == 16.0 and body.health == 15.0 - previous_damage, "Main assigns 16 cover HP before the hit while preserving any prior damage")
-					_check(not following.is_empty() and following.collider == linked_gem, "A promoted cover is the final physical obstruction before its linked gem")
-					_check(body.get_revealed_tier() == 0 and body.light_node.current_tier == 0, "A newly identified cover starts with white light")
-			elif originally_ordinary:
-				_check(body.max_health >= 2.0 and body.max_health <= 4.0 and not is_instance_valid(body.light_node), "Ordinary overlying blockers stay soft and do not emit gem beams")
+		if stone:
+			if is_instance_valid(linked_gem):
+				_check(body.max_health == 16.0 and body.contained_gem.get_ref() == linked_gem and body.cover_gem.get_ref() == linked_gem, "Every owner strike retains its original high health and unique gem")
+				_check(body.light_node.pulse_count == pulses_before + 1 and body.light_node.current_tier <= linked_gem.light_tier, "Each owner strike emits one light pulse bounded by its own gem tier")
+				if pulses_before == 0:
+					_check(body.get_revealed_tier() == 0, "The first real strike on a pristine owner begins with white light")
+				if not body.destroyed:
+					_check(linked_gem.is_embedded and not linked_gem.visible and linked_gem.collision_layer == 0, "A surviving owner retains its hidden, unselectable gem after each impact")
+			elif strikes == 1:
+				_check(not body.is_gem_cover and body.contained_gem == null and body.max_health == original_max_health and not is_instance_valid(body.light_node), "An unrelated struck stone stays ordinary without promotion or gem beams")
 		if not stone or body.destroyed:
 			break
 	if stone:
 		_check(body.collision_layer == 0 and body.destroyed and game.chunks.size() == previous_stone - 1, "Breaking one chunk disables its collision and removes exactly that chunk")
-		if is_instance_valid(linked_gem) and not following.is_empty() and following.collider == linked_gem:
-			var exposed := game.ray_at(screen)
-			_check(not exposed.is_empty() and exposed.collider == linked_gem, "Removing the final cover immediately exposes its gem to the same mining ray")
-			cover_exposures += 1
+		var newly_released: Array[StaticBody3D] = []
+		for jewel in embedded_before:
+			if not jewel.is_embedded:
+				newly_released.append(jewel)
+		if is_instance_valid(linked_gem):
+			owner_releases += 1
+			_check(newly_released == [linked_gem], "A fatal owner hit releases exactly its own gem and no neighbor's")
+			_check(linked_gem.get_parent() == game.shell and linked_gem.host_chunk == null and linked_gem.visible and linked_gem.is_emerging and linked_gem.collision_layer == 0, "Released gem leaves its owner alive and visible with collection disabled during emergence")
+			_check(not game._collect_gem(linked_gem) and game.collected_count == previous_collected and game.gems.has(linked_gem), "Repeated collection attempts during emergence cannot collect or award the gem")
+		else:
+			_check(newly_released.is_empty(), "Destroying an ordinary chunk cannot release any embedded gem")
 		await _frames(1)
 		_check(not is_instance_valid(body), "A detached chunk's physics body is freed")
+		if is_instance_valid(linked_gem):
+			_check(is_instance_valid(linked_gem) and game.gems.has(linked_gem), "The released gem survives its destroyed owner's node deletion")
+			if finish_emergence:
+				_check(await _until(func(): return not linked_gem.is_emerging), "The released gem finishes its outward emergence animation")
+				_check(linked_gem.collision_layer == 2 and linked_gem.scale.is_equal_approx(Vector3.ONE) and not linked_gem.is_embedded, "Only the fully emerged, full-size gem becomes selectable")
 	else:
 		_check(game.chunks.size() == previous_stone, "Collecting a gem preserves every remaining stone chunk")
 		_check(body.collision_layer == 0 and not game.gems.has(body) and game.collected_count == previous_collected + 1, "Collected gem is removed from selection and awarded exactly once")
-		var stale_links := false
-		for remaining in game.chunks:
-			if remaining.cover_gem != null and remaining.cover_gem.get_ref() == body:
-				stale_links = true
-		_check(not stale_links, "Collection releases every surviving cover linked to the gem")
+		_check(not game._collect_gem(body) and game.collected_count == previous_collected + 1, "Repeated collection cannot award the same gem again")
 		await _frames(1)
 	return true
-
-
-func _ray_without(screen: Vector2, excluded: StaticBody3D) -> Dictionary:
-	var origin := game.camera.project_ray_origin(screen)
-	var direction := game.camera.project_ray_normal(screen)
-	var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 40.0, 3)
-	query.exclude = [excluded.get_rid()]
-	return game.get_world_3d().direct_space_state.intersect_ray(query)
 
 
 func _validate_inputs() -> void:
