@@ -830,7 +830,7 @@ func _damage_chunk(result: Dictionary, screen_position: Vector2) -> void:
 				var exit_point: Vector3 = point - camera.project_ray_normal(screen_position) * (contained_gem.bound_radius + 0.16)
 				if contained_gem.release_from_chunk(self, to_local(exit_point)):
 					auto_collected = _collect_gem(contained_gem, exit_point)
-		# The discovery recording includes its own contact. Ordinary fractures,
+		# The discovery sound includes its own contact. Ordinary fractures,
 		# or a failed gem release, still receive the stone destruction sound.
 		if not auto_collected:
 			audio.play_break(layer)

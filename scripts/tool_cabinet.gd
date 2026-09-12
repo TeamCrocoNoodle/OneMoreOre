@@ -1,11 +1,14 @@
 extends Node3D
-## Actual joinery, shelves and existing tools share one lit three-dimensional scene.
+## Two deep iron bays and three tiers, framed like the cabinet reference.
 
 const ToolModels = preload("res://scripts/tool_display_models.gd")
 const UNIT := 0.01
+const HEIGHT_PAD := 52.0
 
 var tag_anchors: Array[Vector3] = []
 var tool_centers: Array[Vector3] = []
+var tag_corners: Array[PackedVector3Array] = []
+var item_corners: Array[PackedVector3Array] = []
 var _materials: Dictionary = {}
 var _meshes: Dictionary = {}
 
@@ -19,86 +22,119 @@ func build(width: float, row_height: float, columns: int) -> void:
 		child.queue_free()
 	tag_anchors.clear()
 	tool_centers.clear()
+	tag_corners.clear()
+	item_corners.clear()
 	_meshes.clear()
 	var catalog := ToolModels.get_catalog()
 	var rows := ceili(float(catalog.size()) / columns)
-	var height := row_height * rows + 38.0
+	var height := row_height * rows + HEIGHT_PAD
 	var span := width * UNIT
 	var tall := height * UNIT
-	var frame := _material("67482b")
-	var frame_edge := _material("87623b")
-	var board := _material("795738")
-	var dark := _material("302216")
-	var nail := _material("38332b", 0.45, 0.4)
-	# Long back planks occupy real depth behind the tools and receive shadows.
-	var plank_count := columns * 4
-	var plank_width := (span - 0.34) / plank_count
-	for plank in plank_count:
-		var x := -span * 0.5 + 0.17 + (plank + 0.5) * plank_width
-		var color: String = ["473322", "4d3825", "423120"][plank % 3]
-		_box("BackPlank%d" % plank, Vector3(plank_width - 0.012, tall - 0.16, 0.13), Vector3(x, 0, -0.48), _material(color), 0.014, "back")
-		for grain in 2:
-			var grain_length := minf(tall * 0.36, 1.3 + 0.11 * (plank % 3))
-			var grain_y := (0.5 - grain) * tall * 0.47 + (plank % 3 - 1) * 0.13
-			var stroke := _box("Grain", Vector3(0.010, grain_length, 0.007), Vector3(x + plank_width * (0.18 if grain == 0 else -0.20), grain_y, -0.410), _material("3c2b1d"), 0.002, "grain")
-			stroke.rotation.z = 0.010 if plank % 2 == 0 else -0.009
-	# Side posts, a proud crown and a bottom rail make a deep cabinet silhouette.
+	var depth := minf(1.45, span * 0.19)
+	var front := depth * 0.5
+	var frame := _material("414951", 0.62, 0.45)
+	var edge := _material("697680", 0.46, 0.55)
+	var board := _material("454f58", 0.64, 0.45)
+	var inner := _material("2a333d", 0.78, 0.35)
+	var dark := _material("1c252d", 0.74, 0.38)
+	var back_colors := ["29343d", "2e3841", "273139"]
+	var bay_width := span * 0.5 - 0.48
+	# Broad iron sheets replace wood grain; narrow welded seams sit at the back.
+	for bay in 2:
+		var x := (-0.25 if bay == 0 else 0.25) * span
+		for sheet in 3:
+			var sheet_width := (span * 0.5 - 0.18) / 3.0
+			var sheet_x := x + (sheet - 1) * sheet_width
+			_box("BackSheet", Vector3(sheet_width - 0.006, tall - 0.12, 0.075), Vector3(sheet_x, 0, -front - 0.05), _material(back_colors[sheet], 0.79, 0.30), 0.008, "back")
+			if sheet < 2:
+				_box("FoldedBackSeam", Vector3(0.016, tall - 0.18, 0.024), Vector3(sheet_x + sheet_width * 0.5, 0, -front + 0.007), inner, 0.004, "back")
+	# The reference's substantial central stile separates two complete cabinets.
 	for side in [-1, 1]:
-		var x: float = side * (span * 0.5 - 0.10)
-		_box("SidePost", Vector3(0.20, tall, 0.97), Vector3(x, 0, -0.01), frame, 0.035, "frame")
-		_box("PostMolding", Vector3(0.045, tall - 0.06, 0.055), Vector3(x - side * 0.046, 0, 0.494), frame_edge, 0.014, "trim")
-		for y in [-tall * 0.5 + 0.21, tall * 0.5 - 0.23]:
-			var rivet := MeshInstance3D.new()
-			rivet.name = "IronPeg"
-			var sphere := SphereMesh.new()
-			sphere.radius = 0.026
-			sphere.height = 0.026
-			sphere.radial_segments = 10
-			sphere.rings = 4
-			rivet.mesh = sphere
-			rivet.material_override = nail
-			rivet.rotation.x = PI * 0.5
-			rivet.position = Vector3(x + side * 0.01, y, 0.488)
-			rivet.set_meta("cabinet_part", "peg")
-			add_child(rivet)
-	_box("Crown", Vector3(span + 0.14, 0.18, 1.12), Vector3(0, tall * 0.5 + 0.025, 0), frame, 0.035, "frame")
-	_box("CrownLip", Vector3(span + 0.16, 0.045, 0.10), Vector3(0, tall * 0.5 + 0.10, 0.535), frame_edge, 0.014, "trim")
-	_box("BottomRail", Vector3(span - 0.22, 0.16, 0.96), Vector3(0, -tall * 0.5 + 0.055, 0), dark, 0.025, "frame")
-	var cell_width := (width - 48.0) / columns
+		var x: float = side * (span * 0.5 - 0.11)
+		_box("OuterSideWall", Vector3(0.13, tall, depth + 0.16), Vector3(x, 0, -0.035), inner, 0.018, "frame")
+		_box("FrontUpright", Vector3(0.23, tall, 0.18), Vector3(x, 0, front + 0.015), frame, 0.027, "frame")
+		_box("UprightFold", Vector3(0.025, tall - 0.03, 0.036), Vector3(x - side * 0.072, 0, front + 0.112), edge, 0.007, "trim")
+	_box("CenterPartition", Vector3(0.20, tall, depth + 0.11), Vector3(0, 0, -0.035), inner, 0.02, "frame")
+	_box("CentralDoubleStile", Vector3(0.42, tall + 0.03, 0.18), Vector3(0, 0, front + 0.025), frame, 0.028, "frame")
+	_box("CentralJoin", Vector3(0.025, tall - 0.01, 0.012), Vector3(0, 0, front + 0.12), dark, 0.002, "trim")
+	for side in [-1, 1]:
+		_box("CenterFold", Vector3(0.024, tall - 0.03, 0.03), Vector3(side * 0.17, 0, front + 0.123), edge, 0.006, "trim")
+	_box("TopCap", Vector3(span + 0.25, 0.23, depth + 0.27), Vector3(0, tall * 0.5 + 0.015, -0.02), frame, 0.03, "frame")
+	_box("TopRolledEdge", Vector3(span + 0.28, 0.045, 0.06), Vector3(0, tall * 0.5 + 0.09, front + 0.135), edge, 0.013, "trim")
+	_box("TopUnderRail", Vector3(span - 0.21, 0.10, 0.15), Vector3(0, tall * 0.5 - 0.15, front - 0.025), dark, 0.016, "frame")
+	_box("BasePlinth", Vector3(span + 0.04, 0.18, depth + 0.13), Vector3(0, -tall * 0.5 + 0.02, -0.015), dark, 0.022, "frame")
 	for row in rows:
-		var surface_y := (height * 0.5 - (18.0 + (row + 1) * row_height - 68.0)) * UNIT
-		_box("Shelf%d" % row, Vector3(span - 0.28, 0.19, 0.97), Vector3(0, surface_y - 0.095, 0), board, 0.025, "shelf")
-		_box("ShelfLip%d" % row, Vector3(span - 0.25, 0.065, 0.06), Vector3(0, surface_y - 0.025, 0.50), frame_edge, 0.015, "trim")
-		# A front apron adds thickness beneath the overhanging surface.
-		_box("ShelfApron%d" % row, Vector3(span - 0.34, 0.12, 0.10), Vector3(0, surface_y - 0.22, 0.36), frame, 0.018, "apron")
+		var surface_y := (height * 0.5 - 28.0 - (row + 1) * row_height) * UNIT
 		for column in columns:
 			var index := row * columns + column
 			if index >= catalog.size():
 				break
-			var x := (-width * 0.5 + 24.0 + (column + 0.5) * cell_width) * UNIT
-			var thumbnail_size := minf(cell_width - 22.0, row_height - 68.0)
+			var x := (-0.25 if column == 0 else 0.25) * span
+			_box("ShelfDeck", Vector3(bay_width, 0.13, depth - 0.035), Vector3(x, surface_y - 0.065, -0.005), board, 0.013, "shelf")
+			_box("ShelfFoldedApron", Vector3(bay_width + 0.015, 0.23, 0.06), Vector3(x, surface_y - 0.115, front + 0.012), frame, 0.012, "apron")
+			_box("ShelfRolledEdge", Vector3(bay_width + 0.018, 0.026, 0.04), Vector3(x, surface_y - 0.015, front + 0.047), edge, 0.008, "trim")
+			_box("ShelfReturnFold", Vector3(bay_width, 0.03, 0.13), Vector3(x, surface_y - 0.235, front - 0.02), dark, 0.008, "trim")
+			var thumbnail_size := minf((bay_width - 0.22) / UNIT, row_height * 0.77)
 			var model := ToolModels.create_preview(index)
 			var contact: Vector3 = model.get_meta("shelf_contact")
 			var factor := thumbnail_size * UNIT / 4.4
 			model.scale = Vector3.ONE * factor
-			model.position = Vector3(x, surface_y - contact.y * factor + 0.012, 0.075)
+			model.position = Vector3(x, surface_y - contact.y * factor + 0.008, front * 0.15)
 			add_child(model)
 			tool_centers.append(model.position)
-			tag_anchors.append(Vector3(x, surface_y - 0.12, 0.57))
+			var plate_width := minf(1.68, bay_width - 0.10)
+			var plate_height := 0.43
+			var plate := Vector3(x, surface_y - 0.165, front + 0.094)
+			_box("IronPricePlate", Vector3(plate_width, plate_height, 0.038), plate, dark, 0.013, "tag")
+			tag_anchors.append(plate)
+			tag_corners.append(_front_corners(plate + Vector3(0, 0, 0.022), plate_width - 0.026, plate_height - 0.014))
+			var top_y := surface_y + row_height * UNIT - 0.22
+			var bottom_y := surface_y - plate_height
+			item_corners.append(_front_corners(Vector3(x, (top_y + bottom_y) * 0.5, front + 0.07), bay_width, top_y - bottom_y))
+			for side in [-1, 1]:
+				_bolt(Vector3(x + side * (plate_width * 0.5 - 0.065), plate.y + 0.13, plate.z + 0.029), 0.018, edge)
+		for x in [-span * 0.5 + 0.11, -0.10, 0.10, span * 0.5 - 0.11]:
+			_bolt(Vector3(x, surface_y - 0.12, front + 0.129), 0.026, edge)
+	set_meta("framing_bounds", AABB(Vector3(-span * 0.5 - 0.15, -tall * 0.5 - 0.18, -front - 0.16), Vector3(span + 0.30, tall + 0.34, depth + 0.34)))
+
+
+func _front_corners(center: Vector3, width: float, height: float) -> PackedVector3Array:
+	return PackedVector3Array([center + Vector3(-width, height, 0) * 0.5, center + Vector3(width, height, 0) * 0.5, center + Vector3(width, -height, 0) * 0.5, center + Vector3(-width, -height, 0) * 0.5])
+
+
+func _bolt(location: Vector3, radius: float, material: Material) -> void:
+	var bolt := MeshInstance3D.new()
+	bolt.name = "HexBolt"
+	var key := "bolt" + str(radius)
+	if not _meshes.has(key):
+		var mesh := CylinderMesh.new()
+		mesh.top_radius = radius
+		mesh.bottom_radius = radius
+		mesh.height = 0.018
+		mesh.radial_segments = 6
+		_meshes[key] = mesh
+	bolt.mesh = _meshes[key]
+	bolt.material_override = material
+	bolt.rotation.x = PI * 0.5
+	bolt.position = location
+	bolt.set_meta("cabinet_part", "peg")
+	add_child(bolt)
 
 
 func _material(hex: String, roughness: float = 0.93, metal: float = 0.0) -> StandardMaterial3D:
-	if _materials.has(hex):
-		return _materials[hex]
+	var key := hex + str(roughness) + str(metal)
+	if _materials.has(key):
+		return _materials[key]
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color(hex)
 	material.roughness = roughness
 	material.metallic = metal
 	material.diffuse_mode = BaseMaterial3D.DIFFUSE_TOON
-	material.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	material.specular_mode = BaseMaterial3D.SPECULAR_TOON
+	material.metallic_specular = 0.18
 	# Flat face normals retain hand-cut bevels at even the smallest UI scale.
 	material.cull_mode = BaseMaterial3D.CULL_BACK
-	_materials[hex] = material
+	_materials[key] = material
 	return material
 
 

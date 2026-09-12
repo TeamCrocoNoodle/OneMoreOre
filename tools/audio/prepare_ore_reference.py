@@ -1,7 +1,8 @@
-"""Suppress background music, then prepare ore contact and discovery samples.
+"""Historical music-suppression experiment, retained for offline comparison.
 
 Usage: python tools/audio/prepare_ore_reference.py "path/to/Ore Sound Ref_.wav"
 The supplied stereo 44.1 kHz float WAV is converted to portable 16-bit PCM.
+Writes artifacts/reference_edits; the game uses synthesize_mining_sounds.py.
 All processing is offline, with only the Python standard library.
 """
 
@@ -113,7 +114,7 @@ def main():
     args = parser.parse_args()
     samples = read_reference(args.source)
     cleaned = suppress_background_music(samples)
-    destination = Path(__file__).resolve().parents[2] / "assets" / "audio"
+    destination = Path(__file__).resolve().parents[2] / "artifacts" / "reference_edits"
     destination.mkdir(parents=True, exist_ok=True)
     for name, start, end, duration, peak in [
         ("ore_hit_01", 0.0, 0.09, 0.31, -6.0),

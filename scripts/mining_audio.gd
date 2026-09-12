@@ -1,5 +1,5 @@
 extends Node
-## Reference-recorded stone, ore, and discovery samples with procedural swing and respawn sounds.
+## Newly synthesized stone, ore, and discovery WAVs with procedural swing and respawn.
 ## The bank is prepared once; playback performs no file loading or synthesis.
 
 const SAMPLE_RATE := 24000
@@ -91,7 +91,7 @@ func play_discovery(special: bool, variant: int = 0) -> void:
 
 
 func play_resonance(tier: int, damage_ratio: float) -> void:
-	# The existing resonance API now plays one reference-recorded ore strike.
+	# One clean, authored ore strike; all synthesis happened offline.
 	if _ore_hits.is_empty():
 		return
 	if _ore_hit_index < 0:

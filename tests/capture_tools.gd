@@ -57,6 +57,10 @@ func _run() -> void:
 		_fail("A preview-only price tag spent gold")
 		return
 	await _save("tools_desktop_selected")
+	await _resize(Vector2i(1080, 600))
+	display.scroll_by(-100000.0)
+	await _save("tools_reference_1080")
+	await _resize(Vector2i(1152, 800))
 	await _tab("skills")
 	await _save("tools_skills_return")
 	await _tab("tools")

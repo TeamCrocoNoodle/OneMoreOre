@@ -24,7 +24,7 @@ var _bold: SystemFont
 var _scale := 1.0
 var _view := Vector2(1200, 680)
 var _cabinet := Rect2()
-var _columns := 3
+var _columns := 2
 var _row_height := 260.0
 var _scroll := 0.0
 var _scroll_limit := 0.0
@@ -141,14 +141,15 @@ func focus_first() -> void:
 
 
 func _arrange() -> void:
-	_columns = 2 if _view.x < 680 else 3
+	_columns = 2
 	var rows := ceili(float(_catalog.size()) / float(_columns))
-	_row_height = clampf((_view.y - 66.0) / maxf(rows, 1), 230.0, 290.0)
 	var width := minf(1120.0, _view.x - 32.0)
-	var height := _row_height * rows + 38.0
+	var desired_height := minf(width / 1.88, _view.y - 28.0) if _view.x >= 680 else _view.y - 28.0
+	_row_height = clampf((desired_height - Cabinet.HEIGHT_PAD) / rows, 160.0 if _view.x >= 680 else 190.0, 202.0 if _view.x >= 680 else 235.0)
+	var height := _row_height * rows + Cabinet.HEIGHT_PAD
 	_scroll_limit = maxf(0.0, height + 28.0 - _view.y)
 	_scroll = clampf(_scroll, 0.0, _scroll_limit)
-	_cabinet = Rect2((_view.x - width) * 0.5, 12.0 - _scroll, width, height)
+	_cabinet = Rect2((_view.x - width) * 0.5, -8.0 - _scroll, width, height)
 	var cell_width := (width - 48.0) / float(_columns)
 	_items.clear()
 	_tags.clear()
@@ -186,23 +187,25 @@ func _build_cabinet_renderer() -> void:
 	environment.background_mode = Environment.BG_COLOR
 	environment.background_color = Color(0, 0, 0, 0)
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color("d4c6b4")
-	environment.ambient_light_energy = 0.52
+	environment.ambient_light_color = Color("c7d2dc")
+	environment.ambient_light_energy = 0.60
 	environment_node.environment = environment
 	cabinet_viewport.add_child(environment_node)
 	_cabinet_camera = Camera3D.new()
-	_cabinet_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	_cabinet_camera.near = 12.0
-	_cabinet_camera.far = 25.0
-	_cabinet_camera.position = Vector3(0, 2.9, 18)
+	_cabinet_camera.projection = Camera3D.PROJECTION_PERSPECTIVE
+	_cabinet_camera.fov = 34.0
+	_cabinet_camera.near = 0.1
+	_cabinet_camera.far = 40.0
+	_cabinet_camera.position = Vector3(0, 2, 12)
 	_cabinet_camera.current = true
 	cabinet_viewport.add_child(_cabinet_camera)
 	_cabinet_camera.look_at(Vector3.ZERO)
 	var key := DirectionalLight3D.new()
-	key.rotation_degrees = Vector3(-32, -28, -8)
-	key.light_color = Color("fff0d7")
-	key.light_energy = 1.30
+	key.rotation_degrees = Vector3(-22, -12, -3)
+	key.light_color = Color("f4ecdf")
+	key.light_energy = 0.95
 	key.shadow_enabled = true
+	key.shadow_opacity = 0.70
 	key.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
 	key.directional_shadow_max_distance = 25.0
 	key.shadow_bias = 0.25
@@ -210,8 +213,8 @@ func _build_cabinet_renderer() -> void:
 	cabinet_viewport.add_child(key)
 	var fill := DirectionalLight3D.new()
 	fill.rotation_degrees = Vector3(10, 135, 0)
-	fill.light_color = Color("c3d9e4")
-	fill.light_energy = 0.40
+	fill.light_color = Color("a6bdd0")
+	fill.light_energy = 0.30
 	cabinet_viewport.add_child(fill)
 	cabinet_model = Cabinet.new()
 	cabinet_viewport.add_child(cabinet_model)
@@ -231,7 +234,7 @@ func _refresh_cabinet() -> void:
 	_cabinet_signature = signature
 	cabinet_model.build(_cabinet.size.x, _row_height, _columns)
 	cabinet_viewport.size = pixels
-	_cabinet_camera.size = _cabinet_render_rect.size.y * Cabinet.UNIT
+	_frame_cabinet_camera()
 	_cabinet_rendered = false
 	cabinet_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 	if not RenderingServer.frame_post_draw.is_connected(_cabinet_frame_finished):
@@ -242,12 +245,49 @@ func _refresh_cabinet() -> void:
 func _update_projected_tags() -> void:
 	if not is_instance_valid(cabinet_model) or not is_instance_valid(_cabinet_camera):
 		return
-	for index in mini(_tags.size(), cabinet_model.tag_anchors.size()):
-		var anchor: Vector3 = cabinet_model.tag_anchors[index]
-		var uv := _cabinet_camera.unproject_position(cabinet_model.to_global(anchor)) / Vector2(cabinet_viewport.size)
+	for index in mini(_tags.size(), cabinet_model.tag_corners.size()):
+		_tags[index] = _project_model_rect(cabinet_model.tag_corners[index])
+		_items[index] = _project_model_rect(cabinet_model.item_corners[index]).merge(_tags[index])
+		_buttons[index].position = _items[index].position * _scale
+		_buttons[index].size = _items[index].size * _scale
+
+
+func _frame_cabinet_camera() -> void:
+	# A centred perspective view reproduces the reference's converging posts
+	# and the larger visible shelf surfaces toward the bottom of the cabinet.
+	var bounds: AABB = cabinet_model.get_meta("framing_bounds")
+	var aspect := float(cabinet_viewport.size.x) / cabinet_viewport.size.y
+	var tilt := deg_to_rad(9.0)
+	var tangent := tan(deg_to_rad(_cabinet_camera.fov * 0.5))
+	var direction := Vector3(0, sin(tilt), cos(tilt))
+	var projected_height := bounds.size.y * cos(tilt) + bounds.size.z * sin(tilt)
+	var distance := maxf(bounds.size.x / aspect, projected_height) / (2.0 * tangent) + bounds.size.z * 0.5
+	var target := bounds.get_center()
+	var viewport_size := Vector2(cabinet_viewport.size)
+	for iteration in 3:
+		_cabinet_camera.position = target + direction * distance
+		_cabinet_camera.look_at(target)
+		var projected := Rect2(_cabinet_camera.unproject_position(bounds.get_endpoint(0)), Vector2.ZERO)
+		for point in range(1, 8):
+			projected = projected.expand(_cabinet_camera.unproject_position(bounds.get_endpoint(point)))
+		var ratio := maxf(projected.size.x / (viewport_size.x - 12), projected.size.y / (viewport_size.y - 12))
+		var dy := projected.get_center().y - viewport_size.y * 0.5
+		target -= _cabinet_camera.basis.y * dy * (2.0 * distance * tangent / viewport_size.y)
+		distance *= ratio
+	_cabinet_camera.position = target + direction * distance
+	_cabinet_camera.look_at(target)
+	# Tight bounds also keep the iron plates free of self-shadow striping.
+	_cabinet_camera.near = maxf(0.1, distance - 4.0)
+	_cabinet_camera.far = distance + 4.0
+
+
+func _project_model_rect(points: PackedVector3Array) -> Rect2:
+	var projected := Rect2()
+	for index in points.size():
+		var uv := _cabinet_camera.unproject_position(cabinet_model.to_global(points[index])) / Vector2(cabinet_viewport.size)
 		var point := _cabinet_render_rect.position + uv * _cabinet_render_rect.size
-		_tags[index].position = Vector2(point.x - _tags[index].size.x * 0.5, point.y + 7.0)
-		_buttons[index].size.y = maxf(_items[index].size.y, _tags[index].end.y - _items[index].position.y) * _scale
+		projected = Rect2(point, Vector2.ZERO) if index == 0 else projected.expand(point)
+	return projected
 
 
 func _cabinet_frame_finished() -> void:
@@ -359,31 +399,30 @@ func _draw_item(index: int) -> void:
 	var tag := _tags[index]
 	var data: Dictionary = _catalog[index]
 	var active := index == _hovered or index == selected_index
-	# Strings and a cut corner make these shelf labels feel like attached tags.
-	for x in [tag.position.x + 15, tag.end.x - 15]:
-		draw_line(Vector2(x, tag.position.y - 11), Vector2(x, tag.position.y + 7), Color("b09265"), 1.5, true)
-	var points := PackedVector2Array([tag.position + Vector2(5, 0), tag.position + Vector2(tag.size.x - 5, 0), tag.position + Vector2(tag.size.x, 5), tag.end, tag.position + Vector2(0, tag.size.y), tag.position + Vector2(0, 5)])
-	var drop := PackedVector2Array()
-	for point in points:
-		drop.append(point + Vector2(2, 3))
-	draw_colored_polygon(drop, Color(0, 0, 0, 0.30))
-	draw_colored_polygon(points, Color("b69a6c") if active else Color("9f855d"))
-	for x in [tag.position.x + 15, tag.end.x - 15]:
-		draw_circle(Vector2(x, tag.position.y + 6), 2, Color("594529"))
-	_text(str(data.title), Vector2(tag.get_center().x, tag.position.y + 21), 14, Color("34291c"))
+	# The backing and bolts are real iron meshes. Project only their lettering.
+	var text_scale := clampf(tag.size.y / 43.0, 0.70, 1.10)
+	var title_size := _fit_label(str(data.title), roundi(13 * text_scale), tag.size.x - 16)
+	_text(str(data.title), Vector2(tag.get_center().x, tag.position.y + tag.size.y * 0.40), title_size, Color("c7cdd0"))
 	if bool(data.owned):
-		_text("✓  사용 중", Vector2(tag.get_center().x, tag.position.y + 44), 18, Color("27251d"))
+		_text("✓ 사용 중", Vector2(tag.get_center().x, tag.position.y + tag.size.y * 0.85), roundi(17 * text_scale), Color("d4d9d5"))
 	else:
 		var price := str(int(data.price))
-		var price_width := _bold.get_string_size(price, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
-		var center := tag.get_center().x - 22
-		_coin(Vector2(center - price_width * 0.5 - 12, tag.position.y + 39), 7)
-		_text(price, Vector2(center + 2, tag.position.y + 46), 20, Color("312619"))
-		_text("준비 중", Vector2(tag.end.x - 28, tag.position.y + 44), 11, Color("4d402b"), false)
+		var price_size := roundi(18 * text_scale)
+		var price_width := _bold.get_string_size(price, HORIZONTAL_ALIGNMENT_LEFT, -1, price_size).x
+		var center := tag.get_center().x - 18 * text_scale
+		var baseline := tag.position.y + tag.size.y * 0.85
+		_coin(Vector2(center - price_width * 0.5 - 10 * text_scale, baseline - 6 * text_scale), 7 * text_scale)
+		_text(price, Vector2(center + 3 * text_scale, baseline), price_size, GOLD)
+		_text("준비 중", Vector2(tag.end.x - 23 * text_scale, baseline - text_scale), roundi(10 * text_scale), Color("94a0a5"), false)
 	if active:
-		var line := points.duplicate()
-		line.append(points[0])
-		draw_polyline(line, Color("edc987"), 1.5, true)
+		draw_line(Vector2(tag.position.x, tag.end.y), tag.end, Color("dfb978"), 1.5, true)
+
+
+func _fit_label(value: String, preferred: int, width: float) -> int:
+	var font_size := preferred
+	while font_size > 8 and _bold.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > width:
+		font_size -= 1
+	return font_size
 
 
 func _text(value: String, baseline: Vector2, font_size: int, color: Color, bold: bool = true) -> void:

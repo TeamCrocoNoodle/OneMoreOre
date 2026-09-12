@@ -80,7 +80,7 @@ func _run() -> void:
 	ui.select_tab("tools")
 	await process_frame
 	await process_frame
-	_check(display.cabinet_model != null and display.cabinet_model.get_meta("modeled_cabinet", false), "The displayed wooden cabinet is an actual retained Node3D model")
+	_check(display.cabinet_model != null and display.cabinet_model.get_meta("modeled_cabinet", false), "The displayed cabinet is an actual retained Node3D model")
 	_check(display.cabinet_viewport != null and display.cabinet_viewport.transparent_bg and display.cabinet_viewport.get_camera_3d() != null, "The cabinet and tools share an actual transparent camera render")
 	var cabinet_meshes: Array[MeshInstance3D] = []
 	_find_meshes(display.cabinet_model, cabinet_meshes)
@@ -94,7 +94,7 @@ func _run() -> void:
 			var size: Vector3 = mesh.mesh.get_aabb().size
 			if minf(size.x, minf(size.y, size.z)) > 0.001:
 				solid_parts += 1
-	_check(part_types.size() >= 3 and solid_parts >= 6, "Separate solid boards, frame, and back parts form the modeled wooden shelf")
+	_check(part_types.size() >= 3 and solid_parts >= 6, "Separate solid shelves, frame, and back parts form the modeled cabinet")
 	var previews: Array[Node] = []
 	_find_previews(display.cabinet_model, previews)
 	_check(previews.size() == 6, "All six existing pickaxes occupy the same modeled cabinet")

@@ -1,8 +1,9 @@
-"""Extract contact-aligned mining samples from the supplied four-strike WAV.
+"""Historical reference-edit experiment, retained for offline comparison.
 
 Run from the project root:
     python tools/audio/prepare_mining_reference.py path/to/Mining_sound_Ref.wav
-Only the output assets are needed at runtime. No third-party packages required.
+Writes artifacts/reference_edits; the game uses synthesize_mining_sounds.py.
+No third-party packages required.
 """
 
 import argparse
@@ -64,7 +65,7 @@ def main():
     parser.add_argument("source", type=Path)
     args = parser.parse_args()
     values = read_pcm(args.source)
-    destination = Path(__file__).resolve().parents[2] / "assets" / "audio"
+    destination = Path(__file__).resolve().parents[2] / "artifacts" / "reference_edits"
     destination.mkdir(parents=True, exist_ok=True)
     cuts = [
         ("mining_hit_01", 0.87, 0.92, 0.34, -6.0),

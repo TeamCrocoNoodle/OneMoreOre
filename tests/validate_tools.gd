@@ -54,7 +54,7 @@ func _run() -> void:
 	await _click(ui.get_node_screen("power"))
 	_check(ui.selected_id.is_empty() and not game.upgrades.is_unlocked("power") and game.round_state.wallet_gold == 1000, "Clicking an old graph location cannot select or purchase a hidden skill")
 	var catalog: Array[Dictionary] = display.get_catalog()
-	_check(catalog.size() == 6, "The wooden display presents the six existing tool variants")
+	_check(catalog.size() == 6, "The iron display presents the six existing tool variants")
 	var ids: Array[String] = []
 	for i in catalog.size():
 		var item: Dictionary = catalog[i]
