@@ -5,6 +5,8 @@ signal next_round_requested
 signal cue(kind: String, tier: int)
 signal settlement_animation_finished
 signal upgrades_requested
+signal auction_requested
+signal auction_animation_finished
 
 const RARITY_NAMES := ["일반", "특별", "희귀", "전설", "신화", "고대"]
 const GEM_COLORS := [Color("edf8ff"), Color("64ff86"), Color("4896ff"), Color("ffe15b"), Color("be65ff"), Color("ff4c61")]
@@ -13,6 +15,7 @@ const MUTED := Color("a5a8a5")
 const GOLD := Color("dca75c")
 const BAR_COLOR := Color("df9b41")
 const ModelGallery = preload("res://scripts/ui_model_gallery.gd")
+const AuctionUI = preload("res://scripts/auction_ui.gd")
 
 class HudCanvas extends Control:
 	var presenter: Node
@@ -27,6 +30,9 @@ var _bold: SystemFont
 var _replay: Button
 var _skip: Button
 var _upgrades: Button
+var _auction: Button
+var auction_ui: Control
+var _auction_available := false
 var _upgrades_available := false
 var _scale := 1.0
 var _view := Vector2(1440, 1000)
@@ -119,11 +125,21 @@ func _ready() -> void:
 		if _upgrades_available:
 			upgrades_requested.emit()
 	)
+	_auction = _button("경매", true)
+	_auction.name = "OpenAuction"
+	_auction.pressed.connect(_open_auction)
+	auction_ui = AuctionUI.new()
+	auction_ui.host = self
+	_canvas.add_child(auction_ui)
+	auction_ui.start_requested.connect(func(): auction_requested.emit())
+	auction_ui.presentation_finished.connect(func(): auction_animation_finished.emit())
+	auction_ui.closed.connect(_auction_closed)
 	get_viewport().size_changed.connect(_layout)
 	_layout()
 	_replay.hide()
 	_skip.hide()
 	_upgrades.hide()
+	_auction.hide()
 
 
 func _redraw_model_icons() -> void:
@@ -238,7 +254,37 @@ func _layout_modal() -> void:
 		_upgrades.focus_neighbor_top = _replay.get_path()
 		_replay.focus_neighbor_left = _upgrades.get_path() if _upgrades_available else _replay.get_path()
 		_replay.focus_previous = _upgrades.get_path() if _upgrades_available else _replay.get_path()
+		_replay.focus_next = _upgrades.get_path() if _upgrades_available else _replay.get_path()
 		_upgrades.focus_next = _replay.get_path()
+		_layout_auction_action()
+	if is_instance_valid(auction_ui):
+		auction_ui.set_layout(_view, _scale)
+
+
+func _layout_auction_action() -> void:
+	if not is_instance_valid(_auction):
+		return
+	var show_auction: bool = _modal and _settlement_done and _auction_available and not auction_ui.is_open
+	_auction.visible = show_auction
+	if not show_auction:
+		return
+	var width := minf(240, (_modal_rect.size.x - 18) * 0.5)
+	var center := _modal_rect.get_center().x
+	var y := _modal_rect.end.y - 60
+	_replay.position = Vector2(center - width - 9, y) * _scale
+	_replay.size = Vector2(width, 60) * _scale
+	_auction.position = Vector2(center + 9, y) * _scale
+	_auction.size = Vector2(width, 60) * _scale
+	_replay.add_theme_font_size_override("font_size", int(18 * _scale))
+	_auction.add_theme_font_size_override("font_size", int(20 * _scale))
+	_replay.focus_neighbor_right = _auction.get_path()
+	_replay.focus_next = _auction.get_path()
+	_auction.focus_neighbor_left = _replay.get_path()
+	_auction.focus_neighbor_right = _upgrades.get_path() if _upgrades_available else _replay.get_path()
+	_auction.focus_neighbor_top = _replay.get_path()
+	_auction.focus_neighbor_bottom = _replay.get_path()
+	_auction.focus_previous = _replay.get_path()
+	_auction.focus_next = _upgrades.get_path() if _upgrades_available else _replay.get_path()
 
 
 func begin_round(round_index: int, wallet: int) -> void:
@@ -259,9 +305,11 @@ func begin_round(round_index: int, wallet: int) -> void:
 	_remaining = _duration
 	_active = true
 	_entry = 0.0
+	_auction_available = false
 	if is_instance_valid(_replay):
 		_replay.hide()
 		_skip.hide()
+		_auction.hide()
 		_replay.release_focus()
 		_skip.release_focus()
 		_upgrades.position = Vector2(24, (_satchel_rect.position.y - 68) if _portrait else (_view.y - 84)) * _scale
@@ -300,6 +348,43 @@ func restore_round_focus() -> void:
 		_replay.grab_focus()
 	elif is_instance_valid(_upgrades):
 		_upgrades.release_focus()
+
+
+func set_auction_available(available: bool) -> void:
+	if _auction_available == available:
+		return
+	_auction_available = available
+	_layout_modal()
+
+
+func _open_auction() -> void:
+	if not _modal or not _settlement_done or not _auction_available or auction_ui.is_open:
+		return
+	auction_ui.show_offer(int(_report.get("total", 0)))
+	_replay.hide()
+	_auction.hide()
+	set_upgrades_available(false)
+	cue.emit("confirm", 0)
+
+
+func _auction_closed() -> void:
+	_replay.show()
+	_layout_modal()
+	if _auction.visible:
+		_auction.grab_focus()
+	else:
+		_replay.grab_focus()
+	_canvas.queue_redraw()
+
+
+func apply_auction_result(report: Dictionary) -> void:
+	_report = report.duplicate(true)
+	_shown_total = int(_report.get("final_total", _report.get("total", 0)))
+	_wallet = int(_report.get("wallet_after", _wallet))
+	_total_punch = 1.0
+	_complete_clock = _clock if int(_report.auction.change_percent) > 0 else _clock - 2.0
+	set_auction_available(false)
+	_canvas.queue_redraw()
 
 
 func set_stones(count: int) -> void:
@@ -357,6 +442,7 @@ func show_settlement(report: Dictionary) -> void:
 	_complete_clock = -1
 	_total_punch = 0
 	_settlement_done = false
+	_auction_available = false
 	_completion_emitted = false
 	_modal = true
 	_active = false
@@ -384,16 +470,18 @@ func finish_settlement() -> void:
 	if not _completion_emitted:
 		_completion_emitted = true
 		settlement_animation_finished.emit()
+	_layout_modal()
 	_canvas.queue_redraw()
 
 
 func _request_next() -> void:
-	if not _modal or not _settlement_done:
+	if not _modal or not _settlement_done or auction_ui.is_open:
 		return
 	# Close immediately, so repeated controller presses cannot request twice.
 	_modal = false
 	_replay.hide()
 	_skip.hide()
+	_auction.hide()
 	cue.emit("confirm", -1)
 	next_round_requested.emit()
 
@@ -438,7 +526,7 @@ func _draw_hud(c: Control) -> void:
 	_draw_wallet(c)
 	_draw_timer(c)
 	_draw_satchel(c)
-	if _modal:
+	if _modal and not auction_ui.is_open:
 		_draw_settlement(c)
 	c.draw_set_transform(Vector2.ZERO)
 
@@ -498,7 +586,11 @@ func _draw_settlement(c: Control) -> void:
 	c.draw_rect(Rect2(Vector2.ZERO, _view), Color(0.015, 0.020, 0.021, 0.84))
 	var r := _modal_rect
 	_text(c, "채굴 완료", r.position + Vector2(r.size.x * 0.5, 32 if _compact_settlement else 40), 31 if _compact_settlement else 38, GOLD, true, HORIZONTAL_ALIGNMENT_CENTER)
-	_text(c, "이번 채굴의 수확", r.position + Vector2(r.size.x * 0.5, 56 if _compact_settlement else 68), 14, MUTED, false, HORIZONTAL_ALIGNMENT_CENTER)
+	var subtitle := "이번 채굴의 수확"
+	if _report.has("auction"):
+		var change := int(_report.auction.change_percent)
+		subtitle = "경매 %s%d%% · 기본 정산 %s G" % ["+" if change > 0 else "", change, _number(int(_report.total))]
+	_text(c, subtitle, r.position + Vector2(r.size.x * 0.5, 56 if _compact_settlement else 68), 14, MUTED, false, HORIZONTAL_ALIGNMENT_CENTER)
 	c.draw_rect(_info_rect, Color(0, 0, 0, 0.22))
 	var best := -1
 	for row in _rows:
@@ -516,7 +608,8 @@ func _draw_settlement(c: Control) -> void:
 		_text(c, "이번에는 수확이 없어요", _info_rect.get_center() + Vector2(0, -4), 18, TEXT, true, HORIZONTAL_ALIGNMENT_CENTER)
 		_text(c, "새 원석에서 다시 도전해요", _info_rect.get_center() + Vector2(0, 23), 14, MUTED, false, HORIZONTAL_ALIGNMENT_CENTER)
 	var total := _total_rect
-	_text(c, "획득 GOLD" if _settlement_done else "정산 중", Vector2(total.get_center().x, total.position.y + 21), 15, TEXT, true, HORIZONTAL_ALIGNMENT_CENTER)
+	var total_title := "경매 정산 GOLD" if _report.has("auction") else ("획득 GOLD" if _settlement_done else "정산 중")
+	_text(c, total_title, Vector2(total.get_center().x, total.position.y + 21), 15, TEXT, true, HORIZONTAL_ALIGNMENT_CENTER)
 	var gold_text := "+ " + _number(_shown_total)
 	var coin_radius := 14.0 if _compact_settlement else 16.0
 	var total_size := _fit_text(gold_text, (44 if _portrait else 54) + int(_total_punch * 4), total.size.x - coin_radius * 2 - 24)

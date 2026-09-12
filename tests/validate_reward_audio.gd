@@ -17,12 +17,12 @@ func _run() -> void:
 	var build_ms := float(Time.get_ticks_usec() - started) / 1000.0
 	var original_builds: int = RewardAudio._bank_build_count
 	_check(audio._players.size() == 8 and audio.get_child_count() == 8 and not audio.is_processing(), "Eight fixed voices need no per-frame script loop")
-	_check(audio._streams.keys().size() == 7, "All seven UI cue kinds have cached PCM")
+	_check(audio._streams.keys().size() == 12, "Settlement and five auction cues have cached PCM")
 	var total_bytes := 0
 	var streams := 0
 	for kind: String in RewardAudio.CUE_KINDS:
 		var bank: Array = audio._streams[kind]
-		var expected_count := 6 if kind in ["pickup", "row", "countdown"] else (3 if kind in ["tick", "confirm"] else 1)
+		var expected_count := 6 if kind in ["pickup", "row", "countdown", "auction_bid"] else (3 if kind in ["tick", "confirm"] else 1)
 		_check(bank.size() == expected_count, kind + ": expected bounded variation bank")
 		for variant in bank.size():
 			var stream: AudioStreamWAV = bank[variant]
@@ -97,6 +97,15 @@ func _run() -> void:
 	before = audio._played_count
 	audio.play_cue("unrecognized")
 	_check(audio._played_count == before and RewardAudio._bank_build_count == original_builds, "Unknown cues are harmless and all playback avoids synthesis")
+	audio.stop_all()
+	audio.play_cue("total")
+	audio.play_cue("auction_jackpot")
+	_check(audio._last_voice == 6 and audio._players[6].stream == audio._streams.auction_jackpot[0], "A skipped auction reveal can replace the earlier settlement flourish on its reserved voice")
+	var auction_started: int = audio._started_usec[6]
+	for i in 20:
+		audio._last_play_usec.erase("auction_bid")
+		audio.play_cue("auction_bid", i % 6)
+	_check(audio._started_usec[6] == auction_started and audio._players[6].stream == audio._streams.auction_jackpot[0], "Auction bid ticks cannot steal the result flourish")
 	var peak_sum: float = 6.0 * 0.70 * db_to_linear(-17.0) + 0.70 * db_to_linear(-13.5) + 0.70 * db_to_linear(-17.0)
 	_check(peak_sum < 0.9, "Even aligned maximum voice peaks retain mix headroom")
 	if "--export-demo" in OS.get_cmdline_user_args():
@@ -104,6 +113,9 @@ func _run() -> void:
 	var voice_ref: WeakRef = weakref(audio._players[6])
 	audio.stop_all()
 	another.stop_all()
+	for owner in [audio, another]:
+		for player in owner._players:
+			player.stream = null
 	audio.queue_free()
 	another.queue_free()
 	await process_frame
@@ -125,7 +137,7 @@ func _export_demo(bank: Dictionary) -> void:
 	var silence := PackedByteArray()
 	silence.resize(24000 * 2 / 4)
 	silence.fill(0)
-	var sequence: Array = [["pickup", 0], ["pickup", 5], ["row", 1], ["tick", 0], ["total", 0], ["timeout", 0], ["countdown", 0], ["countdown", 5], ["confirm", 0]]
+	var sequence: Array = [["pickup", 0], ["pickup", 5], ["row", 1], ["tick", 0], ["total", 0], ["timeout", 0], ["countdown", 0], ["countdown", 5], ["confirm", 0], ["auction_open", 0], ["auction_bid", 0], ["auction_bid", 3], ["auction_bid", 5], ["auction_loss", 0], ["auction_win", 0], ["auction_jackpot", 0]]
 	for entry: Array in sequence:
 		var stream: AudioStreamWAV = bank[entry[0]][entry[1]]
 		var gain := db_to_linear(float(RewardAudio.CUE_VOLUME_DB[entry[0]]) + (float(entry[1]) * 0.32 if entry[0] == "countdown" else 0.0))

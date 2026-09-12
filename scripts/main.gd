@@ -141,6 +141,8 @@ func _ready() -> void:
 		hud.settlement_animation_finished.connect(_finish_settlement)
 		hud.cue.connect(reward_audio.play_cue)
 		hud.upgrades_requested.connect(_open_upgrades)
+		hud.auction_requested.connect(_start_auction)
+		hud.auction_animation_finished.connect(_finish_auction)
 		hud.begin_round(round_state.round_index, round_state.wallet_gold)
 		flight_overlay = GemFlightOverlay.new()
 		add_child(flight_overlay)
@@ -701,7 +703,8 @@ func _process(delta: float) -> void:
 			_spawn_rock()
 	if round_enabled and is_instance_valid(hud):
 		hud.set_timer(round_state.remaining, round_state.duration, round_state.phase != RoundModel.Phase.READY and focused)
-		hud.set_upgrades_available(round_state.phase in [RoundModel.Phase.READY, RoundModel.Phase.COMPLETE] and not _upgrade_window_open())
+		hud.set_upgrades_available(round_state.phase in [RoundModel.Phase.READY, RoundModel.Phase.COMPLETE] and not _upgrade_window_open() and not hud.auction_ui.is_open)
+		hud.set_auction_available(round_state.can_auction() and not _upgrade_window_open())
 		if round_state.phase == RoundModel.Phase.DRAINING and collecting_gems.is_empty():
 			_begin_settlement()
 	if capture_mode:
@@ -933,6 +936,8 @@ func _open_upgrades() -> void:
 		return
 	if round_state.phase not in [RoundModel.Phase.READY, RoundModel.Phase.COMPLETE]:
 		return
+	if hud.auction_ui.is_open:
+		return
 	_clear_upgrade_input()
 	pickaxe.hide()
 	marker.hide()
@@ -978,6 +983,7 @@ func _purchase_upgrade(node_id: String) -> bool:
 		_spawn_rock(rock_seed)
 	hud.set_wallet(round_state.wallet_gold)
 	skill_ui.refresh(round_state.wallet_gold)
+	hud.set_auction_available(round_state.can_auction())
 	return true
 
 func _apply_upgrade_stats() -> void:
@@ -1062,9 +1068,26 @@ func _begin_settlement() -> void:
 func _finish_settlement() -> void:
 	if round_enabled and round_state.commit_settlement():
 		hud.set_wallet(round_state.wallet_gold)
+		hud.set_auction_available(round_state.can_auction())
+
+
+func _start_auction() -> void:
+	if not round_enabled or _upgrade_window_open() or not hud.auction_ui.is_open or hud.auction_ui.mode != hud.auction_ui.Mode.PREVIEW:
+		return
+	var result: Dictionary = round_state.begin_auction()
+	if result.is_empty():
+		return
+	_clear_upgrade_input()
+	hud.set_upgrades_available(false)
+	hud.auction_ui.play_result(result)
+
+
+func _finish_auction() -> void:
+	if round_enabled and round_state.commit_auction():
+		hud.apply_auction_result(round_state.last_report)
 
 func _next_round() -> void:
-	if not round_enabled or not round_state.new_round():
+	if not round_enabled or hud.auction_ui.is_open or not round_state.new_round():
 		return
 	mouse_down = false
 	dragging = false

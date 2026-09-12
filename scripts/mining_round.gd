@@ -2,7 +2,8 @@ class_name MiningRound
 extends RefCounted
 ## Authoritative round cargo. Presentation never changes prices or awards twice.
 
-enum Phase { READY, MINING, DRAINING, SETTLING, COMPLETE }
+enum Phase { READY, MINING, DRAINING, SETTLING, COMPLETE, AUCTION }
+const Auction = preload("res://scripts/ore_auction.gd")
 const DURATION := 30.0
 const STONE_GOLD := 1
 const GEM_GOLD := [10, 50, 200, 1000, 5000, 25000]
@@ -17,6 +18,8 @@ var gem_counts := PackedInt32Array([0, 0, 0, 0, 0, 0])
 var wallet_gold := 0
 var round_index := 1
 var last_report: Dictionary = {}
+var auction := Auction.new()
+var _pending_auction: Dictionary = {}
 
 func apply_stats(values: Dictionary) -> void:
 	# Purchase effects are configured between rounds, never halfway through
@@ -101,5 +104,35 @@ func new_round() -> bool:
 	ordinary_stones = 0
 	gem_counts.fill(0)
 	last_report.clear()
+	_pending_auction.clear()
 	phase = Phase.READY
+	return true
+
+
+func can_auction() -> bool:
+	var stake := int(last_report.get("total", 0))
+	return phase == Phase.COMPLETE and stake > 0 and wallet_gold >= stake and not last_report.has("auction")
+
+
+func begin_auction() -> Dictionary:
+	if not can_auction():
+		return {}
+	_pending_auction = auction.draw(int(last_report.total))
+	_pending_auction["round_index"] = round_index
+	_pending_auction["wallet_before"] = wallet_gold
+	_pending_auction["wallet_after"] = wallet_gold + int(_pending_auction.delta)
+	phase = Phase.AUCTION
+	return _pending_auction.duplicate(true)
+
+
+func commit_auction() -> bool:
+	if phase != Phase.AUCTION or _pending_auction.is_empty():
+		return false
+	# Base settlement has already paid. Apply only its adjustment, once.
+	wallet_gold += int(_pending_auction.delta)
+	last_report["auction"] = _pending_auction.duplicate(true)
+	last_report["final_total"] = int(_pending_auction.payout)
+	last_report["wallet_after"] = wallet_gold
+	_pending_auction.clear()
+	phase = Phase.COMPLETE
 	return true

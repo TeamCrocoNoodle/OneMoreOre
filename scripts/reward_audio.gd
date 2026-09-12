@@ -7,10 +7,11 @@ const VOICE_COUNT := 8
 const NORMAL_VOICES := 6
 const TOTAL_VOICE := 6
 const TIMEOUT_VOICE := 7
-const CUE_KINDS := ["pickup", "row", "tick", "total", "timeout", "countdown", "confirm"]
-const CUE_DURATIONS := {"pickup": 0.21, "row": 0.28, "tick": 0.046, "total": 0.70, "timeout": 0.42, "countdown": 0.075, "confirm": 0.085}
-const CUE_VOLUME_DB := {"pickup": -17.0, "row": -20.0, "tick": -25.0, "total": -13.5, "timeout": -17.0, "countdown": -22.0, "confirm": -20.0}
-const MIN_INTERVAL_USEC := {"pickup": 28000, "row": 65000, "tick": 35000, "total": 350000, "timeout": 350000, "countdown": 150000, "confirm": 70000}
+const CUE_KINDS := ["pickup", "row", "tick", "total", "timeout", "countdown", "confirm", "auction_open", "auction_bid", "auction_loss", "auction_win", "auction_jackpot"]
+const CUE_DURATIONS := {"pickup": 0.21, "row": 0.28, "tick": 0.046, "total": 0.70, "timeout": 0.42, "countdown": 0.075, "confirm": 0.085, "auction_open": 0.28, "auction_bid": 0.070, "auction_loss": 0.35, "auction_win": 0.68, "auction_jackpot": 1.1}
+const CUE_VOLUME_DB := {"pickup": -17.0, "row": -20.0, "tick": -25.0, "total": -13.5, "timeout": -17.0, "countdown": -22.0, "confirm": -20.0, "auction_open": -19.0, "auction_bid": -25.0, "auction_loss": -18.0, "auction_win": -14.5, "auction_jackpot": -13.5}
+const MIN_INTERVAL_USEC := {"pickup": 28000, "row": 65000, "tick": 35000, "total": 350000, "timeout": 350000, "countdown": 150000, "confirm": 70000, "auction_open": 150000, "auction_bid": 30000, "auction_loss": 350000, "auction_win": 350000, "auction_jackpot": 350000}
+const AUCTION_ENDINGS := ["auction_loss", "auction_win", "auction_jackpot"]
 
 static var _shared_bank: Dictionary = {}
 static var _bank_build_count := 0
@@ -47,11 +48,11 @@ func play_cue(kind: String, tier: int = 0) -> void:
 	if now - int(_last_play_usec.get(kind, -10000000)) < int(MIN_INTERVAL_USEC[kind]):
 		_dropped_count += 1
 		return
-	var voice := TOTAL_VOICE if kind == "total" else (TIMEOUT_VOICE if kind == "timeout" else -1)
+	var voice := TOTAL_VOICE if kind == "total" or kind in AUCTION_ENDINGS else (TIMEOUT_VOICE if kind == "timeout" else -1)
 	if voice >= 0:
 		# Each ending owns a separate voice. Neither counting ticks nor the
 		# other ending can steal it, and duplicate UI signals do not restart it.
-		if _players[voice].playing:
+		if _players[voice].playing and not (kind in AUCTION_ENDINGS and _players[voice].stream == _streams.total[0]):
 			_dropped_count += 1
 			return
 	else:
@@ -63,7 +64,7 @@ func play_cue(kind: String, tier: int = 0) -> void:
 			if _started_usec[i] < _started_usec[voice]:
 				voice = i
 	var variants: Array = _streams[kind]
-	var index := clampi(tier, 0, 5) if kind in ["pickup", "row", "countdown"] else int(_variation_cursor.get(kind, 0)) % variants.size()
+	var index := clampi(tier, 0, 5) if kind in ["pickup", "row", "countdown", "auction_bid"] else int(_variation_cursor.get(kind, 0)) % variants.size()
 	_variation_cursor[kind] = int(_variation_cursor.get(kind, 0)) + 1
 	var player := _players[voice]
 	player.stop()
@@ -94,7 +95,7 @@ static func _prepare_bank() -> void:
 		return
 	for kind: String in CUE_KINDS:
 		var variants: Array[AudioStreamWAV] = []
-		var count := 6 if kind in ["pickup", "row", "countdown"] else (3 if kind in ["tick", "confirm"] else 1)
+		var count := 6 if kind in ["pickup", "row", "countdown", "auction_bid"] else (3 if kind in ["tick", "confirm"] else 1)
 		for variant in count:
 			variants.append(_synthesize(kind, variant))
 		_shared_bank[kind] = variants
@@ -141,6 +142,25 @@ static func _synthesize(kind: String, variant: int) -> AudioStreamWAV:
 		"confirm":
 			events.append(_strike(0.0, 1040.0 + float(variant) * 43.0, 0.010, 0.42, 0.14, 0.25, 900.0))
 			events.append(_strike(0.011, 680.0 + float(variant) * 23.0, 0.013, 0.19, 0.15, 0.08))
+		"auction_open":
+			# A small wooden auction hammer; no backing music or sustained bed.
+			events.append(_strike(0.0, 164, 0.026, 0.58, 0.12, 0.24, -180))
+			events.append(_strike(0.060, 213, 0.020, 0.33, 0.10, 0.18, -300))
+			events.append(_strike(0.116, 1170, 0.024, 0.15, 0.55, 0.06, 1100))
+		"auction_bid":
+			events.append(_strike(0.0, 610 + variant * 71, 0.007, 0.55, 0.20, 0.35, -1100))
+			events.append(_strike(0.009, 1720 + variant * 59, 0.010, 0.17, 0.52, 0.04, 520))
+		"auction_loss":
+			events.append(_strike(0.0, 158, 0.041, 0.59, 0.13, 0.14, -190))
+			events.append(_strike(0.075, 310, 0.032, 0.25, 0.28, 0.04, -470))
+		"auction_win", "auction_jackpot":
+			events.append(_strike(0.0, 194, 0.030, 0.46, 0.15, 0.16, -210))
+			var contacts := 9 if kind == "auction_jackpot" else 5
+			var frequencies := [1730, 2490, 1910, 3170, 2240, 2830, 3510, 2370, 3030]
+			for i in contacts:
+				events.append(_strike(0.020 + i * 0.047 + (i % 3) * 0.013, frequencies[i], 0.038 + i * 0.003, 0.32 - i * 0.014, 0.72, 0.065, 290))
+			if kind == "auction_jackpot":
+				events.append(_strike(0.35, 1280, 0.115, 0.34, 0.62, 0.022, 790))
 	var duration := float(CUE_DURATIONS[kind])
 	var frame_count := roundi(duration * float(SAMPLE_RATE))
 	var samples := PackedFloat32Array()
