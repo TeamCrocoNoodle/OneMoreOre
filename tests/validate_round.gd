@@ -3,7 +3,7 @@ extends SceneTree
 const Round = preload("res://scripts/mining_round.gd")
 const Main = preload("res://scripts/main.gd")
 const Gem = preload("res://scripts/gem.gd")
-const RATES := [10, 50, 200, 1000, 5000, 25000]
+const RATES := [15, 60, 220, 800, 2400, 7200, 22000]
 
 var checks := 0
 var failures: Array[String] = []
@@ -40,7 +40,7 @@ func _run() -> void:
 func _validate_model() -> void:
 	var round_state := Round.new()
 	_check(round_state.phase == Round.Phase.READY and round_state.remaining == 30.0, "A fresh round waits with exactly 30 seconds")
-	_check(Round.STONE_GOLD == 1 and Round.GEM_GOLD == RATES, "Stone and all six grade rates use the shared published price table")
+	_check(Round.STONE_GOLD == 1 and Round.GEM_GOLD == RATES, "Stone and all seven grade rates use the shared published price table")
 	_check(not round_state.advance(12.0) and round_state.remaining == 30.0, "Waiting before the first swing does not consume mining time")
 	_check(not round_state.record_stone() and not round_state.record_gem(0), "A round cannot receive cargo before mining starts")
 	_check(not round_state.commit_settlement() and not round_state.new_round(), "Neither payment nor restart can skip the initial mining phase")
@@ -49,11 +49,11 @@ func _validate_model() -> void:
 	_check(not round_state.advance(-1.0) and not round_state.advance(NAN) and round_state.remaining == 1.0, "Invalid frame deltas cannot rewind or corrupt the deadline")
 	for i in 7:
 		_check(round_state.record_stone(), "Destroyed ordinary stone is accepted while mining")
-	var counts := PackedInt32Array([1, 2, 3, 4, 5, 6])
-	for tier in 6:
+	var counts := PackedInt32Array([1, 2, 3, 4, 5, 6, 7])
+	for tier in RATES.size():
 		for i in counts[tier]:
 			round_state.record_gem(tier)
-	_check(not round_state.record_gem(-1) and not round_state.record_gem(6) and round_state.gem_counts == counts, "All six valid grades have exact separate cargo quantities")
+	_check(not round_state.record_gem(-1) and not round_state.record_gem(7) and round_state.gem_counts == counts, "All seven valid grades have exact separate cargo quantities")
 	_check(round_state.advance(1.0) and round_state.remaining == 0.0 and round_state.phase == Round.Phase.DRAINING, "Reaching exactly 30 seconds expires before another award")
 	_check(not round_state.advance(2.0) and not round_state.record_stone() and not round_state.record_gem(5), "Expiry triggers once and rejects every later cargo award")
 	_check(round_state.ordinary_stones == 7 and round_state.gem_counts == counts, "Cargo from the last valid mining interval survives draining")
@@ -64,25 +64,25 @@ func _validate_model() -> void:
 	_check(round_state.begin_settlement() == report and round_state.wallet_gold == 0, "Repeated report requests cannot revalue cargo or pay twice")
 	_check(round_state.commit_settlement() and round_state.wallet_gold == total and round_state.phase == Round.Phase.COMPLETE, "Finishing settlement pays the exact total once")
 	_check(not round_state.commit_settlement() and round_state.wallet_gold == total, "Repeated settlement completion cannot duplicate payment")
-	_check(round_state.ordinary_stones == 0 and round_state.gem_counts == PackedInt32Array([0, 0, 0, 0, 0, 0]) and round_state.last_report == report, "Sold cargo clears while the final receipt remains readable")
+	_check(round_state.ordinary_stones == 0 and round_state.gem_counts == PackedInt32Array([0, 0, 0, 0, 0, 0, 0]) and round_state.last_report == report, "Sold cargo clears while the final receipt remains readable")
 	var prior_index := round_state.round_index
 	_check(round_state.new_round() and not round_state.new_round(), "Only a completed round can create its next round once")
 	_check(round_state.phase == Round.Phase.READY and round_state.remaining == 30.0 and round_state.wallet_gold == total and round_state.round_index == prior_index + 1 and round_state.last_report.is_empty(), "A fresh round resets cargo and time while retaining its wallet")
 	round_state.start()
 	round_state.advance(30.0)
 	var empty_report := round_state.begin_settlement()
-	_validate_report(empty_report, 0, PackedInt32Array([0, 0, 0, 0, 0, 0]), total)
+	_validate_report(empty_report, 0, PackedInt32Array([0, 0, 0, 0, 0, 0, 0]), total)
 	_check(round_state.commit_settlement() and round_state.wallet_gold == total, "An empty round completes normally without changing the wallet")
 
 
 func _validate_report(report: Dictionary, stones: int, counts: PackedInt32Array, wallet_before: int) -> int:
 	var expected := stones
 	var expected_rows := 1
-	for tier in 6:
+	for tier in RATES.size():
 		expected += counts[tier] * RATES[tier]
 		if counts[tier] > 0:
 			expected_rows += 1
-	_check(report.get("total", -1) == expected and report.get("wallet_before", -1) == wallet_before and report.get("wallet_after", -1) == wallet_before + expected, "Settlement total equals ordinary stones plus all six independent grade subtotals")
+	_check(report.get("total", -1) == expected and report.get("wallet_before", -1) == wallet_before and report.get("wallet_after", -1) == wallet_before + expected, "Settlement total equals ordinary stones plus all seven independent grade subtotals")
 	_check(report.get("ordinary_stones", -1) == stones and report.get("gem_counts", PackedInt32Array()) == counts, "The receipt retains the precise cargo snapshot")
 	var rows: Array = report.get("rows", [])
 	var seen := {}
@@ -92,8 +92,8 @@ func _validate_report(report: Dictionary, stones: int, counts: PackedInt32Array,
 		var tier := int(row.get("tier", -2))
 		valid = valid and not seen.has(tier)
 		seen[tier] = true
-		var quantity := stones if tier == -1 else (counts[tier] if tier >= 0 and tier < 6 else -1)
-		var rate: int = 1 if tier == -1 else (RATES[tier] if tier >= 0 and tier < 6 else -1)
+		var quantity := stones if tier == -1 else (counts[tier] if tier >= 0 and tier < RATES.size() else -1)
+		var rate: int = 1 if tier == -1 else (RATES[tier] if tier >= 0 and tier < RATES.size() else -1)
 		valid = valid and int(row.get("count", -1)) == quantity and int(row.get("unit_gold", -1)) == rate and int(row.get("gold", -1)) == quantity * rate
 		row_sum += int(row.get("gold", 0))
 	_check(valid and seen.has(-1) and row_sum == expected, "Receipt rows show each earned grade once with matching quantity, shared rate and subtotal")
@@ -122,7 +122,7 @@ func _validate_gameplay() -> void:
 			_check(false, "Subsequent impacts on the visible ordinary stone are accepted")
 			return
 	_check(state.ordinary_stones == 1 and game.hud.displayed_stones == 1 and game.effects.loose_chunks.size() > 1, "One destroyed stone counts once despite producing multiple physical fragments")
-	_check(state.gem_counts == PackedInt32Array([0, 0, 0, 0, 0, 0]), "Ordinary destruction does not invent a gem reward")
+	_check(state.gem_counts == PackedInt32Array([0, 0, 0, 0, 0, 0, 0]), "Ordinary destruction does not invent a gem reward")
 	game._physics_process(2.0)
 	var before_pause := state.remaining
 	game.notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
@@ -143,7 +143,7 @@ func _validate_gameplay() -> void:
 	owner_body.health = 1.0
 	state.advance(state.remaining - 0.125)
 	_check(game._mine_at(owner.screen), "The last valid fraction of a second can break a real gem owner")
-	var cargo := PackedInt32Array([0, 1, 0, 0, 0, 0])
+	var cargo := PackedInt32Array([0, 1, 0, 0, 0, 0, 0])
 	_check(state.gem_counts == cargo and state.ordinary_stones == 1, "A gem owner credits its exact grade at destruction and is excluded from ordinary-stone cargo")
 	_check(jewel.collected and jewel.is_emerging and game.collecting_gems.size() == 1 and game.hud.displayed_counts[Gem.SPECIAL] == 0, "The last-frame reward is credited while its real crystal still emerges, before HUD arrival")
 	var extraction: Dictionary = game.collecting_gems[0]
@@ -214,7 +214,7 @@ func _validate_gameplay() -> void:
 	var new_rock := int(game.rock_number)
 	game._next_round()
 	_check(state.phase == Round.Phase.READY and state.round_index == index_before + 1 and game.rock_number == new_rock and state.remaining == 30.0 and state.wallet_gold == total, "The next-round action runs once and retains wallet Gold with a fresh 30-second clock")
-	_check(game.collecting_gems.is_empty() and game.displayed_gems == PackedInt32Array([0, 0, 0, 0, 0, 0]) and game.hud.displayed_counts == game.displayed_gems and not game.hud.settlement_visible and not game.impact_pending and not game.mouse_down and game.touch_id == -1, "A fresh round clears old cargo, arrivals, modal, pending hits and pointer states")
+	_check(game.collecting_gems.is_empty() and game.displayed_gems == PackedInt32Array([0, 0, 0, 0, 0, 0, 0]) and game.hud.displayed_counts == game.displayed_gems and not game.hud.settlement_visible and not game.impact_pending and not game.mouse_down and game.touch_id == -1, "A fresh round clears old cargo, arrivals, modal, pending hits and pointer states")
 	await _finish_spawn()
 	game._process(0.016)
 	game._request_swing()
@@ -303,6 +303,8 @@ func _new_game() -> void:
 		game.queue_free()
 		await process_frame
 	game = Main.new()
+	# Ledger/input fixture has all ranks unlocked; campaign gates have their own suite.
+	game.campaign.cleared = 6
 	root.add_child(game)
 	game.set_process(false)
 	game.set_physics_process(false)

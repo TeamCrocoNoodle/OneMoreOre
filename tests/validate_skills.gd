@@ -1,452 +1,273 @@
 extends SceneTree
-## Graph rules, real confirmation controls, and upgrade effects in Main.
+## Reference graph, conditional skills, real world reactions and purchase UI.
 const Skills = preload("res://scripts/skill_tree.gd")
-const RoundModel = preload("res://scripts/mining_round.gd")
-const Gem = preload("res://scripts/gem.gd")
-const Pickaxe = preload("res://scripts/pickaxe.gd")
-const COSTS := {"vitality": 20, "recovery": 35, "power": 25, "speed": 40, "reach": 55, "appraisal": 30, "rich_ore": 40, "soft_ore": 50}
-const PURCHASE_ORDER := ["vitality", "recovery", "power", "speed", "reach", "appraisal", "rich_ore", "soft_ore"]
-const FULL_STATS := {"duration": 35.0, "recovery_per_gem": 1.0, "damage": 2.0, "attack_speed": 1.2, "attack_radius": 0.65, "gem_value_multiplier": 1.2, "extra_common_gems": 1, "stone_health_reduction": 1}
-
-class TestGame:
-	extends "res://scripts/main.gd"
-	func _spawn_rock(seed_override: int = -1, showcase: bool = false) -> void:
-		super._spawn_rock(12873 if seed_override < 0 else seed_override, showcase)
-
+const Runtime = preload("res://scripts/mining_skills.gd")
+const Round = preload("res://scripts/mining_round.gd")
+const Main = preload("res://scripts/main.gd")
 var checks := 0
-var failures: Array[String] = []
-var game: Node3D
-var ended := false
+var failures := 0
 
 func _initialize() -> void:
 	_run.call_deferred()
-	create_timer(45.0).timeout.connect(func():
-		if not ended:
-			push_error("SKILL_VALIDATION_TIMEOUT")
-			quit(2)
-	)
 
 func _run() -> void:
-	root.size = Vector2i(1152, 800)
-	root.content_scale_size = Vector2i(1440, 1000)
-	AudioServer.set_bus_mute(0, true)
 	_validate_graph()
-	_validate_round_effects()
-	if not "--model-only" in OS.get_cmdline_user_args():
-		await _validate_ui()
-		await _validate_gameplay()
-		await _validate_close_navigation()
-	if is_instance_valid(game):
-		_stop_audio(game)
-		game.queue_free()
+	_validate_combat()
+	_validate_stamina_and_rewards()
+	await _validate_game()
+	print("SKILL_VALIDATION checks=%d failures=%d" % [checks, failures])
+	quit(0 if failures == 0 else 1)
+
+func _validate_graph() -> void:
+	var model := Skills.new()
+	var cells := {}
+	var ids := {}
+	var categories := {}
+	for node: Dictionary in model.get_nodes():
+		_check(not ids.has(node.id), "Unique id: " + str(node.id))
+		_check(not cells.has(node.grid), "Unoccupied integer cell: %s %s (previous %s)" % [node.id, node.grid, cells.get(node.grid, "")])
+		_check(node.grid is Vector2i and not str(node.icon).is_empty() and not str(node.description).is_empty(), "Grid/icon/description: " + str(node.id))
+		ids[node.id] = true
+		cells[node.grid] = node.id
+		categories[node.category] = int(categories.get(node.category, 0)) + 1
+	_check(ids.size() == 138, "All reference boxes plus the central starting pickaxe are present")
+	# A connection must not look as though it also unlocks an unrelated card.
+	for edge: Array in model.get_edges():
+		var a := Vector2(model.get_node(edge[0]).grid)
+		var b := Vector2(model.get_node(edge[1]).grid)
+		var clear := true
+		for cell: Vector2i in cells:
+			if cells[cell] in edge:
+				continue
+			var p := Vector2(cell)
+			var h := 0.28
+			for segment: Array in [[Vector2(-h,-h), Vector2(h,-h)], [Vector2(h,-h), Vector2(h,h)], [Vector2(h,h), Vector2(-h,h)], [Vector2(-h,h), Vector2(-h,-h)]]:
+				if Geometry2D.segment_intersects_segment(a, b, p + segment[0], p + segment[1]) != null:
+					clear = false
+		_check(clear, "Connection avoids unrelated cards: %s" % str(edge))
+	var visible: Array[String] = []
+	for id: String in ids:
+		if model.is_visible(id):
+			visible.append(id)
+	visible.sort()
+	_check(visible == ["income_2", "origin", "rich_ore", "speed", "vitality"], "Only the root and four reference branch entries are initially visible")
+	_check(not model.purchase("critical", 999999).ok and not model.purchase("speed", 0).ok, "Hidden and unaffordable purchases are rejected")
+	_check(model.stats().damage == 1.0 and model.stats().duration == 30.0, "The owned starting pickaxe preserves the initial 1 damage / 30 health")
+	var gold := 1000000000
+	var bought := 0
+	while bought < ids.size() - 1:
+		var progress := false
+		for node: Dictionary in model.get_nodes():
+			if model.can_purchase(node.id, gold):
+				var purchase: Dictionary = model.purchase(node.id, gold)
+				_check(purchase.ok and purchase.gold == gold - node.cost, "One exact debit: " + str(node.id))
+				gold = purchase.gold
+				_check(not model.purchase(node.id, gold).ok, "No duplicate purchase: " + str(node.id))
+				bought += 1
+				progress = true
+		if not progress:
+			break
+	_check(bought == ids.size() - 1, "Every node is reachable through neighbor purchases")
+	var s := model.stats()
+	_check(s.duration == 46.0 and is_equal_approx(s.drain_rate, 0.82) and s.revive_count == 2, "Four max-health, three drain and two revival stages aggregate")
+	_check(is_equal_approx(s.gem_spawn_bonus, 0.06) and is_equal_approx(s.rare_spawn_bonus, 0.12), "Five mineral and three rarity probability nodes aggregate")
+	_check(is_equal_approx(s.healing_amount_bonus, 0.5) and is_equal_approx(s.crit_chance_bonus, 0.15), "Corrected healing branch and three critical chances aggregate")
+	print("REFERENCE_GRAPH nodes=", ids.size(), " edges=", model.get_edges().size(), " categories=", categories)
+
+func _runtime(changes: Dictionary) -> RefCounted:
+	var value := Runtime.new()
+	var s: Dictionary = Skills.new().stats()
+	s.merge(changes, true)
+	value.configure(s)
+	value.random.seed = 91077
+	return value
+
+func _validate_combat() -> void:
+	var r := _runtime({"combo": 1.0, "combo_speed": 1.0})
+	for i in 9:
+		r.on_break(false, false)
+	_check(r.combo == 0, "Combo requires ten broken chunks")
+	r.on_break(false, false)
+	_check(r.combo == 1 and r.combo_remaining > 0, "Tenth break grants a timed combo")
+	var early: float = r.combo_remaining
+	for i in 50:
+		r.on_break(false, false)
+	_check(r.combo == 6 and r.combo_remaining < early and r.speed(30, 30) > 1.0, "Growing combo shortens its refresh deadline and unlocks speed above five stacks")
+	var damage: Dictionary = r.damage({}, 1, false, false, 1.0, 1)
+	_check(is_equal_approx(damage.damage, 1.06), "Six stacks add six percent base attack")
+	r.advance(10.0)
+	_check(r.combo == 0 and r.combo_kills == 0, "Combo and partial stack progress expire")
+	r = _runtime({"critical": 1.0, "crit_chance_bonus": 1.0, "extra": 1.0, "extra_chance_bonus": 1.0, "extra_count_bonus": 3.0, "extra_critical": 1.0})
+	for i in 4:
+		r.begin_attack(123)
+	_check(r.extra_charges == 0, "Extra hits cannot trigger before the fifth basic attack")
+	var context: Dictionary = r.begin_attack(123)
+	_check(context.critical and r.extra_charges == 4, "Fifth critical grants all upgraded extra-hit charges")
+	r.stats.crit_chance_bonus = -0.10
+	for i in 4:
+		context = r.begin_attack(123)
+		_check(context.extra and context.critical, "Every charged extra inherits the qualifying fifth critical")
+	_check(r.extra_charges == 0 and r.attacks == 5, "Extra hits do not recursively charge more extra hits")
+	r = _runtime({"execute": 1.0, "first_damage": 0.3, "ore_damage": 0.25, "finisher": 1.0, "crowd": 1.0, "streak": 1.0})
+	r.begin_attack(71)
+	damage = r.damage({}, 71, true, true, 0.2, 12)
+	_check(damage.execute and is_equal_approx(damage.damage, 2.35), "First/ore/low-health/capped crowd bonuses combine before execution")
+	_check(not r.damage({}, 71, false, true, 0.2, 1).execute, "Execution never rolls on previously hit stone")
+	r.begin_attack(71)
+	_check(r.streak == 1 and is_equal_approx(r.damage({}, 71, false, false, 1, 1).damage, 1.08), "Consecutive direct target increases damage")
+	r.begin_attack(99)
+	_check(r.streak == 0, "Changing direct target resets focus stacks")
+	r = _runtime({"low_health": 1.0, "spent_range": 1.0, "gem_buff": 1.0, "gem_pickup_gold": 4, "recovery_per_gem": 2.0})
+	_check(r.speed(5, 30) > r.speed(30, 30) and r.radius(15) > r.radius(0), "Low remaining health and spent-health threshold affect separate stats")
+	var reward: Dictionary = r.on_gem()
+	_check(reward.gold == 4 and reward.heal == 2.0 and r.buff in [0, 1, 2] and r.buff_remaining == 5.0, "Gem grants gold, healing and one timed blessing")
+	r.advance(5.1)
+	_check(r.buff == -1, "Blessing expires")
+	r = _runtime({"gold_drop": 1.0, "drop_chance_bonus": 1.0, "break_heal": 1.0, "break_heal_chance_bonus": 1.0, "crit_gold": 3, "execute_gold": 5})
+	reward = r.on_break(true, true)
+	_check(reward.gold == 11 and is_equal_approx(reward.heal,0.35), "Independent drop, critical, execution and heal rewards accumulate once")
+	r.reset_round()
+	_check(r.attacks == 0 and r.extra_charges == 0 and r.combo == 0, "New rounds clear temporary combat state")
+
+func _validate_stamina_and_rewards() -> void:
+	var session := Round.new()
+	session.apply_stats({"drain_rate": 0.5, "revive_count": 2, "revive_fraction": 0.2, "income_multiplier": 1.2, "golden_chance": 1.0, "golden_pity": 0.02})
+	session.golden_failures = 4
+	session.start()
+	for i in 3:
+		session.record_stone()
+	session.record_gem(0, 1.5)
+	session.record_bonus_gold(7)
+	_check(not session.advance(60) and session.remaining == 6 and session.revives_used == 1 and session.spent == 30, "Slower drain and first revival preserve exact spent health")
+	_check(not session.advance(12) and session.revives_used == 2 and session.remaining == 6, "Second revival is independent of the first")
+	_check(session.advance(12) and session.phase == Round.Phase.DRAINING, "Exhausting the last life enters settlement exactly once")
+	var report: Dictionary = session.begin_settlement()
+	_check(report.total == 80 and report.golden_day and report.subtotal == 26, "(3 stone + 23 brilliant gem + 7 bonus) × 1.2 × 2 = 80 Gold")
+	var sum := 0
+	for row: Dictionary in report.rows:
+		sum += int(row.gold)
+	_check(sum == report.total and session.golden_failures == 0, "Visible rows reconcile and winning resets pity")
+	var state := session.reward_random.state
+	_check(session.begin_settlement().total == 80 and session.reward_random.state == state, "Reopening settlement cannot reroll golden day")
+	_check(session.commit_settlement() and not session.commit_settlement() and session.wallet_gold == 80, "Payment is idempotent")
+	session.new_round()
+	_check(session.revives_used == 0 and session.spent == 0 and session.remaining == 30 and session.bonus_gold == 0, "Only a new round restores lives and clears cargo")
+	session.apply_stats({"golden_chance": 0.000001, "golden_pity": 0.01})
+	session.reward_random.seed = 343
+	session.start()
+	session.record_stone()
+	session.advance(30)
+	report = session.begin_settlement()
+	_check(not report.golden_day and session.golden_failures == 1, "A failed eligible settlement increases pity")
+
+func _validate_game() -> void:
+	root.size = Vector2i(1152, 800)
+	var game := Main.new()
+	root.add_child(game)
+	game.set_process(false)
+	game.set_physics_process(false)
+	game.pickaxe.set_process(false)
+	game.focused = true
+	game.spawn_time = 1.0
+	await physics_frame
+	await process_frame
+	game.round_state.wallet_gold = 500
+	game._open_upgrades()
+	await process_frame
+	_check(game.skill_ui.get_visible_node_ids().size() == 5, "Real UI respects the initial fog of undiscovered nodes")
+	for dimensions: Vector2i in [Vector2i(360, 800), Vector2i(800, 450), Vector2i(1152, 800)]:
+		root.size = dimensions
+		await process_frame
+		var ui: Node = game.skill_ui
+		for id: String in ui.get_visible_node_ids():
+			var card: Rect2 = ui._node_rects[id]
+			_check(card.position.x >= 0 and card.end.x <= ui._view.x and card.position.y >= ui._header_height + 50 and card.end.y <= ui._view.y, "Initial frontier fits below the header at %s: %s" % [dimensions, id])
+	var initial_point: Vector2 = game.skill_ui.get_node_screen("speed")
+	var hover := InputEventMouseMotion.new()
+	hover.position = initial_point
+	root.push_input(hover, true)
+	await process_frame
+	await _click(initial_point)
+	_check(game.skill_ui.selected_id == "speed" and game.round_state.wallet_gold == 500, "Node click only opens the check button")
+	await _click(game.skill_ui.get_node_screen("vitality"))
+	_check(game.skill_ui.selected_id.is_empty() and game.round_state.wallet_gold == 500, "Another click cancels without spending")
+	await _click(game.skill_ui.get_node_screen("speed"))
+	await _click(game.skill_ui.get_confirmation_rect().get_center())
+	_check(game.upgrades.is_unlocked("speed") and game.round_state.wallet_gold == 440 and is_equal_approx(game.upgrade_stats.attack_speed, 1.16), "The actual confirmation applies gameplay and debits Gold")
+	_check(game.skill_ui.get_visible_node_ids().has("reach") and not game.skill_ui.get_visible_node_ids().has("critical"), "Purchase reveals exactly the next graph frontier")
+	game.skill_ui.close_tree()
+	game.round_state.apply_stats({"drain_rate": 0.5})
+	game._process(0.0)
+	_check(game.round_state.remaining == 30.0 and game.hud._remaining == 60.0, "Slower stamina drain displays actual remaining seconds on the existing countdown")
+	# Isolate deterministic world reactions from independently tested chance rolls.
+	game.upgrade_stats = Skills.new().stats()
+	game.mining_skills.configure(game.upgrade_stats)
+	game.round_state.apply_stats(game.upgrade_stats)
+	game._spawn_rock(98173)
+	game.spawn_time = 1.0
+	game._start_round()
+	game.round_state.remaining = 15.0
+	var source: StaticBody3D = game.chunks[0]
+	source.configure_special("resonance")
+	source.max_health = 20
+	source.health = 20
+	var health_before := {}
+	for chunk in game.chunks:
+		health_before[chunk.get_instance_id()] = chunk.health
+	var point: Vector3 = source.to_global(source.face_center)
+	game._damage_chunk({"collider": source, "position": point, "normal": source.direction}, Vector2(400, 350))
+	_check(not game._reactions.is_empty(), "A real resonance hit queues adjacent damage")
+	game._drain_reactions()
+	var neighbors_damaged := 0
+	for chunk in game.chunks:
+		if chunk != source and chunk.health < float(health_before[chunk.get_instance_id()]):
+			neighbors_damaged += 1
+	_check(neighbors_damaged > 0 and neighbors_damaged <= 3, "The real world applies at most three reaction targets per frame")
+	game._reactions.clear()
+	var healer: StaticBody3D = game.chunks[1]
+	healer.configure_special("healing")
+	healer.health = 0.25
+	point = healer.to_global(healer.face_center)
+	var before: float = game.round_state.remaining
+	game._damage_chunk({"collider": healer, "position": point, "normal": healer.direction}, Vector2(400, 350))
+	_check(game.round_state.remaining == before + 1.0, "A real healing chunk restores stamina on destruction")
+	var gold_chunk: StaticBody3D = game.chunks[2]
+	gold_chunk.configure_special("gold_stone")
+	gold_chunk.health = 0.25
+	point = gold_chunk.to_global(gold_chunk.face_center)
+	game._damage_chunk({"collider": gold_chunk, "position": point, "normal": gold_chunk.direction}, Vector2(400, 350))
+	_check(game.round_state.bonus_gold == 90, "A real gold chunk adds its gold once to the round ledger")
+	var bomb: StaticBody3D = game.chunks[3]
+	bomb.configure_special("bomb")
+	bomb.health = 0.25
+	point = bomb.to_global(bomb.face_center)
+	game._damage_chunk({"collider": bomb, "position": point, "normal": bomb.direction}, Vector2(400, 350))
+	_check(not game._reactions.is_empty(), "Destroying a bomb queues real neighboring damage")
+	game._spawn_rock(98174)
+	_check(game._reactions.is_empty() and game.round_state.remaining == before + 1.0, "Changing rocks clears reactions without resetting round stamina")
+	# This fixture verifies unlocked rare-roll upgrades; boss tests cover rank caps.
+	game.campaign.cleared = 6
+	game.upgrade_stats.rare_spawn_bonus = 1.0
+	game.upgrade_stats.brilliant = 1.0
+	game.upgrade_stats.brilliant_chance_bonus = 1.0
+	game.upgrade_stats.gem_spawn_bonus = 1.0
+	game._spawn_rock(98175)
+	var valid: bool = game.gems.size() == game.ore_profile.gem_cap
+	for gem in game.gems:
+		valid = valid and gem.grade >= 2 and gem.is_embedded and gem.get_meta("brilliant", false) and float(gem.get_meta("value_multiplier", 1.0)) > 1.0
+	_check(valid, "At 100% spawn chance, the stage cap contains distinct hidden, higher-grade brilliant gems without overfilling either layer")
+	_stop_audio(game)
+	game.queue_free()
+	await process_frame
 	await process_frame
 	var deadline := Time.get_ticks_usec() + 40000
 	while Time.get_ticks_usec() < deadline:
 		await process_frame
-	ended = true
-	print("SKILL_VALIDATION checks=%d failures=%d" % [checks, failures.size()])
-	quit(0 if failures.is_empty() else 1)
-
-func _validate_graph() -> void:
-	var model := Skills.new()
-	var nodes: Array[Dictionary] = model.get_nodes()
-	var edges: Array = model.get_edges()
-	var ids: Array[String] = []
-	var cells: Array[Vector2i] = []
-	for node in nodes:
-		_check(not ids.has(node.id) and not cells.has(node.grid), "Each skill has a unique identity and grid position")
-		ids.append(node.id)
-		cells.append(node.grid)
-		if node.id != "origin":
-			_check(COSTS.get(node.id, -1) == node.cost, "The eight actual upgrades retain their specified purchase prices")
-	_check(nodes.size() == 9 and model.is_unlocked("origin"), "A new nine-node graph begins with exactly its origin owned")
-	var initial: Array[String] = []
-	for id in ids:
-		if model.is_visible(id):
-			initial.append(id)
-	initial.sort()
-	_check(initial == ["appraisal", "origin", "power", "rich_ore", "vitality"], "Only the origin and its four immediate neighbors are initially revealed")
-	var unique_edges := {}
-	for edge: Array in edges:
-		var sorted_edge: Array = edge.duplicate()
-		sorted_edge.sort()
-		var key := str(sorted_edge)
-		_check(edge.size() == 2 and ids.has(edge[0]) and ids.has(edge[1]) and edge[0] != edge[1] and not unique_edges.has(key), "Graph edges join two real distinct nodes without duplicate undirected links")
-		unique_edges[key] = true
-	var hidden := model.purchase("speed", 1000)
-	_check(not hidden.ok and hidden.gold == 1000 and hidden.reason == "hidden" and not model.is_unlocked("speed"), "Money alone cannot buy a node beyond the revealed frontier")
-	var poor := model.purchase("power", 24)
-	_check(not poor.ok and poor.gold == 24 and poor.reason == "insufficient_gold", "An unaffordable purchase leaves both ownership and wallet untouched")
-	_check(not model.can_purchase("unknown", 999) and not model.purchase("unknown", 999).ok, "Unknown IDs cannot enter the owned graph")
-	_check(not model.can_purchase("origin", 999), "The starting node cannot be purchased again")
-	var gold := 1000
-	for id: String in PURCHASE_ORDER:
-		var before := gold
-		_check(model.can_purchase(id, gold), "A connected purchase becomes available through an owned neighbor")
-		var result := model.purchase(id, gold)
-		gold = int(result.gold)
-		_check(result.ok and gold == before - int(COSTS[id]) and model.is_unlocked(id), "A purchase spends exactly its cost and unlocks exactly once")
-		var duplicate := model.purchase(id, gold)
-		_check(not duplicate.ok and duplicate.gold == gold and duplicate.reason == "already_unlocked", "Repeated confirmation cannot purchase the same upgrade twice")
-		for candidate: String in ids:
-			var expected: bool = model.is_unlocked(candidate)
-			for edge: Array in edges:
-				expected = expected or (edge[0] == candidate and model.is_unlocked(edge[1])) or (edge[1] == candidate and model.is_unlocked(edge[0]))
-			_check(model.is_visible(candidate) == expected, "Visibility follows owned-neighbor graph adjacency after each purchase")
-	_check(gold == 705 and model.stats() == FULL_STATS, "All eight purchases cost 295 gold and yield the specified eight gameplay effects")
-	_check(Skills.new().stats().damage == 1.0 and not Skills.new().is_unlocked("power"), "Independent playthroughs do not share purchased skills")
-
-func _validate_round_effects() -> void:
-	var state := RoundModel.new()
-	state.apply_stats(FULL_STATS)
-	_check(state.duration == 35.0 and state.remaining == 35.0, "Vitality configures the actual round duration and its ready timer")
-	state.start()
-	state.advance(8.0)
-	_check(state.recover(1.0) == 1.0 and state.remaining == 28.0, "Recovery restores one real second while mining")
-	_check(state.recover(100.0) == 7.0 and state.remaining == 35.0, "Recovery is capped by the upgraded maximum time")
-	_check(state.recover(-1.0) == 0.0 and state.recover(NAN) == 0.0, "Invalid recovery cannot corrupt the deadline")
-	state.apply_stats({"duration": 90.0, "gem_value_multiplier": 9.0})
-	_check(state.duration == 35.0 and state.gem_value_multiplier == 1.2, "Stats cannot change the live round or its cargo valuation mid-run")
-	for i in 3:
-		state.record_stone()
-	for tier in 6:
-		state.record_gem(tier)
-	state.advance(35.0)
-	_check(state.recover(1.0) == 0.0 and state.remaining == 0.0, "A gem cannot revive an already expired round")
-	var receipt := state.begin_settlement()
-	var rates := [1, 12, 60, 240, 1200, 6000, 30000]
-	var rows: Array = receipt.rows
-	for i in rows.size():
-		_check(int(rows[i].unit_gold) == rates[i], "Appraisal raises each real gem sale price while stone remains one gold")
-	_check(receipt.total == 37515 and state.commit_settlement() and state.wallet_gold == 37515, "The upgraded sale receipt commits its exact independent price sum")
-	_check(state.new_round() and state.remaining == 35.0, "The next round retains the purchased maximum duration")
-
-func _validate_ui() -> void:
-	await _new_game()
-	game.round_state.wallet_gold = 100
-	game.aim_position = Vector2(160, 400)
-	_check(game.ray_at(game.aim_position).is_empty(), "The pending-input fixture prepares an empty-air swing without starting a mining round")
-	game._request_swing()
-	game.impact_pending = true
-	var shortcut := InputEventKey.new()
-	shortcut.physical_keycode = KEY_U
-	shortcut.pressed = true
-	game._input(shortcut)
-	await process_frame
-	var ui: Node = game.skill_ui
-	_check(ui.is_open and game.round_state.phase == RoundModel.Phase.READY, "The real upgrade entry opens between rounds without starting the timer")
-	_check(not game.pickaxe.is_swinging and not game.impact_pending and game.pending_rock_number == -1, "Opening the tree cancels a prepared swing and all pending mining input")
-	var controller := InputEventJoypadButton.new()
-	controller.button_index = JOY_BUTTON_Y
-	controller.pressed = true
-	game._input(controller)
-	_check(not ui.is_open, "Controller Y closes the same real upgrade window")
-	game._input(controller)
-	_check(ui.is_open, "Controller Y can reopen the between-round upgrade window")
-	var initial_gold: int = game.round_state.wallet_gold
-	var power: Vector2 = ui.get_node_screen("power")
-	await _hover(power)
-	_check(ui.hovered_id == "power" and ui.selected_id.is_empty() and ui.get_confirmation_rect().size == Vector2.ZERO, "Hover reveals information without selecting or spending gold")
-	await _click(power)
-	_check(ui.selected_id == "power" and ui.get_confirmation_rect().size.x > 0.0 and game.round_state.wallet_gold == initial_gold and not game.upgrades.is_unlocked("power"), "Clicking an affordable node opens confirmation without purchasing it")
-	await _click(ui.get_node_screen("vitality"))
-	_check(ui.selected_id.is_empty() and game.round_state.wallet_gold == initial_gold, "Clicking elsewhere cancels the pending purchase instead of spending")
-	await _click(power)
-	await _click(ui.get_confirmation_rect().get_center())
-	_check(game.upgrades.is_unlocked("power") and game.round_state.wallet_gold == 75, "Only the real confirmation Button spends gold through Main")
-	_check(game.upgrades.is_visible("speed") and not game.upgrades.is_unlocked("speed"), "Buying power reveals its adjacent speed node without granting it")
-	game._purchase_upgrade("power")
-	_check(game.round_state.wallet_gold == 75, "Repeated Main purchase requests cannot charge an owned node")
-	game.round_state.wallet_gold = 0
-	ui.refresh(0)
-	await _click(ui.get_node_screen("vitality"))
-	if ui.get_confirmation_rect().size.x > 0.0:
-		await _click(ui.get_confirmation_rect().get_center())
-	_check(not game.upgrades.is_unlocked("vitality") and game.round_state.wallet_gold == 0, "Unaffordable confirmation cannot change actual ownership or make gold negative")
-	ui.close_tree()
-	game._start_round()
-	game.round_state.wallet_gold = 1000
-	game._open_upgrades()
-	game._purchase_upgrade("vitality")
-	_check(not ui.is_open and not game.upgrades.is_unlocked("vitality") and game.round_state.wallet_gold == 1000 and game.round_state.phase == RoundModel.Phase.MINING, "The tree and purchases stay unavailable during active mining even with sufficient gold")
-	await _new_game()
-	game.round_state.wallet_gold = 1000
-	game._open_upgrades()
-	await process_frame
-	ui = game.skill_ui
-	var concealed: Vector2 = ui.get_node_screen("speed")
-	if not concealed.is_finite():
-		concealed = ui.get_node_screen("origin") + (ui.get_node_screen("power") + ui.get_node_screen("appraisal") - ui.get_node_screen("origin") * 2.0)
-	await _hover(concealed)
-	await _click(concealed)
-	_check(ui.selected_id.is_empty() and ui.hovered_id != "speed" and game.round_state.wallet_gold == 1000 and not game.upgrades.is_unlocked("speed"), "A hidden grid node has no interactive hit target even with sufficient gold")
-	ui.close_tree()
-
-func _validate_gameplay() -> void:
-	await _new_game()
-	var baseline_health: Array[float] = []
-	var baseline_covers: Array[bool] = []
-	for chunk in game.chunks:
-		baseline_health.append(chunk.max_health)
-		baseline_covers.append(chunk.is_gem_cover)
-	game.round_state.wallet_gold = 1000
-	game._open_upgrades()
-	for id: String in PURCHASE_ORDER:
-		game._purchase_upgrade(id)
-	game.skill_ui.close_tree()
-	_check(game.upgrades.stats() == FULL_STATS and game.round_state.wallet_gold == 705, "Main applies the complete purchased model without free upgrades")
-	_check(game.round_state.duration == 35.0 and game.round_state.remaining == 35.0 and is_equal_approx(game.pickaxe.speed_multiplier, 1.2), "Main applies purchased duration and animation speed to the live round and pickaxe")
-	game._spawn_rock(12873, false)
-	await _finish_spawn()
-	var counts := [0, 0, 0, 0, 0, 0]
-	var health_correct: bool = game.chunks.size() == baseline_health.size()
-	for i in game.chunks.size():
-		var chunk: StaticBody3D = game.chunks[i]
-		if not chunk.is_gem_cover:
-			# Rich ore may select a different host; compare ordinary geometry
-			# only where both otherwise-identical seeded ores have normal stone.
-			if not baseline_covers[i]:
-				health_correct = health_correct and is_equal_approx(chunk.max_health, maxf(1.0, baseline_health[i] - 1.0))
-		else:
-			health_correct = health_correct and chunk.max_health >= 16.0
-	for jewel in game.gems:
-		counts[jewel.grade] += 1
-		_check(jewel.is_embedded and not jewel.visible and jewel.host_chunk.get_ref().is_gem_cover, "Extra ore gems remain actually buried in owning chunks")
-	_check(counts == [4, 1, 0, 0, 0, 0], "Rich ore adds one ordinary gem to the next real random starter")
-	_check(health_correct, "Soft ore reduces actual ordinary stone health by one with a floor of one, preserving gem covers")
-	await _validate_damage_and_reach()
-	await _validate_collection_recovery()
-
-func _validate_damage_and_reach() -> void:
-	# Search a real surface seam, then validate actual damage independently of
-	# the selector's returned count. Healthy fixture bodies prevent early breaks.
-	for chunk in game.chunks:
-		chunk.health = 20.0
-		chunk.max_health = 20.0
-	var target := Vector2.INF
-	var primary: Dictionary = {}
-	var surrounding: Array[Dictionary] = []
-	for chunk in game.chunks:
-		if chunk.layer_index != 0:
-			continue
-		for corner: Vector3 in chunk.face_points:
-			var local: Vector3 = chunk.face_center.lerp(corner, 0.88)
-			var screen: Vector2 = game.camera.unproject_position(chunk.mesh_instance.to_global(local))
-			var ray: Dictionary = game.ray_at(screen)
-			if ray.is_empty() or ray.collider != chunk or game.hud.is_pointer_blocked(screen):
-				continue
-			var candidates: Array[Dictionary] = game._area_targets(screen, ray)
-			if candidates.size() == 2 and candidates.all(func(entry: Dictionary): return not entry.hit.collider.is_gem_cover):
-				target = screen
-				primary = ray
-				surrounding = candidates
-				break
-		if target.is_finite():
-			break
-	_check(target.is_finite() and surrounding.size() == 2, "A real starter surface seam can use both extra reach contacts")
-	if not target.is_finite():
-		return
-	var selected: Array[StaticBody3D] = [primary.collider]
-	for contact in surrounding:
-		var independent_ray: Dictionary = game.ray_at(contact.screen)
-		_check(not selected.has(contact.hit.collider) and independent_ray.get("collider") == contact.hit.collider and Vector3(contact.hit.position).distance_to(primary.position) <= 0.65001, "Each extra contact is a distinct first visible ray hit within the physical reach radius")
-		selected.append(contact.hit.collider)
-	game.focused = true
-	_check(game._mine_at(target), "The upgraded swing mines a real surface seam")
-	var affected := 0
-	for chunk in game.chunks:
-		if chunk.health != 20.0:
-			affected += 1
-		_check(is_equal_approx(chunk.health, 18.0 if selected.has(chunk) else 20.0), "Power deals exactly two damage to each selected surface stone and leaves every unselected layer unchanged")
-	_check(affected == 3, "Reach adds exactly two contacts to the primary hit without recursive area damage")
-	# Save the hidden backing hit before the front fragments are removed. All
-	# targets are pre-resolved, so this same swing must not damage it afterward.
-	var query := PhysicsRayQueryParameters3D.create(game.camera.project_ray_origin(target), game.camera.project_ray_origin(target) + game.camera.project_ray_normal(target) * 40.0, 3)
-	var excluded: Array[RID] = []
-	for chunk in selected:
-		excluded.append(chunk.get_rid())
-		chunk.health = 1.0
-	query.exclude = excluded
-	var backing: Dictionary = game.get_world_3d().direct_space_state.intersect_ray(query)
-	var backing_body: StaticBody3D = backing.get("collider") as StaticBody3D
-	var backing_health: float = backing_body.health if is_instance_valid(backing_body) else -1.0
-	_check(game._mine_at(target), "A wide fatal strike still resolves its visible contacts before breaking them")
-	_check(not is_instance_valid(backing_body) or backing_body.health == backing_health, "Destroying the front contacts does not drill the same attack into the newly exposed backing layer")
-	await physics_frame
-	# Cooldown and animation must both accelerate, keeping one impact per swing.
-	game.aim_position = target
-	game.swing_cooldown = 0.0
-	game._wait_for_mine_release = false
-	game._request_swing()
-	_check(game.pickaxe.is_swinging and is_equal_approx(game.swing_cooldown, 0.25), "The purchased speed changes Main's real attack interval from .30 to .25 seconds")
-	if game.pickaxe.is_swinging:
-		game.pickaxe._process(Pickaxe.SWING_DURATION / 1.2 + 0.001)
-		_check(not game.pickaxe.is_swinging, "The real pickaxe animation completes in the accelerated duration")
-	game.impact_pending = false
-
-func _validate_collection_recovery() -> void:
-	var jewel: StaticBody3D = game.gems[0]
-	var owner: StaticBody3D = jewel.host_chunk.get_ref()
-	for chunk in game.chunks:
-		chunk.collision_layer = 1 if chunk == owner else 0
-	game.shell.quaternion = Quaternion(owner.direction, game.camera.global_basis.z.normalized())
-	await physics_frame
-	game.focused = true
-	game._start_round()
-	game._advance_round(maxf(game.round_state.remaining - 10.0, 0.0))
-	var before: float = game.round_state.remaining
-	owner.health = 1.0
-	var screen: Vector2 = game.camera.unproject_position(owner.mesh_instance.to_global(owner.face_center))
-	_check(game.ray_at(screen).get("collider") == owner and game._mine_at(screen), "The recovery fixture destroys an actual gem-owning stone through Main physics")
-	_check(jewel.collected and game.round_state.remaining == before + 1.0 and game.round_state.gem_counts[jewel.grade] == 1, "Real gem discovery immediately restores one second and records one gem")
-	game._collect_gem(jewel)
-	_check(game.round_state.remaining == before + 1.0 and game.round_state.gem_counts[jewel.grade] == 1, "Repeated collection cannot repeatedly recover time or duplicate cargo")
-
-func _validate_close_navigation() -> void:
-	await _new_game()
-	game.using_controller = true
-	var original_rotation: Quaternion = game.shell.quaternion
-	var original_aim: Vector2 = game.aim_position
-	Input.action_press("orbit_right")
-	Input.action_press("aim_right")
-	game._open_upgrades()
-	game._process(0.016)
-	game.skill_ui.close_tree()
-	game._process(0.016)
-	_check(game.shell.quaternion.is_equal_approx(original_rotation) and game.aim_position.is_equal_approx(original_aim), "Held navigation used around the tree does not move the rock or aim when it closes")
-	Input.action_release("orbit_right")
-	game._process(0.016)
-	_check(game.aim_position.is_equal_approx(original_aim), "Releasing only one held navigation stick does not prematurely resume the other")
-	Input.action_release("aim_right")
-	game._process(0.016)
-	Input.action_press("orbit_right")
-	Input.action_press("aim_right")
-	game._process(0.016)
-	_check(not game.shell.quaternion.is_equal_approx(original_rotation) and not game.aim_position.is_equal_approx(original_aim), "Fresh navigation works again after both sticks return to neutral")
-	Input.action_release("orbit_right")
-	Input.action_release("aim_right")
-	game.round_state.wallet_gold = 100
-	game._open_upgrades()
-	await _joy(JOY_BUTTON_DPAD_RIGHT)
-	var chosen: String = game.skill_ui._focused_id
-	_check(chosen != "origin" and game.upgrades.can_purchase(chosen, 100), "Actual controller D-pad navigation focuses a purchasable adjacent skill")
-	await _joy(JOY_BUTTON_A)
-	_check(game.skill_ui.selected_id == chosen and game.round_state.wallet_gold == 100, "Actual controller A selects the skill without spending")
-	await _joy(JOY_BUTTON_B)
-	_check(game.skill_ui.selected_id.is_empty() and game.skill_ui.is_open, "Actual controller B cancels the selection before closing the tree")
-	await _joy(JOY_BUTTON_A)
-	await _joy(JOY_BUTTON_A)
-	_check(game.upgrades.is_unlocked(chosen) and game.round_state.wallet_gold == 100 - int(COSTS[chosen]), "A second actual controller A confirms exactly one purchase")
-	await _joy(JOY_BUTTON_B)
-	_check(not game.skill_ui.is_open, "Actual controller B closes an unselected skill tree")
-	for keyboard in [false, true]:
-		game._start_round()
-		game._advance_round(game.round_state.remaining)
-		game._process(0.0)
-		game.hud.finish_settlement()
-		game._process(0.0)
-		_check(game.round_state.phase == RoundModel.Phase.COMPLETE, "The shortcut fixture finishes a real empty round before opening upgrades")
-		game._open_upgrades()
-		game.skill_ui.close_tree()
-		await process_frame
-		_check(root.gui_get_focus_owner() == game.hud._replay, "Closing upgrades from a completed round restores the real replay Button's focus")
-		var before_index: int = game.round_state.round_index
-		var accept: InputEvent
-		if keyboard:
-			var key := InputEventKey.new()
-			key.keycode = KEY_ENTER
-			key.physical_keycode = KEY_ENTER
-			key.pressed = true
-			accept = key
-		else:
-			var button := InputEventJoypadButton.new()
-			button.device = 3
-			button.button_index = JOY_BUTTON_A
-			button.pressed = true
-			accept = button
-		_check(accept.is_action_pressed("ui_accept"), "The actual Enter/A event is mapped to the project's UI accept action: %s" % str(InputMap.action_get_events("ui_accept")))
-		root.push_input(accept, true)
-		await process_frame
-		accept = accept.duplicate()
-		accept.pressed = false
-		root.push_input(accept, true)
-		await process_frame
-		_check(game.round_state.phase == RoundModel.Phase.READY and game.round_state.round_index == before_index + 1, "Actual %s activates replay after returning from upgrades (phase=%d round=%d expected=%d)" % ["Enter" if keyboard else "controller A", game.round_state.phase, game.round_state.round_index, before_index + 1])
-		await _finish_spawn()
-	# Reproduce the two narrow-layout faults found in actual rendered captures.
-	game.round_state.wallet_gold = 1000
-	game._open_upgrades()
-	for id: String in ["vitality", "power", "appraisal", "rich_ore"]:
-		if not game.upgrades.is_unlocked(id):
-			game._purchase_upgrade(id)
-	await _finish_spawn()
-	root.size = Vector2i(360, 800)
-	await process_frame
-	await _click(game.skill_ui.get_node_screen("reach"))
-	var check_rect: Rect2 = game.skill_ui.get_confirmation_rect()
-	var separate := check_rect.size.x > 0.0
-	for id: String in game.skill_ui.get_visible_node_ids():
-		if id != "reach":
-			separate = separate and not check_rect.intersects(game.skill_ui._buttons[id].get_global_rect())
-	_check(separate, "At 360x800 the actual reach confirmation does not cover another visible node's native Button")
-	game.skill_ui.close_tree()
-	game._start_round()
-	game._advance_round(game.round_state.remaining)
-	game._process(0.0)
-	game.hud.finish_settlement()
-	game._process(0.0)
-	game.hud._process(0.0)
-	_check(game.hud._upgrades.visible and not game.hud._upgrades.get_global_rect().intersects(game.hud._replay.get_global_rect()), "At 360x800 the completed round exposes upgrades separately from the replay Button")
-	root.size = Vector2i(1152, 800)
-	await process_frame
-
-func _new_game() -> void:
-	if is_instance_valid(game):
-		_stop_audio(game)
-		game.queue_free()
-		await process_frame
-	game = TestGame.new()
-	root.add_child(game)
-	game.set_process(false)
-	game.set_physics_process(false)
-	game.set_process_input(false)
-	game.pickaxe.set_process(false)
-	game.hud.set_process(false)
-	game.focused = true
-	game.spawn_time = 1.0
-	await physics_frame
-	await process_frame
-
-func _finish_spawn() -> void:
-	if game.spawn_tween != null and game.spawn_tween.is_valid():
-		game.spawn_tween.kill()
-	game.rock_motion.scale = Vector3.ONE
-	game.spawn_time = 1.0
-	await physics_frame
-	await process_frame
-
-func _hover(point: Vector2) -> void:
-	var motion := InputEventMouseMotion.new()
-	motion.position = point
-	root.push_input(motion, true)
-	await process_frame
 
 func _click(point: Vector2) -> void:
-	var button := InputEventMouseButton.new()
-	button.button_index = MOUSE_BUTTON_LEFT
-	button.position = point
-	button.pressed = true
-	root.push_input(button, true)
-	await process_frame
-	button = button.duplicate()
-	button.pressed = false
-	root.push_input(button, true)
-	await process_frame
-
-func _joy(button_index: int) -> void:
-	var event := InputEventJoypadButton.new()
-	event.device = 3
-	event.button_index = button_index
+	var event := InputEventMouseButton.new()
+	event.position = point
+	event.button_index = MOUSE_BUTTON_LEFT
 	event.pressed = true
 	root.push_input(event, true)
 	await process_frame
@@ -465,5 +286,5 @@ func _stop_audio(node: Node) -> void:
 func _check(condition: bool, message: String) -> void:
 	checks += 1
 	if not condition:
-		failures.append(message)
-		push_error("SKILL_CHECK_FAILED: " + message)
+		failures += 1
+		push_error("SKILL_FAILED: " + message)

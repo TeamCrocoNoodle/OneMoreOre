@@ -1,0 +1,6416 @@
+[
+  {
+    "active_minutes": 215.7,
+    "all_unlocked_minute": 218.8,
+    "aux": 7,
+    "boss_failures": 0,
+    "efficiency": 1.0,
+    "lifetime_gold": 155586601,
+    "main": "gold_pickaxe",
+    "milestones": [
+      {
+        "boss": 1,
+        "fight_seconds": 42.9,
+        "minute": 61.6,
+        "nodes": 30,
+        "power": 4.42
+      },
+      {
+        "boss": 2,
+        "fight_seconds": 53.2,
+        "minute": 102.2,
+        "nodes": 60,
+        "power": 5.78
+      },
+      {
+        "boss": 3,
+        "fight_seconds": 25.1,
+        "minute": 135.8,
+        "nodes": 91,
+        "power": 9.52
+      },
+      {
+        "boss": 4,
+        "fight_seconds": 22.6,
+        "minute": 155.0,
+        "nodes": 113,
+        "power": 19.0
+      },
+      {
+        "boss": 5,
+        "fight_seconds": 20.8,
+        "minute": 178.2,
+        "nodes": 122,
+        "power": 30.0
+      },
+      {
+        "boss": 6,
+        "fight_seconds": 32.9,
+        "minute": 210.4,
+        "nodes": 137,
+        "power": 30.0
+      },
+      {
+        "boss": 7,
+        "fight_seconds": 25.1,
+        "minute": 255.4,
+        "nodes": 137,
+        "power": 60.0
+      }
+    ],
+    "minutes": 255.6,
+    "paid_nodes": 137,
+    "policy": "balanced",
+    "purchases": [
+      {
+        "cost": 60,
+        "id": "speed",
+        "kind": "skill",
+        "minute": 1.3
+      },
+      {
+        "cost": 60,
+        "id": "vitality",
+        "kind": "skill",
+        "minute": 2.7
+      },
+      {
+        "cost": 60,
+        "id": "income_2",
+        "kind": "skill",
+        "minute": 4.2
+      },
+      {
+        "cost": 60,
+        "id": "rich_ore",
+        "kind": "skill",
+        "minute": 5.7
+      },
+      {
+        "cost": 160,
+        "id": "power_tip",
+        "kind": "skill",
+        "minute": 8.7
+      },
+      {
+        "cost": 160,
+        "id": "reach",
+        "kind": "skill",
+        "minute": 10.3
+      },
+      {
+        "cost": 160,
+        "id": "health_2",
+        "kind": "skill",
+        "minute": 11.8
+      },
+      {
+        "cost": 160,
+        "id": "gem_gold_1",
+        "kind": "skill",
+        "minute": 13.5
+      },
+      {
+        "cost": 160,
+        "id": "gold_drop",
+        "kind": "skill",
+        "minute": 15.2
+      },
+      {
+        "cost": 160,
+        "id": "value_1",
+        "kind": "skill",
+        "minute": 16.0
+      },
+      {
+        "cost": 160,
+        "id": "income_1",
+        "kind": "skill",
+        "minute": 17.7
+      },
+      {
+        "cost": 160,
+        "id": "income_3",
+        "kind": "skill",
+        "minute": 19.4
+      },
+      {
+        "cost": 400,
+        "id": "power",
+        "kind": "skill",
+        "minute": 21.9
+      },
+      {
+        "cost": 400,
+        "id": "ore_spawn_2",
+        "kind": "skill",
+        "minute": 24.3
+      },
+      {
+        "cost": 400,
+        "id": "health_3",
+        "kind": "skill",
+        "minute": 26.8
+      },
+      {
+        "cost": 400,
+        "id": "drain_1",
+        "kind": "skill",
+        "minute": 29.5
+      },
+      {
+        "cost": 400,
+        "id": "drop_chance_1",
+        "kind": "skill",
+        "minute": 31.4
+      },
+      {
+        "cost": 400,
+        "id": "drop_amount_1",
+        "kind": "skill",
+        "minute": 34.2
+      },
+      {
+        "cost": 400,
+        "id": "break_heal",
+        "kind": "skill",
+        "minute": 36.1
+      },
+      {
+        "cost": 400,
+        "id": "value_2",
+        "kind": "skill",
+        "minute": 38.0
+      },
+      {
+        "cost": 400,
+        "id": "income_4",
+        "kind": "skill",
+        "minute": 39.9
+      },
+      {
+        "cost": 800,
+        "id": "axe",
+        "kind": "main",
+        "minute": 42.8
+      },
+      {
+        "cost": 800,
+        "id": "speed_2",
+        "kind": "skill",
+        "minute": 44.7
+      },
+      {
+        "cost": 900,
+        "id": "laser",
+        "kind": "aux",
+        "minute": 47.6
+      },
+      {
+        "cost": 800,
+        "id": "rare_1",
+        "kind": "skill",
+        "minute": 49.6
+      },
+      {
+        "cost": 800,
+        "id": "brilliant",
+        "kind": "skill",
+        "minute": 50.6
+      },
+      {
+        "cost": 800,
+        "id": "drop_chance_2",
+        "kind": "skill",
+        "minute": 52.6
+      },
+      {
+        "cost": 800,
+        "id": "health_4",
+        "kind": "skill",
+        "minute": 54.5
+      },
+      {
+        "cost": 800,
+        "id": "drain_2",
+        "kind": "skill",
+        "minute": 55.6
+      },
+      {
+        "cost": 800,
+        "id": "spent_range",
+        "kind": "skill",
+        "minute": 56.8
+      },
+      {
+        "cost": 800,
+        "id": "break_heal_chance",
+        "kind": "skill",
+        "minute": 59.0
+      },
+      {
+        "cost": 800,
+        "id": "income_5",
+        "kind": "skill",
+        "minute": 60.1
+      },
+      {
+        "cost": 800,
+        "id": "value_3",
+        "kind": "skill",
+        "minute": 61.7
+      },
+      {
+        "cost": 800,
+        "id": "drop_amount_2",
+        "kind": "skill",
+        "minute": 61.7
+      },
+      {
+        "cost": 1200,
+        "id": "shock",
+        "kind": "skill",
+        "minute": 62.9
+      },
+      {
+        "cost": 800,
+        "id": "shock_power_1",
+        "kind": "skill",
+        "minute": 64.1
+      },
+      {
+        "cost": 800,
+        "id": "shock_range_1",
+        "kind": "skill",
+        "minute": 65.3
+      },
+      {
+        "cost": 800,
+        "id": "shock_chance_1",
+        "kind": "skill",
+        "minute": 66.5
+      },
+      {
+        "cost": 1600,
+        "id": "combo",
+        "kind": "skill",
+        "minute": 67.6
+      },
+      {
+        "cost": 1300,
+        "id": "beer",
+        "kind": "aux",
+        "minute": 69.9
+      },
+      {
+        "cost": 1360,
+        "id": "resonance",
+        "kind": "skill",
+        "minute": 71.2
+      },
+      {
+        "cost": 1800,
+        "id": "power_3",
+        "kind": "skill",
+        "minute": 72.5
+      },
+      {
+        "cost": 1800,
+        "id": "range_3",
+        "kind": "skill",
+        "minute": 75.0
+      },
+      {
+        "cost": 1800,
+        "id": "combo_power_1",
+        "kind": "skill",
+        "minute": 76.3
+      },
+      {
+        "cost": 1800,
+        "id": "combo_time_1",
+        "kind": "skill",
+        "minute": 77.6
+      },
+      {
+        "cost": 1800,
+        "id": "shock_power_2",
+        "kind": "skill",
+        "minute": 79.0
+      },
+      {
+        "cost": 1800,
+        "id": "shock_range_2",
+        "kind": "skill",
+        "minute": 80.3
+      },
+      {
+        "cost": 1800,
+        "id": "shock_chance_2",
+        "kind": "skill",
+        "minute": 81.6
+      },
+      {
+        "cost": 1800,
+        "id": "resonance_amount_1",
+        "kind": "skill",
+        "minute": 84.1
+      },
+      {
+        "cost": 1800,
+        "id": "resonance_chance_1",
+        "kind": "skill",
+        "minute": 84.1
+      },
+      {
+        "cost": 1800,
+        "id": "rare_2",
+        "kind": "skill",
+        "minute": 85.5
+      },
+      {
+        "cost": 1800,
+        "id": "ore_spawn_3",
+        "kind": "skill",
+        "minute": 86.8
+      },
+      {
+        "cost": 1800,
+        "id": "brilliant_chance_1",
+        "kind": "skill",
+        "minute": 88.2
+      },
+      {
+        "cost": 1800,
+        "id": "brilliant_value_1",
+        "kind": "skill",
+        "minute": 89.5
+      },
+      {
+        "cost": 1800,
+        "id": "drop_chance_3",
+        "kind": "skill",
+        "minute": 90.9
+      },
+      {
+        "cost": 1800,
+        "id": "drop_amount_3",
+        "kind": "skill",
+        "minute": 92.2
+      },
+      {
+        "cost": 1800,
+        "id": "value_4",
+        "kind": "skill",
+        "minute": 93.5
+      },
+      {
+        "cost": 1800,
+        "id": "recovery",
+        "kind": "skill",
+        "minute": 94.9
+      },
+      {
+        "cost": 1800,
+        "id": "drain_3",
+        "kind": "skill",
+        "minute": 96.4
+      },
+      {
+        "cost": 1800,
+        "id": "spent_range_more",
+        "kind": "skill",
+        "minute": 96.4
+      },
+      {
+        "cost": 1800,
+        "id": "break_heal_amount",
+        "kind": "skill",
+        "minute": 98.0
+      },
+      {
+        "cost": 2340,
+        "id": "revive",
+        "kind": "skill",
+        "minute": 99.9
+      },
+      {
+        "cost": 2700,
+        "id": "golden_day",
+        "kind": "skill",
+        "minute": 99.9
+      },
+      {
+        "cost": 3600,
+        "id": "extra",
+        "kind": "skill",
+        "minute": 102.4
+      },
+      {
+        "cost": 4000,
+        "id": "ore_damage",
+        "kind": "skill",
+        "minute": 102.4
+      },
+      {
+        "cost": 4000,
+        "id": "crowd",
+        "kind": "skill",
+        "minute": 102.4
+      },
+      {
+        "cost": 4000,
+        "id": "combo_power_2",
+        "kind": "skill",
+        "minute": 104.3
+      },
+      {
+        "cost": 4000,
+        "id": "combo_time_2",
+        "kind": "skill",
+        "minute": 106.1
+      },
+      {
+        "cost": 4000,
+        "id": "shock_power_3",
+        "kind": "skill",
+        "minute": 108.1
+      },
+      {
+        "cost": 4000,
+        "id": "shock_range_3",
+        "kind": "skill",
+        "minute": 108.1
+      },
+      {
+        "cost": 4000,
+        "id": "shock_chance_3",
+        "kind": "skill",
+        "minute": 109.9
+      },
+      {
+        "cost": 4000,
+        "id": "extra_count_1",
+        "kind": "skill",
+        "minute": 111.8
+      },
+      {
+        "cost": 4000,
+        "id": "extra_chance_1",
+        "kind": "skill",
+        "minute": 111.8
+      },
+      {
+        "cost": 4000,
+        "id": "resonance_amount_2",
+        "kind": "skill",
+        "minute": 113.8
+      },
+      {
+        "cost": 4000,
+        "id": "resonance_chance_2",
+        "kind": "skill",
+        "minute": 113.8
+      },
+      {
+        "cost": 4000,
+        "id": "rare_3",
+        "kind": "skill",
+        "minute": 115.6
+      },
+      {
+        "cost": 4000,
+        "id": "gem_gold_2",
+        "kind": "skill",
+        "minute": 117.4
+      },
+      {
+        "cost": 4000,
+        "id": "golden_chance",
+        "kind": "skill",
+        "minute": 119.5
+      },
+      {
+        "cost": 4000,
+        "id": "brilliant_chance_2",
+        "kind": "skill",
+        "minute": 119.5
+      },
+      {
+        "cost": 4000,
+        "id": "spent_threshold",
+        "kind": "skill",
+        "minute": 121.6
+      },
+      {
+        "cost": 4000,
+        "id": "low_health",
+        "kind": "skill",
+        "minute": 121.6
+      },
+      {
+        "cost": 4000,
+        "id": "revive_heal",
+        "kind": "skill",
+        "minute": 123.8
+      },
+      {
+        "cost": 4000,
+        "id": "recovery_more",
+        "kind": "skill",
+        "minute": 123.8
+      },
+      {
+        "cost": 4000,
+        "id": "brilliant_value_2",
+        "kind": "skill",
+        "minute": 123.8
+      },
+      {
+        "cost": 8500,
+        "id": "hammer",
+        "kind": "main",
+        "minute": 126.3
+      },
+      {
+        "cost": 5000,
+        "id": "healing",
+        "kind": "skill",
+        "minute": 128.7
+      },
+      {
+        "cost": 9000,
+        "id": "range_2",
+        "kind": "skill",
+        "minute": 128.7
+      },
+      {
+        "cost": 9000,
+        "id": "speed_3",
+        "kind": "skill",
+        "minute": 128.7
+      },
+      {
+        "cost": 9000,
+        "id": "speed_4",
+        "kind": "skill",
+        "minute": 131.3
+      },
+      {
+        "cost": 9000,
+        "id": "combo_speed",
+        "kind": "skill",
+        "minute": 131.3
+      },
+      {
+        "cost": 9000,
+        "id": "extra_count_2",
+        "kind": "skill",
+        "minute": 131.3
+      },
+      {
+        "cost": 9000,
+        "id": "extra_chance_2",
+        "kind": "skill",
+        "minute": 133.8
+      },
+      {
+        "cost": 9000,
+        "id": "healing_amount_1",
+        "kind": "skill",
+        "minute": 133.8
+      },
+      {
+        "cost": 9000,
+        "id": "healing_chance_1",
+        "kind": "skill",
+        "minute": 133.8
+      },
+      {
+        "cost": 9000,
+        "id": "resonance_amount_3",
+        "kind": "skill",
+        "minute": 133.8
+      },
+      {
+        "cost": 9000,
+        "id": "resonance_chance_3",
+        "kind": "skill",
+        "minute": 136.0
+      },
+      {
+        "cost": 9000,
+        "id": "ore_spawn_4",
+        "kind": "skill",
+        "minute": 136.0
+      },
+      {
+        "cost": 9000,
+        "id": "low_health_speed",
+        "kind": "skill",
+        "minute": 136.0
+      },
+      {
+        "cost": 9000,
+        "id": "revive_count",
+        "kind": "skill",
+        "minute": 136.0
+      },
+      {
+        "cost": 9000,
+        "id": "brilliant_value_3",
+        "kind": "skill",
+        "minute": 136.0
+      },
+      {
+        "cost": 9000,
+        "id": "brilliant_chance_3",
+        "kind": "skill",
+        "minute": 136.0
+      },
+      {
+        "cost": 9000,
+        "id": "golden_pity",
+        "kind": "skill",
+        "minute": 136.0
+      },
+      {
+        "cost": 12600,
+        "id": "critical",
+        "kind": "skill",
+        "minute": 138.9
+      },
+      {
+        "cost": 12000,
+        "id": "detector",
+        "kind": "aux",
+        "minute": 138.9
+      },
+      {
+        "cost": 22000,
+        "id": "first_hit",
+        "kind": "skill",
+        "minute": 138.9
+      },
+      {
+        "cost": 22000,
+        "id": "power_side_1",
+        "kind": "skill",
+        "minute": 138.9
+      },
+      {
+        "cost": 22000,
+        "id": "extra_count_3",
+        "kind": "skill",
+        "minute": 138.9
+      },
+      {
+        "cost": 22000,
+        "id": "extra_chance_3",
+        "kind": "skill",
+        "minute": 138.9
+      },
+      {
+        "cost": 22000,
+        "id": "crit_chance_1",
+        "kind": "skill",
+        "minute": 141.8
+      },
+      {
+        "cost": 22000,
+        "id": "crit_power_1",
+        "kind": "skill",
+        "minute": 141.8
+      },
+      {
+        "cost": 22000,
+        "id": "healing_amount_2",
+        "kind": "skill",
+        "minute": 141.8
+      },
+      {
+        "cost": 22000,
+        "id": "low_health_threshold",
+        "kind": "skill",
+        "minute": 141.8
+      },
+      {
+        "cost": 22000,
+        "id": "gem_buff",
+        "kind": "skill",
+        "minute": 141.8
+      },
+      {
+        "cost": 22000,
+        "id": "healing_chance_2",
+        "kind": "skill",
+        "minute": 141.8
+      },
+      {
+        "cost": 33000,
+        "id": "bomb",
+        "kind": "skill",
+        "minute": 144.7
+      },
+      {
+        "cost": 65000,
+        "id": "jackhammer",
+        "kind": "main",
+        "minute": 144.7
+      },
+      {
+        "cost": 180000,
+        "id": "speed_5",
+        "kind": "skill",
+        "minute": 144.7
+      },
+      {
+        "cost": 180000,
+        "id": "power_side_2",
+        "kind": "skill",
+        "minute": 150.1
+      },
+      {
+        "cost": 180000,
+        "id": "streak",
+        "kind": "skill",
+        "minute": 152.8
+      },
+      {
+        "cost": 180000,
+        "id": "crit_chance_2",
+        "kind": "skill",
+        "minute": 155.2
+      },
+      {
+        "cost": 180000,
+        "id": "crit_power_2",
+        "kind": "skill",
+        "minute": 155.2
+      },
+      {
+        "cost": 180000,
+        "id": "extra_critical",
+        "kind": "skill",
+        "minute": 158.0
+      },
+      {
+        "cost": 180000,
+        "id": "execute",
+        "kind": "skill",
+        "minute": 160.7
+      },
+      {
+        "cost": 180000,
+        "id": "ore_spawn_5",
+        "kind": "skill",
+        "minute": 160.7
+      },
+      {
+        "cost": 180000,
+        "id": "bomb_chance_1",
+        "kind": "skill",
+        "minute": 163.5
+      },
+      {
+        "cost": 180000,
+        "id": "bomb_amount_1",
+        "kind": "skill",
+        "minute": 163.5
+      },
+      {
+        "cost": 300000,
+        "id": "crusher",
+        "kind": "aux",
+        "minute": 166.3
+      },
+      {
+        "cost": 400000,
+        "id": "drill",
+        "kind": "main",
+        "minute": 169.0
+      },
+      {
+        "cost": 310000,
+        "id": "xray",
+        "kind": "aux",
+        "minute": 171.7
+      },
+      {
+        "cost": 450000,
+        "id": "finisher",
+        "kind": "skill",
+        "minute": 174.5
+      },
+      {
+        "cost": 450000,
+        "id": "crit_chance_3",
+        "kind": "skill",
+        "minute": 177.2
+      },
+      {
+        "cost": 450000,
+        "id": "crit_power_3",
+        "kind": "skill",
+        "minute": 178.4
+      },
+      {
+        "cost": 450000,
+        "id": "crit_gold",
+        "kind": "skill",
+        "minute": 178.4
+      },
+      {
+        "cost": 450000,
+        "id": "execute_chance_1",
+        "kind": "skill",
+        "minute": 181.2
+      },
+      {
+        "cost": 450000,
+        "id": "execute_gold",
+        "kind": "skill",
+        "minute": 181.2
+      },
+      {
+        "cost": 450000,
+        "id": "bomb_chance_2",
+        "kind": "skill",
+        "minute": 184.0
+      },
+      {
+        "cost": 450000,
+        "id": "bomb_amount_2",
+        "kind": "skill",
+        "minute": 186.7
+      },
+      {
+        "cost": 450000,
+        "id": "gold_stone",
+        "kind": "skill",
+        "minute": 186.7
+      },
+      {
+        "cost": 550000,
+        "id": "pin",
+        "kind": "aux",
+        "minute": 186.7
+      },
+      {
+        "cost": 1000000,
+        "id": "range_4",
+        "kind": "skill",
+        "minute": 189.5
+      },
+      {
+        "cost": 1000000,
+        "id": "execute_chance_2",
+        "kind": "skill",
+        "minute": 192.3
+      },
+      {
+        "cost": 1000000,
+        "id": "bomb_chance_3",
+        "kind": "skill",
+        "minute": 195.0
+      },
+      {
+        "cost": 1000000,
+        "id": "bomb_amount_3",
+        "kind": "skill",
+        "minute": 197.8
+      },
+      {
+        "cost": 1000000,
+        "id": "gold_stone_chance_1",
+        "kind": "skill",
+        "minute": 200.5
+      },
+      {
+        "cost": 1000000,
+        "id": "gold_stone_amount_1",
+        "kind": "skill",
+        "minute": 200.5
+      },
+      {
+        "cost": 2100000,
+        "id": "gold_stone_chance_2",
+        "kind": "skill",
+        "minute": 206.0
+      },
+      {
+        "cost": 2100000,
+        "id": "gold_stone_amount_2",
+        "kind": "skill",
+        "minute": 208.7
+      },
+      {
+        "cost": 3500000,
+        "id": "detonator",
+        "kind": "aux",
+        "minute": 213.3
+      },
+      {
+        "cost": 10000000,
+        "id": "gold_pickaxe",
+        "kind": "main",
+        "minute": 218.7
+      }
+    ],
+    "rounds": 160,
+    "seed": 101,
+    "snapshots": [
+      {
+        "attacks": 3679,
+        "aux": 0,
+        "bosses": 0,
+        "damage": 2.6,
+        "gold": 3192,
+        "main": "pickaxe",
+        "minute": 30,
+        "nodes": 16,
+        "radius": 0.475,
+        "speed": 1.16,
+        "stones": 1348
+      },
+      {
+        "attacks": 7157,
+        "aux": 1,
+        "bosses": 0,
+        "damage": 4.42,
+        "gold": 14128,
+        "main": "axe",
+        "minute": 60,
+        "nodes": 29,
+        "radius": 0.475,
+        "speed": 1.386,
+        "stones": 3672
+      },
+      {
+        "attacks": 10773,
+        "aux": 2,
+        "bosses": 1,
+        "damage": 5.78,
+        "gold": 47725,
+        "main": "axe",
+        "minute": 90,
+        "nodes": 51,
+        "radius": 0.57,
+        "speed": 1.386,
+        "stones": 6414
+      },
+      {
+        "attacks": 14565,
+        "aux": 2,
+        "bosses": 2,
+        "damage": 5.78,
+        "gold": 131110,
+        "main": "axe",
+        "minute": 120,
+        "nodes": 76,
+        "radius": 0.57,
+        "speed": 1.386,
+        "stones": 9794
+      },
+      {
+        "attacks": 19180,
+        "aux": 3,
+        "bosses": 3,
+        "damage": 15.96,
+        "gold": 1069723,
+        "main": "jackhammer",
+        "minute": 150,
+        "nodes": 111,
+        "radius": 0.665,
+        "speed": 2.07,
+        "stones": 20363
+      },
+      {
+        "attacks": 25959,
+        "aux": 5,
+        "bosses": 5,
+        "damage": 30.0,
+        "gold": 5597040,
+        "main": "drill",
+        "minute": 180,
+        "nodes": 124,
+        "radius": 0.665,
+        "speed": 4.5,
+        "stones": 40068
+      },
+      {
+        "attacks": 33173,
+        "aux": 6,
+        "bosses": 6,
+        "damage": 30.0,
+        "gold": 21237204,
+        "main": "drill",
+        "minute": 210,
+        "nodes": 137,
+        "radius": 0.76,
+        "speed": 4.5,
+        "stones": 70867
+      },
+      {
+        "attacks": 40314,
+        "aux": 7,
+        "bosses": 6,
+        "damage": 60.0,
+        "gold": 105667346,
+        "main": "gold_pickaxe",
+        "minute": 240,
+        "nodes": 137,
+        "radius": 0.76,
+        "speed": 5.4,
+        "stones": 125134
+      }
+    ],
+    "wallet": 123828381,
+    "won": true
+  },
+  {
+    "active_minutes": 217.3,
+    "all_unlocked_minute": 219.8,
+    "aux": 7,
+    "boss_failures": 0,
+    "efficiency": 1.0,
+    "lifetime_gold": 167520307,
+    "main": "gold_pickaxe",
+    "milestones": [
+      {
+        "boss": 1,
+        "fight_seconds": 42.9,
+        "minute": 58.4,
+        "nodes": 30,
+        "power": 4.42
+      },
+      {
+        "boss": 2,
+        "fight_seconds": 53.2,
+        "minute": 101.0,
+        "nodes": 60,
+        "power": 5.78
+      },
+      {
+        "boss": 3,
+        "fight_seconds": 25.1,
+        "minute": 133.1,
+        "nodes": 91,
+        "power": 9.52
+      },
+      {
+        "boss": 4,
+        "fight_seconds": 24.0,
+        "minute": 153.7,
+        "nodes": 112,
+        "power": 19.0
+      },
+      {
+        "boss": 5,
+        "fight_seconds": 18.4,
+        "minute": 180.1,
+        "nodes": 122,
+        "power": 30.0
+      },
+      {
+        "boss": 6,
+        "fight_seconds": 38.6,
+        "minute": 211.4,
+        "nodes": 137,
+        "power": 30.0
+      },
+      {
+        "boss": 7,
+        "fight_seconds": 25.1,
+        "minute": 256.9,
+        "nodes": 137,
+        "power": 60.0
+      }
+    ],
+    "minutes": 257.1,
+    "paid_nodes": 137,
+    "policy": "balanced",
+    "purchases": [
+      {
+        "cost": 60,
+        "id": "speed",
+        "kind": "skill",
+        "minute": 1.3
+      },
+      {
+        "cost": 60,
+        "id": "vitality",
+        "kind": "skill",
+        "minute": 3.3
+      },
+      {
+        "cost": 60,
+        "id": "income_2",
+        "kind": "skill",
+        "minute": 4.1
+      },
+      {
+        "cost": 60,
+        "id": "rich_ore",
+        "kind": "skill",
+        "minute": 4.9
+      },
+      {
+        "cost": 160,
+        "id": "power_tip",
+        "kind": "skill",
+        "minute": 7.9
+      },
+      {
+        "cost": 160,
+        "id": "reach",
+        "kind": "skill",
+        "minute": 9.5
+      },
+      {
+        "cost": 160,
+        "id": "health_2",
+        "kind": "skill",
+        "minute": 11.0
+      },
+      {
+        "cost": 160,
+        "id": "gem_gold_1",
+        "kind": "skill",
+        "minute": 12.7
+      },
+      {
+        "cost": 160,
+        "id": "gold_drop",
+        "kind": "skill",
+        "minute": 13.6
+      },
+      {
+        "cost": 160,
+        "id": "value_1",
+        "kind": "skill",
+        "minute": 15.3
+      },
+      {
+        "cost": 160,
+        "id": "income_1",
+        "kind": "skill",
+        "minute": 16.2
+      },
+      {
+        "cost": 160,
+        "id": "income_3",
+        "kind": "skill",
+        "minute": 17.8
+      },
+      {
+        "cost": 400,
+        "id": "power",
+        "kind": "skill",
+        "minute": 20.3
+      },
+      {
+        "cost": 400,
+        "id": "ore_spawn_2",
+        "kind": "skill",
+        "minute": 22.0
+      },
+      {
+        "cost": 400,
+        "id": "health_3",
+        "kind": "skill",
+        "minute": 24.5
+      },
+      {
+        "cost": 400,
+        "id": "drain_1",
+        "kind": "skill",
+        "minute": 26.3
+      },
+      {
+        "cost": 400,
+        "id": "drop_chance_1",
+        "kind": "skill",
+        "minute": 28.2
+      },
+      {
+        "cost": 400,
+        "id": "drop_amount_1",
+        "kind": "skill",
+        "minute": 30.1
+      },
+      {
+        "cost": 400,
+        "id": "break_heal",
+        "kind": "skill",
+        "minute": 32.9
+      },
+      {
+        "cost": 400,
+        "id": "value_2",
+        "kind": "skill",
+        "minute": 34.8
+      },
+      {
+        "cost": 400,
+        "id": "income_4",
+        "kind": "skill",
+        "minute": 35.8
+      },
+      {
+        "cost": 800,
+        "id": "axe",
+        "kind": "main",
+        "minute": 39.6
+      },
+      {
+        "cost": 800,
+        "id": "speed_2",
+        "kind": "skill",
+        "minute": 41.5
+      },
+      {
+        "cost": 900,
+        "id": "laser",
+        "kind": "aux",
+        "minute": 43.5
+      },
+      {
+        "cost": 800,
+        "id": "rare_1",
+        "kind": "skill",
+        "minute": 45.4
+      },
+      {
+        "cost": 800,
+        "id": "brilliant",
+        "kind": "skill",
+        "minute": 47.4
+      },
+      {
+        "cost": 800,
+        "id": "drop_chance_2",
+        "kind": "skill",
+        "minute": 49.3
+      },
+      {
+        "cost": 800,
+        "id": "health_4",
+        "kind": "skill",
+        "minute": 51.3
+      },
+      {
+        "cost": 800,
+        "id": "drain_2",
+        "kind": "skill",
+        "minute": 52.4
+      },
+      {
+        "cost": 800,
+        "id": "spent_range",
+        "kind": "skill",
+        "minute": 53.6
+      },
+      {
+        "cost": 800,
+        "id": "break_heal_chance",
+        "kind": "skill",
+        "minute": 55.8
+      },
+      {
+        "cost": 800,
+        "id": "income_5",
+        "kind": "skill",
+        "minute": 57.0
+      },
+      {
+        "cost": 800,
+        "id": "value_3",
+        "kind": "skill",
+        "minute": 58.6
+      },
+      {
+        "cost": 800,
+        "id": "drop_amount_2",
+        "kind": "skill",
+        "minute": 58.6
+      },
+      {
+        "cost": 1200,
+        "id": "shock",
+        "kind": "skill",
+        "minute": 59.8
+      },
+      {
+        "cost": 800,
+        "id": "shock_power_1",
+        "kind": "skill",
+        "minute": 61.0
+      },
+      {
+        "cost": 800,
+        "id": "shock_range_1",
+        "kind": "skill",
+        "minute": 62.2
+      },
+      {
+        "cost": 800,
+        "id": "shock_chance_1",
+        "kind": "skill",
+        "minute": 63.4
+      },
+      {
+        "cost": 1600,
+        "id": "combo",
+        "kind": "skill",
+        "minute": 65.6
+      },
+      {
+        "cost": 1300,
+        "id": "beer",
+        "kind": "aux",
+        "minute": 66.8
+      },
+      {
+        "cost": 1360,
+        "id": "resonance",
+        "kind": "skill",
+        "minute": 68.1
+      },
+      {
+        "cost": 1800,
+        "id": "power_3",
+        "kind": "skill",
+        "minute": 70.6
+      },
+      {
+        "cost": 1800,
+        "id": "range_3",
+        "kind": "skill",
+        "minute": 71.9
+      },
+      {
+        "cost": 1800,
+        "id": "combo_power_1",
+        "kind": "skill",
+        "minute": 74.5
+      },
+      {
+        "cost": 1800,
+        "id": "combo_time_1",
+        "kind": "skill",
+        "minute": 75.8
+      },
+      {
+        "cost": 1800,
+        "id": "shock_power_2",
+        "kind": "skill",
+        "minute": 77.1
+      },
+      {
+        "cost": 1800,
+        "id": "shock_range_2",
+        "kind": "skill",
+        "minute": 78.5
+      },
+      {
+        "cost": 1800,
+        "id": "shock_chance_2",
+        "kind": "skill",
+        "minute": 79.8
+      },
+      {
+        "cost": 1800,
+        "id": "resonance_amount_1",
+        "kind": "skill",
+        "minute": 81.2
+      },
+      {
+        "cost": 1800,
+        "id": "resonance_chance_1",
+        "kind": "skill",
+        "minute": 82.5
+      },
+      {
+        "cost": 1800,
+        "id": "rare_2",
+        "kind": "skill",
+        "minute": 83.9
+      },
+      {
+        "cost": 1800,
+        "id": "ore_spawn_3",
+        "kind": "skill",
+        "minute": 85.2
+      },
+      {
+        "cost": 1800,
+        "id": "brilliant_chance_1",
+        "kind": "skill",
+        "minute": 86.6
+      },
+      {
+        "cost": 1800,
+        "id": "brilliant_value_1",
+        "kind": "skill",
+        "minute": 87.9
+      },
+      {
+        "cost": 1800,
+        "id": "drop_chance_3",
+        "kind": "skill",
+        "minute": 89.3
+      },
+      {
+        "cost": 1800,
+        "id": "drop_amount_3",
+        "kind": "skill",
+        "minute": 90.7
+      },
+      {
+        "cost": 1800,
+        "id": "value_4",
+        "kind": "skill",
+        "minute": 92.0
+      },
+      {
+        "cost": 1800,
+        "id": "recovery",
+        "kind": "skill",
+        "minute": 93.3
+      },
+      {
+        "cost": 1800,
+        "id": "drain_3",
+        "kind": "skill",
+        "minute": 93.3
+      },
+      {
+        "cost": 1800,
+        "id": "spent_range_more",
+        "kind": "skill",
+        "minute": 94.9
+      },
+      {
+        "cost": 1800,
+        "id": "break_heal_amount",
+        "kind": "skill",
+        "minute": 96.6
+      },
+      {
+        "cost": 2340,
+        "id": "revive",
+        "kind": "skill",
+        "minute": 96.6
+      },
+      {
+        "cost": 2700,
+        "id": "golden_day",
+        "kind": "skill",
+        "minute": 98.7
+      },
+      {
+        "cost": 3600,
+        "id": "extra",
+        "kind": "skill",
+        "minute": 101.2
+      },
+      {
+        "cost": 4000,
+        "id": "ore_damage",
+        "kind": "skill",
+        "minute": 101.2
+      },
+      {
+        "cost": 4000,
+        "id": "crowd",
+        "kind": "skill",
+        "minute": 101.2
+      },
+      {
+        "cost": 4000,
+        "id": "combo_power_2",
+        "kind": "skill",
+        "minute": 103.2
+      },
+      {
+        "cost": 4000,
+        "id": "combo_time_2",
+        "kind": "skill",
+        "minute": 105.1
+      },
+      {
+        "cost": 4000,
+        "id": "shock_power_3",
+        "kind": "skill",
+        "minute": 105.1
+      },
+      {
+        "cost": 4000,
+        "id": "shock_range_3",
+        "kind": "skill",
+        "minute": 106.8
+      },
+      {
+        "cost": 4000,
+        "id": "shock_chance_3",
+        "kind": "skill",
+        "minute": 108.8
+      },
+      {
+        "cost": 4000,
+        "id": "extra_count_1",
+        "kind": "skill",
+        "minute": 110.8
+      },
+      {
+        "cost": 4000,
+        "id": "extra_chance_1",
+        "kind": "skill",
+        "minute": 110.8
+      },
+      {
+        "cost": 4000,
+        "id": "resonance_amount_2",
+        "kind": "skill",
+        "minute": 112.8
+      },
+      {
+        "cost": 4000,
+        "id": "resonance_chance_2",
+        "kind": "skill",
+        "minute": 112.8
+      },
+      {
+        "cost": 4000,
+        "id": "rare_3",
+        "kind": "skill",
+        "minute": 114.7
+      },
+      {
+        "cost": 4000,
+        "id": "gem_gold_2",
+        "kind": "skill",
+        "minute": 116.7
+      },
+      {
+        "cost": 4000,
+        "id": "golden_chance",
+        "kind": "skill",
+        "minute": 116.7
+      },
+      {
+        "cost": 4000,
+        "id": "brilliant_chance_2",
+        "kind": "skill",
+        "minute": 118.6
+      },
+      {
+        "cost": 4000,
+        "id": "spent_threshold",
+        "kind": "skill",
+        "minute": 118.6
+      },
+      {
+        "cost": 4000,
+        "id": "low_health",
+        "kind": "skill",
+        "minute": 118.6
+      },
+      {
+        "cost": 4000,
+        "id": "revive_heal",
+        "kind": "skill",
+        "minute": 120.7
+      },
+      {
+        "cost": 4000,
+        "id": "recovery_more",
+        "kind": "skill",
+        "minute": 120.7
+      },
+      {
+        "cost": 4000,
+        "id": "brilliant_value_2",
+        "kind": "skill",
+        "minute": 123.2
+      },
+      {
+        "cost": 8500,
+        "id": "hammer",
+        "kind": "main",
+        "minute": 123.2
+      },
+      {
+        "cost": 5000,
+        "id": "healing",
+        "kind": "skill",
+        "minute": 125.7
+      },
+      {
+        "cost": 9000,
+        "id": "range_2",
+        "kind": "skill",
+        "minute": 125.7
+      },
+      {
+        "cost": 9000,
+        "id": "speed_3",
+        "kind": "skill",
+        "minute": 125.7
+      },
+      {
+        "cost": 9000,
+        "id": "speed_4",
+        "kind": "skill",
+        "minute": 128.2
+      },
+      {
+        "cost": 9000,
+        "id": "combo_speed",
+        "kind": "skill",
+        "minute": 128.2
+      },
+      {
+        "cost": 9000,
+        "id": "extra_count_2",
+        "kind": "skill",
+        "minute": 128.2
+      },
+      {
+        "cost": 9000,
+        "id": "extra_chance_2",
+        "kind": "skill",
+        "minute": 130.7
+      },
+      {
+        "cost": 9000,
+        "id": "healing_amount_1",
+        "kind": "skill",
+        "minute": 130.7
+      },
+      {
+        "cost": 9000,
+        "id": "healing_chance_1",
+        "kind": "skill",
+        "minute": 130.7
+      },
+      {
+        "cost": 9000,
+        "id": "resonance_amount_3",
+        "kind": "skill",
+        "minute": 130.7
+      },
+      {
+        "cost": 9000,
+        "id": "resonance_chance_3",
+        "kind": "skill",
+        "minute": 133.3
+      },
+      {
+        "cost": 9000,
+        "id": "ore_spawn_4",
+        "kind": "skill",
+        "minute": 133.3
+      },
+      {
+        "cost": 9000,
+        "id": "low_health_speed",
+        "kind": "skill",
+        "minute": 133.3
+      },
+      {
+        "cost": 9000,
+        "id": "revive_count",
+        "kind": "skill",
+        "minute": 133.3
+      },
+      {
+        "cost": 9000,
+        "id": "brilliant_value_3",
+        "kind": "skill",
+        "minute": 133.3
+      },
+      {
+        "cost": 9000,
+        "id": "brilliant_chance_3",
+        "kind": "skill",
+        "minute": 133.3
+      },
+      {
+        "cost": 9000,
+        "id": "golden_pity",
+        "kind": "skill",
+        "minute": 133.3
+      },
+      {
+        "cost": 12600,
+        "id": "critical",
+        "kind": "skill",
+        "minute": 136.2
+      },
+      {
+        "cost": 12000,
+        "id": "detector",
+        "kind": "aux",
+        "minute": 136.2
+      },
+      {
+        "cost": 22000,
+        "id": "first_hit",
+        "kind": "skill",
+        "minute": 136.2
+      },
+      {
+        "cost": 22000,
+        "id": "power_side_1",
+        "kind": "skill",
+        "minute": 136.2
+      },
+      {
+        "cost": 22000,
+        "id": "extra_count_3",
+        "kind": "skill",
+        "minute": 136.2
+      },
+      {
+        "cost": 22000,
+        "id": "extra_chance_3",
+        "kind": "skill",
+        "minute": 136.2
+      },
+      {
+        "cost": 22000,
+        "id": "crit_chance_1",
+        "kind": "skill",
+        "minute": 139.1
+      },
+      {
+        "cost": 22000,
+        "id": "crit_power_1",
+        "kind": "skill",
+        "minute": 139.1
+      },
+      {
+        "cost": 22000,
+        "id": "healing_amount_2",
+        "kind": "skill",
+        "minute": 139.1
+      },
+      {
+        "cost": 22000,
+        "id": "low_health_threshold",
+        "kind": "skill",
+        "minute": 139.1
+      },
+      {
+        "cost": 22000,
+        "id": "gem_buff",
+        "kind": "skill",
+        "minute": 139.1
+      },
+      {
+        "cost": 22000,
+        "id": "healing_chance_2",
+        "kind": "skill",
+        "minute": 139.1
+      },
+      {
+        "cost": 33000,
+        "id": "bomb",
+        "kind": "skill",
+        "minute": 142.0
+      },
+      {
+        "cost": 65000,
+        "id": "jackhammer",
+        "kind": "main",
+        "minute": 142.0
+      },
+      {
+        "cost": 180000,
+        "id": "speed_5",
+        "kind": "skill",
+        "minute": 144.8
+      },
+      {
+        "cost": 180000,
+        "id": "power_side_2",
+        "kind": "skill",
+        "minute": 150.1
+      },
+      {
+        "cost": 180000,
+        "id": "streak",
+        "kind": "skill",
+        "minute": 153.9
+      },
+      {
+        "cost": 180000,
+        "id": "crit_chance_2",
+        "kind": "skill",
+        "minute": 153.9
+      },
+      {
+        "cost": 180000,
+        "id": "crit_power_2",
+        "kind": "skill",
+        "minute": 156.6
+      },
+      {
+        "cost": 180000,
+        "id": "extra_critical",
+        "kind": "skill",
+        "minute": 159.4
+      },
+      {
+        "cost": 180000,
+        "id": "execute",
+        "kind": "skill",
+        "minute": 162.1
+      },
+      {
+        "cost": 180000,
+        "id": "ore_spawn_5",
+        "kind": "skill",
+        "minute": 162.1
+      },
+      {
+        "cost": 180000,
+        "id": "bomb_chance_1",
+        "kind": "skill",
+        "minute": 162.1
+      },
+      {
+        "cost": 180000,
+        "id": "bomb_amount_1",
+        "kind": "skill",
+        "minute": 164.9
+      },
+      {
+        "cost": 300000,
+        "id": "crusher",
+        "kind": "aux",
+        "minute": 167.6
+      },
+      {
+        "cost": 400000,
+        "id": "drill",
+        "kind": "main",
+        "minute": 170.4
+      },
+      {
+        "cost": 310000,
+        "id": "xray",
+        "kind": "aux",
+        "minute": 173.1
+      },
+      {
+        "cost": 450000,
+        "id": "finisher",
+        "kind": "skill",
+        "minute": 175.9
+      },
+      {
+        "cost": 450000,
+        "id": "crit_chance_3",
+        "kind": "skill",
+        "minute": 178.6
+      },
+      {
+        "cost": 450000,
+        "id": "crit_power_3",
+        "kind": "skill",
+        "minute": 180.3
+      },
+      {
+        "cost": 450000,
+        "id": "crit_gold",
+        "kind": "skill",
+        "minute": 180.3
+      },
+      {
+        "cost": 450000,
+        "id": "execute_chance_1",
+        "kind": "skill",
+        "minute": 180.3
+      },
+      {
+        "cost": 450000,
+        "id": "execute_gold",
+        "kind": "skill",
+        "minute": 183.1
+      },
+      {
+        "cost": 450000,
+        "id": "bomb_chance_2",
+        "kind": "skill",
+        "minute": 185.9
+      },
+      {
+        "cost": 450000,
+        "id": "bomb_amount_2",
+        "kind": "skill",
+        "minute": 188.6
+      },
+      {
+        "cost": 450000,
+        "id": "gold_stone",
+        "kind": "skill",
+        "minute": 188.6
+      },
+      {
+        "cost": 550000,
+        "id": "pin",
+        "kind": "aux",
+        "minute": 188.6
+      },
+      {
+        "cost": 1000000,
+        "id": "range_4",
+        "kind": "skill",
+        "minute": 191.5
+      },
+      {
+        "cost": 1000000,
+        "id": "execute_chance_2",
+        "kind": "skill",
+        "minute": 194.2
+      },
+      {
+        "cost": 1000000,
+        "id": "bomb_chance_3",
+        "kind": "skill",
+        "minute": 194.2
+      },
+      {
+        "cost": 1000000,
+        "id": "bomb_amount_3",
+        "kind": "skill",
+        "minute": 197.0
+      },
+      {
+        "cost": 1000000,
+        "id": "gold_stone_chance_1",
+        "kind": "skill",
+        "minute": 199.7
+      },
+      {
+        "cost": 1000000,
+        "id": "gold_stone_amount_1",
+        "kind": "skill",
+        "minute": 202.5
+      },
+      {
+        "cost": 2100000,
+        "id": "gold_stone_chance_2",
+        "kind": "skill",
+        "minute": 205.3
+      },
+      {
+        "cost": 2100000,
+        "id": "gold_stone_amount_2",
+        "kind": "skill",
+        "minute": 210.7
+      },
+      {
+        "cost": 3500000,
+        "id": "detonator",
+        "kind": "aux",
+        "minute": 214.3
+      },
+      {
+        "cost": 10000000,
+        "id": "gold_pickaxe",
+        "kind": "main",
+        "minute": 219.7
+      }
+    ],
+    "rounds": 158,
+    "seed": 404,
+    "snapshots": [
+      {
+        "attacks": 3669,
+        "aux": 0,
+        "bosses": 0,
+        "damage": 2.6,
+        "gold": 3933,
+        "main": "pickaxe",
+        "minute": 30,
+        "nodes": 17,
+        "radius": 0.475,
+        "speed": 1.16,
+        "stones": 1333
+      },
+      {
+        "attacks": 7025,
+        "aux": 1,
+        "bosses": 1,
+        "damage": 4.42,
+        "gold": 17084,
+        "main": "axe",
+        "minute": 60,
+        "nodes": 33,
+        "radius": 0.475,
+        "speed": 1.386,
+        "stones": 3655
+      },
+      {
+        "attacks": 10786,
+        "aux": 2,
+        "bosses": 1,
+        "damage": 5.78,
+        "gold": 50124,
+        "main": "axe",
+        "minute": 90,
+        "nodes": 52,
+        "radius": 0.57,
+        "speed": 1.386,
+        "stones": 6574
+      },
+      {
+        "attacks": 14596,
+        "aux": 2,
+        "bosses": 2,
+        "damage": 5.78,
+        "gold": 136477,
+        "main": "axe",
+        "minute": 120,
+        "nodes": 78,
+        "radius": 0.57,
+        "speed": 1.386,
+        "stones": 10036
+      },
+      {
+        "attacks": 19382,
+        "aux": 3,
+        "bosses": 3,
+        "damage": 15.96,
+        "gold": 1060597,
+        "main": "jackhammer",
+        "minute": 150,
+        "nodes": 111,
+        "radius": 0.665,
+        "speed": 2.07,
+        "stones": 22036
+      },
+      {
+        "attacks": 26243,
+        "aux": 5,
+        "bosses": 5,
+        "damage": 30.0,
+        "gold": 5762901,
+        "main": "drill",
+        "minute": 180,
+        "nodes": 122,
+        "radius": 0.665,
+        "speed": 4.5,
+        "stones": 40682
+      },
+      {
+        "attacks": 33491,
+        "aux": 6,
+        "bosses": 5,
+        "damage": 30.0,
+        "gold": 17872354,
+        "main": "drill",
+        "minute": 210,
+        "nodes": 136,
+        "radius": 0.76,
+        "speed": 4.5,
+        "stones": 71210
+      },
+      {
+        "attacks": 40519,
+        "aux": 7,
+        "bosses": 6,
+        "damage": 60.0,
+        "gold": 99959806,
+        "main": "gold_pickaxe",
+        "minute": 240,
+        "nodes": 137,
+        "radius": 0.76,
+        "speed": 5.4,
+        "stones": 123388
+      }
+    ],
+    "wallet": 135762087,
+    "won": true
+  },
+  {
+    "active_minutes": 224.2,
+    "all_unlocked_minute": 229.0,
+    "aux": 7,
+    "boss_failures": 0,
+    "efficiency": 1.0,
+    "lifetime_gold": 173565211,
+    "main": "gold_pickaxe",
+    "milestones": [
+      {
+        "boss": 1,
+        "fight_seconds": 47.6,
+        "minute": 59.8,
+        "nodes": 31,
+        "power": 4.42
+      },
+      {
+        "boss": 2,
+        "fight_seconds": 53.2,
+        "minute": 115.4,
+        "nodes": 65,
+        "power": 5.78
+      },
+      {
+        "boss": 3,
+        "fight_seconds": 27.9,
+        "minute": 146.0,
+        "nodes": 94,
+        "power": 9.52
+      },
+      {
+        "boss": 4,
+        "fight_seconds": 26.5,
+        "minute": 165.2,
+        "nodes": 113,
+        "power": 15.96
+      },
+      {
+        "boss": 5,
+        "fight_seconds": 18.4,
+        "minute": 188.3,
+        "nodes": 122,
+        "power": 30.0
+      },
+      {
+        "boss": 6,
+        "fight_seconds": 34.1,
+        "minute": 220.6,
+        "nodes": 137,
+        "power": 30.0
+      },
+      {
+        "boss": 7,
+        "fight_seconds": 23.2,
+        "minute": 264.9,
+        "nodes": 137,
+        "power": 60.0
+      }
+    ],
+    "minutes": 265.1,
+    "paid_nodes": 137,
+    "policy": "economy",
+    "purchases": [
+      {
+        "cost": 60,
+        "id": "income_2",
+        "kind": "skill",
+        "minute": 1.9
+      },
+      {
+        "cost": 60,
+        "id": "rich_ore",
+        "kind": "skill",
+        "minute": 3.3
+      },
+      {
+        "cost": 60,
+        "id": "vitality",
+        "kind": "skill",
+        "minute": 4.7
+      },
+      {
+        "cost": 60,
+        "id": "speed",
+        "kind": "skill",
+        "minute": 5.5
+      },
+      {
+        "cost": 160,
+        "id": "income_1",
+        "kind": "skill",
+        "minute": 9.2
+      },
+      {
+        "cost": 160,
+        "id": "income_3",
+        "kind": "skill",
+        "minute": 10.8
+      },
+      {
+        "cost": 160,
+        "id": "value_1",
+        "kind": "skill",
+        "minute": 13.0
+      },
+      {
+        "cost": 160,
+        "id": "gold_drop",
+        "kind": "skill",
+        "minute": 14.6
+      },
+      {
+        "cost": 160,
+        "id": "gem_gold_1",
+        "kind": "skill",
+        "minute": 16.8
+      },
+      {
+        "cost": 160,
+        "id": "health_2",
+        "kind": "skill",
+        "minute": 18.4
+      },
+      {
+        "cost": 160,
+        "id": "power_tip",
+        "kind": "skill",
+        "minute": 20.1
+      },
+      {
+        "cost": 160,
+        "id": "reach",
+        "kind": "skill",
+        "minute": 21.0
+      },
+      {
+        "cost": 400,
+        "id": "ore_spawn_2",
+        "kind": "skill",
+        "minute": 22.6
+      },
+      {
+        "cost": 400,
+        "id": "income_4",
+        "kind": "skill",
+        "minute": 25.1
+      },
+      {
+        "cost": 400,
+        "id": "value_2",
+        "kind": "skill",
+        "minute": 27.6
+      },
+      {
+        "cost": 400,
+        "id": "drop_amount_1",
+        "kind": "skill",
+        "minute": 29.3
+      },
+      {
+        "cost": 400,
+        "id": "drop_chance_1",
+        "kind": "skill",
+        "minute": 30.9
+      },
+      {
+        "cost": 400,
+        "id": "health_3",
+        "kind": "skill",
+        "minute": 33.4
+      },
+      {
+        "cost": 400,
+        "id": "drain_1",
+        "kind": "skill",
+        "minute": 34.4
+      },
+      {
+        "cost": 400,
+        "id": "break_heal",
+        "kind": "skill",
+        "minute": 36.3
+      },
+      {
+        "cost": 400,
+        "id": "power",
+        "kind": "skill",
+        "minute": 37.3
+      },
+      {
+        "cost": 800,
+        "id": "axe",
+        "kind": "main",
+        "minute": 41.1
+      },
+      {
+        "cost": 800,
+        "id": "rare_1",
+        "kind": "skill",
+        "minute": 43.0
+      },
+      {
+        "cost": 800,
+        "id": "brilliant",
+        "kind": "skill",
+        "minute": 45.0
+      },
+      {
+        "cost": 800,
+        "id": "income_5",
+        "kind": "skill",
+        "minute": 46.9
+      },
+      {
+        "cost": 800,
+        "id": "drop_chance_2",
+        "kind": "skill",
+        "minute": 48.8
+      },
+      {
+        "cost": 800,
+        "id": "drop_amount_2",
+        "kind": "skill",
+        "minute": 49.9
+      },
+      {
+        "cost": 800,
+        "id": "value_3",
+        "kind": "skill",
+        "minute": 51.8
+      },
+      {
+        "cost": 900,
+        "id": "laser",
+        "kind": "aux",
+        "minute": 52.9
+      },
+      {
+        "cost": 800,
+        "id": "health_4",
+        "kind": "skill",
+        "minute": 54.8
+      },
+      {
+        "cost": 800,
+        "id": "drain_2",
+        "kind": "skill",
+        "minute": 55.9
+      },
+      {
+        "cost": 800,
+        "id": "spent_range",
+        "kind": "skill",
+        "minute": 57.1
+      },
+      {
+        "cost": 800,
+        "id": "break_heal_chance",
+        "kind": "skill",
+        "minute": 58.3
+      },
+      {
+        "cost": 800,
+        "id": "speed_2",
+        "kind": "skill",
+        "minute": 60.0
+      },
+      {
+        "cost": 1360,
+        "id": "resonance",
+        "kind": "skill",
+        "minute": 60.0
+      },
+      {
+        "cost": 1800,
+        "id": "ore_spawn_3",
+        "kind": "skill",
+        "minute": 62.2
+      },
+      {
+        "cost": 1800,
+        "id": "resonance_amount_1",
+        "kind": "skill",
+        "minute": 64.5
+      },
+      {
+        "cost": 1800,
+        "id": "resonance_chance_1",
+        "kind": "skill",
+        "minute": 66.8
+      },
+      {
+        "cost": 1800,
+        "id": "rare_2",
+        "kind": "skill",
+        "minute": 69.1
+      },
+      {
+        "cost": 1800,
+        "id": "brilliant_chance_1",
+        "kind": "skill",
+        "minute": 70.2
+      },
+      {
+        "cost": 1800,
+        "id": "brilliant_value_1",
+        "kind": "skill",
+        "minute": 72.5
+      },
+      {
+        "cost": 1800,
+        "id": "drop_chance_3",
+        "kind": "skill",
+        "minute": 74.7
+      },
+      {
+        "cost": 1800,
+        "id": "value_4",
+        "kind": "skill",
+        "minute": 76.9
+      },
+      {
+        "cost": 1800,
+        "id": "drop_amount_3",
+        "kind": "skill",
+        "minute": 78.1
+      },
+      {
+        "cost": 1300,
+        "id": "beer",
+        "kind": "aux",
+        "minute": 79.3
+      },
+      {
+        "cost": 1200,
+        "id": "shock",
+        "kind": "skill",
+        "minute": 80.6
+      },
+      {
+        "cost": 800,
+        "id": "shock_power_1",
+        "kind": "skill",
+        "minute": 80.6
+      },
+      {
+        "cost": 800,
+        "id": "shock_range_1",
+        "kind": "skill",
+        "minute": 82.0
+      },
+      {
+        "cost": 800,
+        "id": "shock_chance_1",
+        "kind": "skill",
+        "minute": 83.3
+      },
+      {
+        "cost": 1600,
+        "id": "combo",
+        "kind": "skill",
+        "minute": 84.6
+      },
+      {
+        "cost": 1800,
+        "id": "drain_3",
+        "kind": "skill",
+        "minute": 85.9
+      },
+      {
+        "cost": 1800,
+        "id": "spent_range_more",
+        "kind": "skill",
+        "minute": 87.3
+      },
+      {
+        "cost": 1800,
+        "id": "break_heal_amount",
+        "kind": "skill",
+        "minute": 90.0
+      },
+      {
+        "cost": 1800,
+        "id": "recovery",
+        "kind": "skill",
+        "minute": 91.6
+      },
+      {
+        "cost": 2700,
+        "id": "golden_day",
+        "kind": "skill",
+        "minute": 94.7
+      },
+      {
+        "cost": 1800,
+        "id": "power_3",
+        "kind": "skill",
+        "minute": 94.7
+      },
+      {
+        "cost": 1800,
+        "id": "range_3",
+        "kind": "skill",
+        "minute": 96.4
+      },
+      {
+        "cost": 1800,
+        "id": "combo_power_1",
+        "kind": "skill",
+        "minute": 98.2
+      },
+      {
+        "cost": 1800,
+        "id": "combo_time_1",
+        "kind": "skill",
+        "minute": 98.2
+      },
+      {
+        "cost": 1800,
+        "id": "shock_power_2",
+        "kind": "skill",
+        "minute": 99.9
+      },
+      {
+        "cost": 1800,
+        "id": "shock_range_2",
+        "kind": "skill",
+        "minute": 101.5
+      },
+      {
+        "cost": 1800,
+        "id": "shock_chance_2",
+        "kind": "skill",
+        "minute": 101.5
+      },
+      {
+        "cost": 2340,
+        "id": "revive",
+        "kind": "skill",
+        "minute": 103.5
+      },
+      {
+        "cost": 4000,
+        "id": "resonance_amount_2",
+        "kind": "skill",
+        "minute": 105.6
+      },
+      {
+        "cost": 4000,
+        "id": "resonance_chance_2",
+        "kind": "skill",
+        "minute": 107.7
+      },
+      {
+        "cost": 4000,
+        "id": "rare_3",
+        "kind": "skill",
+        "minute": 109.6
+      },
+      {
+        "cost": 4000,
+        "id": "gem_gold_2",
+        "kind": "skill",
+        "minute": 111.5
+      },
+      {
+        "cost": 4000,
+        "id": "golden_chance",
+        "kind": "skill",
+        "minute": 113.7
+      },
+      {
+        "cost": 4000,
+        "id": "brilliant_chance_2",
+        "kind": "skill",
+        "minute": 115.6
+      },
+      {
+        "cost": 4000,
+        "id": "brilliant_value_2",
+        "kind": "skill",
+        "minute": 115.6
+      },
+      {
+        "cost": 5000,
+        "id": "healing",
+        "kind": "skill",
+        "minute": 115.6
+      },
+      {
+        "cost": 3600,
+        "id": "extra",
+        "kind": "skill",
+        "minute": 117.5
+      },
+      {
+        "cost": 4000,
+        "id": "recovery_more",
+        "kind": "skill",
+        "minute": 119.4
+      },
+      {
+        "cost": 4000,
+        "id": "spent_threshold",
+        "kind": "skill",
+        "minute": 121.8
+      },
+      {
+        "cost": 4000,
+        "id": "low_health",
+        "kind": "skill",
+        "minute": 121.8
+      },
+      {
+        "cost": 4000,
+        "id": "revive_heal",
+        "kind": "skill",
+        "minute": 124.0
+      },
+      {
+        "cost": 4000,
+        "id": "ore_damage",
+        "kind": "skill",
+        "minute": 124.0
+      },
+      {
+        "cost": 4000,
+        "id": "extra_chance_1",
+        "kind": "skill",
+        "minute": 126.5
+      },
+      {
+        "cost": 4000,
+        "id": "crowd",
+        "kind": "skill",
+        "minute": 126.5
+      },
+      {
+        "cost": 4000,
+        "id": "extra_count_1",
+        "kind": "skill",
+        "minute": 126.5
+      },
+      {
+        "cost": 4000,
+        "id": "combo_power_2",
+        "kind": "skill",
+        "minute": 126.5
+      },
+      {
+        "cost": 4000,
+        "id": "combo_time_2",
+        "kind": "skill",
+        "minute": 129.0
+      },
+      {
+        "cost": 4000,
+        "id": "shock_power_3",
+        "kind": "skill",
+        "minute": 129.0
+      },
+      {
+        "cost": 4000,
+        "id": "shock_range_3",
+        "kind": "skill",
+        "minute": 131.5
+      },
+      {
+        "cost": 4000,
+        "id": "shock_chance_3",
+        "kind": "skill",
+        "minute": 131.5
+      },
+      {
+        "cost": 8500,
+        "id": "hammer",
+        "kind": "main",
+        "minute": 134.0
+      },
+      {
+        "cost": 9000,
+        "id": "healing_amount_1",
+        "kind": "skill",
+        "minute": 136.5
+      },
+      {
+        "cost": 9000,
+        "id": "healing_chance_1",
+        "kind": "skill",
+        "minute": 136.5
+      },
+      {
+        "cost": 9000,
+        "id": "resonance_amount_3",
+        "kind": "skill",
+        "minute": 136.5
+      },
+      {
+        "cost": 9000,
+        "id": "resonance_chance_3",
+        "kind": "skill",
+        "minute": 139.0
+      },
+      {
+        "cost": 9000,
+        "id": "ore_spawn_4",
+        "kind": "skill",
+        "minute": 139.0
+      },
+      {
+        "cost": 9000,
+        "id": "golden_pity",
+        "kind": "skill",
+        "minute": 139.0
+      },
+      {
+        "cost": 9000,
+        "id": "brilliant_chance_3",
+        "kind": "skill",
+        "minute": 141.5
+      },
+      {
+        "cost": 9000,
+        "id": "brilliant_value_3",
+        "kind": "skill",
+        "minute": 141.5
+      },
+      {
+        "cost": 9000,
+        "id": "low_health_speed",
+        "kind": "skill",
+        "minute": 141.5
+      },
+      {
+        "cost": 9000,
+        "id": "revive_count",
+        "kind": "skill",
+        "minute": 144.0
+      },
+      {
+        "cost": 9000,
+        "id": "range_2",
+        "kind": "skill",
+        "minute": 144.0
+      },
+      {
+        "cost": 9000,
+        "id": "speed_3",
+        "kind": "skill",
+        "minute": 144.0
+      },
+      {
+        "cost": 9000,
+        "id": "speed_4",
+        "kind": "skill",
+        "minute": 146.2
+      },
+      {
+        "cost": 9000,
+        "id": "combo_speed",
+        "kind": "skill",
+        "minute": 146.2
+      },
+      {
+        "cost": 9000,
+        "id": "extra_count_2",
+        "kind": "skill",
+        "minute": 146.2
+      },
+      {
+        "cost": 9000,
+        "id": "extra_chance_2",
+        "kind": "skill",
+        "minute": 146.2
+      },
+      {
+        "cost": 12000,
+        "id": "detector",
+        "kind": "aux",
+        "minute": 146.2
+      },
+      {
+        "cost": 12600,
+        "id": "critical",
+        "kind": "skill",
+        "minute": 146.2
+      },
+      {
+        "cost": 22000,
+        "id": "gem_buff",
+        "kind": "skill",
+        "minute": 149.1
+      },
+      {
+        "cost": 22000,
+        "id": "healing_chance_2",
+        "kind": "skill",
+        "minute": 149.1
+      },
+      {
+        "cost": 22000,
+        "id": "healing_amount_2",
+        "kind": "skill",
+        "minute": 149.1
+      },
+      {
+        "cost": 22000,
+        "id": "low_health_threshold",
+        "kind": "skill",
+        "minute": 149.1
+      },
+      {
+        "cost": 33000,
+        "id": "bomb",
+        "kind": "skill",
+        "minute": 149.1
+      },
+      {
+        "cost": 22000,
+        "id": "first_hit",
+        "kind": "skill",
+        "minute": 149.1
+      },
+      {
+        "cost": 22000,
+        "id": "power_side_1",
+        "kind": "skill",
+        "minute": 149.1
+      },
+      {
+        "cost": 22000,
+        "id": "extra_count_3",
+        "kind": "skill",
+        "minute": 149.1
+      },
+      {
+        "cost": 22000,
+        "id": "extra_chance_3",
+        "kind": "skill",
+        "minute": 149.1
+      },
+      {
+        "cost": 22000,
+        "id": "crit_chance_1",
+        "kind": "skill",
+        "minute": 152.1
+      },
+      {
+        "cost": 22000,
+        "id": "crit_power_1",
+        "kind": "skill",
+        "minute": 152.1
+      },
+      {
+        "cost": 65000,
+        "id": "jackhammer",
+        "kind": "main",
+        "minute": 152.1
+      },
+      {
+        "cost": 180000,
+        "id": "ore_spawn_5",
+        "kind": "skill",
+        "minute": 154.9
+      },
+      {
+        "cost": 180000,
+        "id": "bomb_chance_1",
+        "kind": "skill",
+        "minute": 160.3
+      },
+      {
+        "cost": 180000,
+        "id": "bomb_amount_1",
+        "kind": "skill",
+        "minute": 163.0
+      },
+      {
+        "cost": 180000,
+        "id": "speed_5",
+        "kind": "skill",
+        "minute": 165.4
+      },
+      {
+        "cost": 180000,
+        "id": "power_side_2",
+        "kind": "skill",
+        "minute": 165.4
+      },
+      {
+        "cost": 180000,
+        "id": "streak",
+        "kind": "skill",
+        "minute": 168.2
+      },
+      {
+        "cost": 180000,
+        "id": "crit_chance_2",
+        "kind": "skill",
+        "minute": 170.9
+      },
+      {
+        "cost": 180000,
+        "id": "crit_power_2",
+        "kind": "skill",
+        "minute": 170.9
+      },
+      {
+        "cost": 180000,
+        "id": "extra_critical",
+        "kind": "skill",
+        "minute": 173.7
+      },
+      {
+        "cost": 180000,
+        "id": "execute",
+        "kind": "skill",
+        "minute": 173.7
+      },
+      {
+        "cost": 300000,
+        "id": "crusher",
+        "kind": "aux",
+        "minute": 176.4
+      },
+      {
+        "cost": 400000,
+        "id": "drill",
+        "kind": "main",
+        "minute": 179.2
+      },
+      {
+        "cost": 310000,
+        "id": "xray",
+        "kind": "aux",
+        "minute": 181.9
+      },
+      {
+        "cost": 450000,
+        "id": "bomb_chance_2",
+        "kind": "skill",
+        "minute": 184.7
+      },
+      {
+        "cost": 450000,
+        "id": "bomb_amount_2",
+        "kind": "skill",
+        "minute": 187.4
+      },
+      {
+        "cost": 450000,
+        "id": "gold_stone",
+        "kind": "skill",
+        "minute": 188.5
+      },
+      {
+        "cost": 450000,
+        "id": "finisher",
+        "kind": "skill",
+        "minute": 188.5
+      },
+      {
+        "cost": 450000,
+        "id": "crit_chance_3",
+        "kind": "skill",
+        "minute": 191.3
+      },
+      {
+        "cost": 450000,
+        "id": "crit_power_3",
+        "kind": "skill",
+        "minute": 191.3
+      },
+      {
+        "cost": 450000,
+        "id": "crit_gold",
+        "kind": "skill",
+        "minute": 194.1
+      },
+      {
+        "cost": 450000,
+        "id": "execute_chance_1",
+        "kind": "skill",
+        "minute": 196.9
+      },
+      {
+        "cost": 450000,
+        "id": "execute_gold",
+        "kind": "skill",
+        "minute": 196.9
+      },
+      {
+        "cost": 550000,
+        "id": "pin",
+        "kind": "aux",
+        "minute": 199.7
+      },
+      {
+        "cost": 1000000,
+        "id": "bomb_chance_3",
+        "kind": "skill",
+        "minute": 199.7
+      },
+      {
+        "cost": 1000000,
+        "id": "bomb_amount_3",
+        "kind": "skill",
+        "minute": 202.4
+      },
+      {
+        "cost": 1000000,
+        "id": "gold_stone_chance_1",
+        "kind": "skill",
+        "minute": 205.2
+      },
+      {
+        "cost": 1000000,
+        "id": "gold_stone_amount_1",
+        "kind": "skill",
+        "minute": 207.9
+      },
+      {
+        "cost": 1000000,
+        "id": "range_4",
+        "kind": "skill",
+        "minute": 207.9
+      },
+      {
+        "cost": 1000000,
+        "id": "execute_chance_2",
+        "kind": "skill",
+        "minute": 210.7
+      },
+      {
+        "cost": 2100000,
+        "id": "gold_stone_chance_2",
+        "kind": "skill",
+        "minute": 213.5
+      },
+      {
+        "cost": 2100000,
+        "id": "gold_stone_amount_2",
+        "kind": "skill",
+        "minute": 218.9
+      },
+      {
+        "cost": 3500000,
+        "id": "detonator",
+        "kind": "aux",
+        "minute": 220.8
+      },
+      {
+        "cost": 10000000,
+        "id": "gold_pickaxe",
+        "kind": "main",
+        "minute": 228.9
+      }
+    ],
+    "rounds": 166,
+    "seed": 303,
+    "snapshots": [
+      {
+        "attacks": 3745,
+        "aux": 0,
+        "bosses": 0,
+        "damage": 1.8,
+        "gold": 3434,
+        "main": "pickaxe",
+        "minute": 30,
+        "nodes": 16,
+        "radius": 0.475,
+        "speed": 1.16,
+        "stones": 1045
+      },
+      {
+        "attacks": 6907,
+        "aux": 1,
+        "bosses": 1,
+        "damage": 4.42,
+        "gold": 17106,
+        "main": "axe",
+        "minute": 60,
+        "nodes": 33,
+        "radius": 0.475,
+        "speed": 1.386,
+        "stones": 3149
+      },
+      {
+        "attacks": 11090,
+        "aux": 2,
+        "bosses": 1,
+        "damage": 4.42,
+        "gold": 46514,
+        "main": "axe",
+        "minute": 90,
+        "nodes": 49,
+        "radius": 0.475,
+        "speed": 1.386,
+        "stones": 5308
+      },
+      {
+        "attacks": 14783,
+        "aux": 2,
+        "bosses": 2,
+        "damage": 5.78,
+        "gold": 108526,
+        "main": "axe",
+        "minute": 120,
+        "nodes": 70,
+        "radius": 0.57,
+        "speed": 1.386,
+        "stones": 8588
+      },
+      {
+        "attacks": 18752,
+        "aux": 3,
+        "bosses": 3,
+        "damage": 11.76,
+        "gold": 559790,
+        "main": "hammer",
+        "minute": 150,
+        "nodes": 108,
+        "radius": 0.665,
+        "speed": 1.64,
+        "stones": 15381
+      },
+      {
+        "attacks": 25428,
+        "aux": 4,
+        "bosses": 4,
+        "damage": 30.0,
+        "gold": 3217660,
+        "main": "drill",
+        "minute": 180,
+        "nodes": 120,
+        "radius": 0.665,
+        "speed": 4.5,
+        "stones": 31612
+      },
+      {
+        "attacks": 32517,
+        "aux": 6,
+        "bosses": 5,
+        "damage": 30.0,
+        "gold": 13565274,
+        "main": "drill",
+        "minute": 210,
+        "nodes": 134,
+        "radius": 0.76,
+        "speed": 4.5,
+        "stones": 59392
+      },
+      {
+        "attacks": 39584,
+        "aux": 7,
+        "bosses": 6,
+        "damage": 60.0,
+        "gold": 77213474,
+        "main": "gold_pickaxe",
+        "minute": 240,
+        "nodes": 137,
+        "radius": 0.76,
+        "speed": 5.4,
+        "stones": 106094
+      }
+    ],
+    "wallet": 141806991,
+    "won": true
+  },
+  {
+    "active_minutes": 199.2,
+    "all_unlocked_minute": 211.6,
+    "aux": 7,
+    "boss_failures": 0,
+    "efficiency": 1.0,
+    "lifetime_gold": 164400014,
+    "main": "gold_pickaxe",
+    "milestones": [
+      {
+        "boss": 1,
+        "fight_seconds": 42.9,
+        "minute": 55.6,
+        "nodes": 28,
+        "power": 4.42
+      },
+      {
+        "boss": 2,
+        "fight_seconds": 53.2,
+        "minute": 100.8,
+        "nodes": 66,
+        "power": 5.78
+      },
+      {
+        "boss": 3,
+        "fight_seconds": 25.1,
+        "minute": 128.4,
+        "nodes": 92,
+        "power": 9.52
+      },
+      {
+        "boss": 4,
+        "fight_seconds": 24.0,
+        "minute": 149.7,
+        "nodes": 113,
+        "power": 19.0
+      },
+      {
+        "boss": 5,
+        "fight_seconds": 22.7,
+        "minute": 171.4,
+        "nodes": 123,
+        "power": 30.0
+      },
+      {
+        "boss": 6,
+        "fight_seconds": 32.9,
+        "minute": 202.8,
+        "nodes": 137,
+        "power": 30.0
+      },
+      {
+        "boss": 7,
+        "fight_seconds": 25.1,
+        "minute": 248.6,
+        "nodes": 137,
+        "power": 60.0
+      }
+    ],
+    "minutes": 249.0,
+    "paid_nodes": 137,
+    "policy": "auction",
+    "purchases": [
+      {
+        "cost": 60,
+        "id": "speed",
+        "kind": "skill",
+        "minute": 1.5
+      },
+      {
+        "cost": 60,
+        "id": "vitality",
+        "kind": "skill",
+        "minute": 3.1
+      },
+      {
+        "cost": 60,
+        "id": "income_2",
+        "kind": "skill",
+        "minute": 4.0
+      },
+      {
+        "cost": 60,
+        "id": "rich_ore",
+        "kind": "skill",
+        "minute": 4.0
+      },
+      {
+        "cost": 160,
+        "id": "power_tip",
+        "kind": "skill",
+        "minute": 7.4
+      },
+      {
+        "cost": 160,
+        "id": "reach",
+        "kind": "skill",
+        "minute": 9.1
+      },
+      {
+        "cost": 160,
+        "id": "health_2",
+        "kind": "skill",
+        "minute": 12.5
+      },
+      {
+        "cost": 160,
+        "id": "gem_gold_1",
+        "kind": "skill",
+        "minute": 13.5
+      },
+      {
+        "cost": 160,
+        "id": "gold_drop",
+        "kind": "skill",
+        "minute": 15.4
+      },
+      {
+        "cost": 160,
+        "id": "value_1",
+        "kind": "skill",
+        "minute": 18.2
+      },
+      {
+        "cost": 160,
+        "id": "income_1",
+        "kind": "skill",
+        "minute": 19.2
+      },
+      {
+        "cost": 160,
+        "id": "income_3",
+        "kind": "skill",
+        "minute": 20.2
+      },
+      {
+        "cost": 400,
+        "id": "power",
+        "kind": "skill",
+        "minute": 21.1
+      },
+      {
+        "cost": 400,
+        "id": "ore_spawn_2",
+        "kind": "skill",
+        "minute": 23.9
+      },
+      {
+        "cost": 400,
+        "id": "health_3",
+        "kind": "skill",
+        "minute": 24.9
+      },
+      {
+        "cost": 400,
+        "id": "drain_1",
+        "kind": "skill",
+        "minute": 26.9
+      },
+      {
+        "cost": 400,
+        "id": "drop_chance_1",
+        "kind": "skill",
+        "minute": 29.0
+      },
+      {
+        "cost": 400,
+        "id": "drop_amount_1",
+        "kind": "skill",
+        "minute": 30.1
+      },
+      {
+        "cost": 400,
+        "id": "break_heal",
+        "kind": "skill",
+        "minute": 31.2
+      },
+      {
+        "cost": 400,
+        "id": "value_2",
+        "kind": "skill",
+        "minute": 32.3
+      },
+      {
+        "cost": 400,
+        "id": "income_4",
+        "kind": "skill",
+        "minute": 33.4
+      },
+      {
+        "cost": 800,
+        "id": "axe",
+        "kind": "main",
+        "minute": 35.6
+      },
+      {
+        "cost": 800,
+        "id": "speed_2",
+        "kind": "skill",
+        "minute": 37.7
+      },
+      {
+        "cost": 900,
+        "id": "laser",
+        "kind": "aux",
+        "minute": 40.9
+      },
+      {
+        "cost": 800,
+        "id": "rare_1",
+        "kind": "skill",
+        "minute": 42.1
+      },
+      {
+        "cost": 800,
+        "id": "brilliant",
+        "kind": "skill",
+        "minute": 43.2
+      },
+      {
+        "cost": 800,
+        "id": "drop_chance_2",
+        "kind": "skill",
+        "minute": 46.4
+      },
+      {
+        "cost": 800,
+        "id": "health_4",
+        "kind": "skill",
+        "minute": 50.6
+      },
+      {
+        "cost": 800,
+        "id": "drain_2",
+        "kind": "skill",
+        "minute": 51.8
+      },
+      {
+        "cost": 800,
+        "id": "spent_range",
+        "kind": "skill",
+        "minute": 51.8
+      },
+      {
+        "cost": 800,
+        "id": "break_heal_chance",
+        "kind": "skill",
+        "minute": 55.9
+      },
+      {
+        "cost": 800,
+        "id": "income_5",
+        "kind": "skill",
+        "minute": 58.4
+      },
+      {
+        "cost": 800,
+        "id": "value_3",
+        "kind": "skill",
+        "minute": 58.4
+      },
+      {
+        "cost": 800,
+        "id": "drop_amount_2",
+        "kind": "skill",
+        "minute": 60.9
+      },
+      {
+        "cost": 1200,
+        "id": "shock",
+        "kind": "skill",
+        "minute": 62.1
+      },
+      {
+        "cost": 800,
+        "id": "shock_power_1",
+        "kind": "skill",
+        "minute": 64.6
+      },
+      {
+        "cost": 800,
+        "id": "shock_range_1",
+        "kind": "skill",
+        "minute": 64.6
+      },
+      {
+        "cost": 800,
+        "id": "shock_chance_1",
+        "kind": "skill",
+        "minute": 65.9
+      },
+      {
+        "cost": 1600,
+        "id": "combo",
+        "kind": "skill",
+        "minute": 65.9
+      },
+      {
+        "cost": 1300,
+        "id": "beer",
+        "kind": "aux",
+        "minute": 67.2
+      },
+      {
+        "cost": 1360,
+        "id": "resonance",
+        "kind": "skill",
+        "minute": 68.6
+      },
+      {
+        "cost": 1800,
+        "id": "power_3",
+        "kind": "skill",
+        "minute": 70.0
+      },
+      {
+        "cost": 1800,
+        "id": "range_3",
+        "kind": "skill",
+        "minute": 71.4
+      },
+      {
+        "cost": 1800,
+        "id": "combo_power_1",
+        "kind": "skill",
+        "minute": 71.4
+      },
+      {
+        "cost": 1800,
+        "id": "combo_time_1",
+        "kind": "skill",
+        "minute": 72.9
+      },
+      {
+        "cost": 1800,
+        "id": "shock_power_2",
+        "kind": "skill",
+        "minute": 74.3
+      },
+      {
+        "cost": 1800,
+        "id": "shock_range_2",
+        "kind": "skill",
+        "minute": 74.3
+      },
+      {
+        "cost": 1800,
+        "id": "shock_chance_2",
+        "kind": "skill",
+        "minute": 77.1
+      },
+      {
+        "cost": 1800,
+        "id": "resonance_amount_1",
+        "kind": "skill",
+        "minute": 77.1
+      },
+      {
+        "cost": 1800,
+        "id": "resonance_chance_1",
+        "kind": "skill",
+        "minute": 79.9
+      },
+      {
+        "cost": 1800,
+        "id": "rare_2",
+        "kind": "skill",
+        "minute": 79.9
+      },
+      {
+        "cost": 1800,
+        "id": "ore_spawn_3",
+        "kind": "skill",
+        "minute": 81.4
+      },
+      {
+        "cost": 1800,
+        "id": "brilliant_chance_1",
+        "kind": "skill",
+        "minute": 82.8
+      },
+      {
+        "cost": 1800,
+        "id": "brilliant_value_1",
+        "kind": "skill",
+        "minute": 82.8
+      },
+      {
+        "cost": 1800,
+        "id": "drop_chance_3",
+        "kind": "skill",
+        "minute": 84.3
+      },
+      {
+        "cost": 1800,
+        "id": "drop_amount_3",
+        "kind": "skill",
+        "minute": 84.3
+      },
+      {
+        "cost": 1800,
+        "id": "value_4",
+        "kind": "skill",
+        "minute": 87.1
+      },
+      {
+        "cost": 1800,
+        "id": "recovery",
+        "kind": "skill",
+        "minute": 87.1
+      },
+      {
+        "cost": 1800,
+        "id": "drain_3",
+        "kind": "skill",
+        "minute": 88.7
+      },
+      {
+        "cost": 1800,
+        "id": "spent_range_more",
+        "kind": "skill",
+        "minute": 88.7
+      },
+      {
+        "cost": 1800,
+        "id": "break_heal_amount",
+        "kind": "skill",
+        "minute": 88.7
+      },
+      {
+        "cost": 2340,
+        "id": "revive",
+        "kind": "skill",
+        "minute": 90.6
+      },
+      {
+        "cost": 2700,
+        "id": "golden_day",
+        "kind": "skill",
+        "minute": 90.6
+      },
+      {
+        "cost": 3600,
+        "id": "extra",
+        "kind": "skill",
+        "minute": 92.8
+      },
+      {
+        "cost": 4000,
+        "id": "ore_damage",
+        "kind": "skill",
+        "minute": 92.8
+      },
+      {
+        "cost": 4000,
+        "id": "crowd",
+        "kind": "skill",
+        "minute": 94.9
+      },
+      {
+        "cost": 4000,
+        "id": "combo_power_2",
+        "kind": "skill",
+        "minute": 94.9
+      },
+      {
+        "cost": 4000,
+        "id": "combo_time_2",
+        "kind": "skill",
+        "minute": 97.0
+      },
+      {
+        "cost": 4000,
+        "id": "shock_power_3",
+        "kind": "skill",
+        "minute": 99.2
+      },
+      {
+        "cost": 4000,
+        "id": "shock_range_3",
+        "kind": "skill",
+        "minute": 101.1
+      },
+      {
+        "cost": 4000,
+        "id": "shock_chance_3",
+        "kind": "skill",
+        "minute": 101.1
+      },
+      {
+        "cost": 4000,
+        "id": "extra_count_1",
+        "kind": "skill",
+        "minute": 101.1
+      },
+      {
+        "cost": 4000,
+        "id": "extra_chance_1",
+        "kind": "skill",
+        "minute": 101.1
+      },
+      {
+        "cost": 4000,
+        "id": "resonance_amount_2",
+        "kind": "skill",
+        "minute": 103.3
+      },
+      {
+        "cost": 4000,
+        "id": "resonance_chance_2",
+        "kind": "skill",
+        "minute": 105.3
+      },
+      {
+        "cost": 4000,
+        "id": "rare_3",
+        "kind": "skill",
+        "minute": 105.3
+      },
+      {
+        "cost": 4000,
+        "id": "gem_gold_2",
+        "kind": "skill",
+        "minute": 105.3
+      },
+      {
+        "cost": 4000,
+        "id": "golden_chance",
+        "kind": "skill",
+        "minute": 109.3
+      },
+      {
+        "cost": 4000,
+        "id": "brilliant_chance_2",
+        "kind": "skill",
+        "minute": 109.3
+      },
+      {
+        "cost": 4000,
+        "id": "spent_threshold",
+        "kind": "skill",
+        "minute": 109.3
+      },
+      {
+        "cost": 4000,
+        "id": "low_health",
+        "kind": "skill",
+        "minute": 113.5
+      },
+      {
+        "cost": 4000,
+        "id": "revive_heal",
+        "kind": "skill",
+        "minute": 113.5
+      },
+      {
+        "cost": 4000,
+        "id": "recovery_more",
+        "kind": "skill",
+        "minute": 113.5
+      },
+      {
+        "cost": 4000,
+        "id": "brilliant_value_2",
+        "kind": "skill",
+        "minute": 113.5
+      },
+      {
+        "cost": 8500,
+        "id": "hammer",
+        "kind": "main",
+        "minute": 115.9
+      },
+      {
+        "cost": 5000,
+        "id": "healing",
+        "kind": "skill",
+        "minute": 115.9
+      },
+      {
+        "cost": 9000,
+        "id": "range_2",
+        "kind": "skill",
+        "minute": 120.9
+      },
+      {
+        "cost": 9000,
+        "id": "speed_3",
+        "kind": "skill",
+        "minute": 120.9
+      },
+      {
+        "cost": 9000,
+        "id": "speed_4",
+        "kind": "skill",
+        "minute": 120.9
+      },
+      {
+        "cost": 9000,
+        "id": "combo_speed",
+        "kind": "skill",
+        "minute": 120.9
+      },
+      {
+        "cost": 9000,
+        "id": "extra_count_2",
+        "kind": "skill",
+        "minute": 126.0
+      },
+      {
+        "cost": 9000,
+        "id": "extra_chance_2",
+        "kind": "skill",
+        "minute": 126.0
+      },
+      {
+        "cost": 9000,
+        "id": "healing_amount_1",
+        "kind": "skill",
+        "minute": 126.0
+      },
+      {
+        "cost": 9000,
+        "id": "healing_chance_1",
+        "kind": "skill",
+        "minute": 126.0
+      },
+      {
+        "cost": 9000,
+        "id": "resonance_amount_3",
+        "kind": "skill",
+        "minute": 126.0
+      },
+      {
+        "cost": 9000,
+        "id": "resonance_chance_3",
+        "kind": "skill",
+        "minute": 126.0
+      },
+      {
+        "cost": 9000,
+        "id": "ore_spawn_4",
+        "kind": "skill",
+        "minute": 128.7
+      },
+      {
+        "cost": 9000,
+        "id": "low_health_speed",
+        "kind": "skill",
+        "minute": 128.7
+      },
+      {
+        "cost": 9000,
+        "id": "revive_count",
+        "kind": "skill",
+        "minute": 128.7
+      },
+      {
+        "cost": 9000,
+        "id": "brilliant_value_3",
+        "kind": "skill",
+        "minute": 128.7
+      },
+      {
+        "cost": 9000,
+        "id": "brilliant_chance_3",
+        "kind": "skill",
+        "minute": 128.7
+      },
+      {
+        "cost": 9000,
+        "id": "golden_pity",
+        "kind": "skill",
+        "minute": 128.7
+      },
+      {
+        "cost": 12600,
+        "id": "critical",
+        "kind": "skill",
+        "minute": 128.7
+      },
+      {
+        "cost": 12000,
+        "id": "detector",
+        "kind": "aux",
+        "minute": 128.7
+      },
+      {
+        "cost": 22000,
+        "id": "first_hit",
+        "kind": "skill",
+        "minute": 128.7
+      },
+      {
+        "cost": 22000,
+        "id": "power_side_1",
+        "kind": "skill",
+        "minute": 128.7
+      },
+      {
+        "cost": 22000,
+        "id": "extra_count_3",
+        "kind": "skill",
+        "minute": 128.7
+      },
+      {
+        "cost": 22000,
+        "id": "extra_chance_3",
+        "kind": "skill",
+        "minute": 131.9
+      },
+      {
+        "cost": 22000,
+        "id": "crit_chance_1",
+        "kind": "skill",
+        "minute": 131.9
+      },
+      {
+        "cost": 22000,
+        "id": "crit_power_1",
+        "kind": "skill",
+        "minute": 131.9
+      },
+      {
+        "cost": 22000,
+        "id": "healing_amount_2",
+        "kind": "skill",
+        "minute": 131.9
+      },
+      {
+        "cost": 22000,
+        "id": "low_health_threshold",
+        "kind": "skill",
+        "minute": 131.9
+      },
+      {
+        "cost": 22000,
+        "id": "gem_buff",
+        "kind": "skill",
+        "minute": 134.8
+      },
+      {
+        "cost": 22000,
+        "id": "healing_chance_2",
+        "kind": "skill",
+        "minute": 134.8
+      },
+      {
+        "cost": 33000,
+        "id": "bomb",
+        "kind": "skill",
+        "minute": 134.8
+      },
+      {
+        "cost": 65000,
+        "id": "jackhammer",
+        "kind": "main",
+        "minute": 134.8
+      },
+      {
+        "cost": 180000,
+        "id": "speed_5",
+        "kind": "skill",
+        "minute": 140.5
+      },
+      {
+        "cost": 180000,
+        "id": "power_side_2",
+        "kind": "skill",
+        "minute": 146.0
+      },
+      {
+        "cost": 180000,
+        "id": "streak",
+        "kind": "skill",
+        "minute": 146.0
+      },
+      {
+        "cost": 180000,
+        "id": "crit_chance_2",
+        "kind": "skill",
+        "minute": 150.0
+      },
+      {
+        "cost": 180000,
+        "id": "crit_power_2",
+        "kind": "skill",
+        "minute": 150.0
+      },
+      {
+        "cost": 180000,
+        "id": "extra_critical",
+        "kind": "skill",
+        "minute": 150.0
+      },
+      {
+        "cost": 180000,
+        "id": "execute",
+        "kind": "skill",
+        "minute": 152.9
+      },
+      {
+        "cost": 180000,
+        "id": "ore_spawn_5",
+        "kind": "skill",
+        "minute": 152.9
+      },
+      {
+        "cost": 180000,
+        "id": "bomb_chance_1",
+        "kind": "skill",
+        "minute": 155.8
+      },
+      {
+        "cost": 180000,
+        "id": "bomb_amount_1",
+        "kind": "skill",
+        "minute": 155.8
+      },
+      {
+        "cost": 300000,
+        "id": "crusher",
+        "kind": "aux",
+        "minute": 155.8
+      },
+      {
+        "cost": 400000,
+        "id": "drill",
+        "kind": "main",
+        "minute": 161.4
+      },
+      {
+        "cost": 310000,
+        "id": "xray",
+        "kind": "aux",
+        "minute": 161.4
+      },
+      {
+        "cost": 450000,
+        "id": "finisher",
+        "kind": "skill",
+        "minute": 167.0
+      },
+      {
+        "cost": 450000,
+        "id": "crit_chance_3",
+        "kind": "skill",
+        "minute": 167.0
+      },
+      {
+        "cost": 450000,
+        "id": "crit_power_3",
+        "kind": "skill",
+        "minute": 169.9
+      },
+      {
+        "cost": 450000,
+        "id": "crit_gold",
+        "kind": "skill",
+        "minute": 171.7
+      },
+      {
+        "cost": 450000,
+        "id": "execute_chance_1",
+        "kind": "skill",
+        "minute": 174.6
+      },
+      {
+        "cost": 450000,
+        "id": "execute_gold",
+        "kind": "skill",
+        "minute": 177.4
+      },
+      {
+        "cost": 450000,
+        "id": "bomb_chance_2",
+        "kind": "skill",
+        "minute": 177.4
+      },
+      {
+        "cost": 450000,
+        "id": "bomb_amount_2",
+        "kind": "skill",
+        "minute": 180.3
+      },
+      {
+        "cost": 450000,
+        "id": "gold_stone",
+        "kind": "skill",
+        "minute": 180.3
+      },
+      {
+        "cost": 550000,
+        "id": "pin",
+        "kind": "aux",
+        "minute": 180.3
+      },
+      {
+        "cost": 1000000,
+        "id": "range_4",
+        "kind": "skill",
+        "minute": 180.3
+      },
+      {
+        "cost": 1000000,
+        "id": "execute_chance_2",
+        "kind": "skill",
+        "minute": 188.7
+      },
+      {
+        "cost": 1000000,
+        "id": "bomb_chance_3",
+        "kind": "skill",
+        "minute": 188.7
+      },
+      {
+        "cost": 1000000,
+        "id": "bomb_amount_3",
+        "kind": "skill",
+        "minute": 191.6
+      },
+      {
+        "cost": 1000000,
+        "id": "gold_stone_chance_1",
+        "kind": "skill",
+        "minute": 191.6
+      },
+      {
+        "cost": 1000000,
+        "id": "gold_stone_amount_1",
+        "kind": "skill",
+        "minute": 191.6
+      },
+      {
+        "cost": 2100000,
+        "id": "gold_stone_chance_2",
+        "kind": "skill",
+        "minute": 194.5
+      },
+      {
+        "cost": 2100000,
+        "id": "gold_stone_amount_2",
+        "kind": "skill",
+        "minute": 200.1
+      },
+      {
+        "cost": 3500000,
+        "id": "detonator",
+        "kind": "aux",
+        "minute": 203.2
+      },
+      {
+        "cost": 10000000,
+        "id": "gold_pickaxe",
+        "kind": "main",
+        "minute": 211.5
+      }
+    ],
+    "rounds": 142,
+    "seed": 606,
+    "snapshots": [
+      {
+        "attacks": 3242,
+        "aux": 0,
+        "bosses": 0,
+        "damage": 2.6,
+        "gold": 3100,
+        "main": "pickaxe",
+        "minute": 30,
+        "nodes": 17,
+        "radius": 0.475,
+        "speed": 1.16,
+        "stones": 1194
+      },
+      {
+        "attacks": 6330,
+        "aux": 1,
+        "bosses": 1,
+        "damage": 4.42,
+        "gold": 16923,
+        "main": "axe",
+        "minute": 60,
+        "nodes": 31,
+        "radius": 0.475,
+        "speed": 1.386,
+        "stones": 3424
+      },
+      {
+        "attacks": 9785,
+        "aux": 2,
+        "bosses": 1,
+        "damage": 5.78,
+        "gold": 48652,
+        "main": "axe",
+        "minute": 90,
+        "nodes": 58,
+        "radius": 0.57,
+        "speed": 1.386,
+        "stones": 6203
+      },
+      {
+        "attacks": 13390,
+        "aux": 2,
+        "bosses": 2,
+        "damage": 9.52,
+        "gold": 158813,
+        "main": "hammer",
+        "minute": 120,
+        "nodes": 82,
+        "radius": 0.57,
+        "speed": 1.32,
+        "stones": 10470
+      },
+      {
+        "attacks": 18491,
+        "aux": 3,
+        "bosses": 4,
+        "damage": 19.0,
+        "gold": 1557059,
+        "main": "jackhammer",
+        "minute": 150,
+        "nodes": 113,
+        "radius": 0.665,
+        "speed": 2.07,
+        "stones": 22576
+      },
+      {
+        "attacks": 25310,
+        "aux": 5,
+        "bosses": 5,
+        "damage": 30.0,
+        "gold": 7783378,
+        "main": "drill",
+        "minute": 180,
+        "nodes": 127,
+        "radius": 0.665,
+        "speed": 4.5,
+        "stones": 46507
+      },
+      {
+        "attacks": 32230,
+        "aux": 7,
+        "bosses": 6,
+        "damage": 30.0,
+        "gold": 30497707,
+        "main": "drill",
+        "minute": 210,
+        "nodes": 137,
+        "radius": 0.76,
+        "speed": 4.5,
+        "stones": 79631
+      },
+      {
+        "attacks": 38999,
+        "aux": 7,
+        "bosses": 6,
+        "damage": 60.0,
+        "gold": 132644721,
+        "main": "gold_pickaxe",
+        "minute": 240,
+        "nodes": 137,
+        "radius": 0.76,
+        "speed": 5.4,
+        "stones": 139056
+      }
+    ],
+    "wallet": 151897587,
+    "won": true
+  },
+  {
+    "active_minutes": 245.6,
+    "all_unlocked_minute": 245.1,
+    "aux": 7,
+    "boss_failures": 0,
+    "efficiency": 0.85,
+    "lifetime_gold": 170052976,
+    "main": "gold_pickaxe",
+    "milestones": [
+      {
+        "boss": 1,
+        "fight_seconds": 49.8,
+        "minute": 66.6,
+        "nodes": 29,
+        "power": 4.42
+      },
+      {
+        "boss": 2,
+        "fight_seconds": 61.9,
+        "minute": 113.1,
+        "nodes": 57,
+        "power": 5.78
+      },
+      {
+        "boss": 3,
+        "fight_seconds": 26.7,
+        "minute": 154.9,
+        "nodes": 93,
+        "power": 9.52
+      },
+      {
+        "boss": 4,
+        "fight_seconds": 25.0,
+        "minute": 177.4,
+        "nodes": 113,
+        "power": 19.0
+      },
+      {
+        "boss": 5,
+        "fight_seconds": 25.9,
+        "minute": 206.6,
+        "nodes": 124,
+        "power": 30.0
+      },
+      {
+        "boss": 6,
+        "fight_seconds": 34.6,
+        "minute": 239.3,
+        "nodes": 137,
+        "power": 30.0
+      },
+      {
+        "boss": 7,
+        "fight_seconds": 28.9,
+        "minute": 289.7,
+        "nodes": 137,
+        "power": 60.0
+      }
+    ],
+    "minutes": 289.9,
+    "paid_nodes": 137,
+    "policy": "balanced",
+    "purchases": [
+      {
+        "cost": 60,
+        "id": "speed",
+        "kind": "skill",
+        "minute": 1.3
+      },
+      {
+        "cost": 60,
+        "id": "vitality",
+        "kind": "skill",
+        "minute": 3.3
+      },
+      {
+        "cost": 60,
+        "id": "income_2",
+        "kind": "skill",
+        "minute": 4.8
+      },
+      {
+        "cost": 60,
+        "id": "rich_ore",
+        "kind": "skill",
+        "minute": 6.3
+      },
+      {
+        "cost": 160,
+        "id": "power_tip",
+        "kind": "skill",
+        "minute": 9.3
+      },
+      {
+        "cost": 160,
+        "id": "reach",
+        "kind": "skill",
+        "minute": 11.6
+      },
+      {
+        "cost": 160,
+        "id": "health_2",
+        "kind": "skill",
+        "minute": 13.2
+      },
+      {
+        "cost": 160,
+        "id": "gem_gold_1",
+        "kind": "skill",
+        "minute": 15.6
+      },
+      {
+        "cost": 160,
+        "id": "gold_drop",
+        "kind": "skill",
+        "minute": 16.5
+      },
+      {
+        "cost": 160,
+        "id": "value_1",
+        "kind": "skill",
+        "minute": 18.2
+      },
+      {
+        "cost": 160,
+        "id": "income_1",
+        "kind": "skill",
+        "minute": 19.9
+      },
+      {
+        "cost": 160,
+        "id": "income_3",
+        "kind": "skill",
+        "minute": 20.8
+      },
+      {
+        "cost": 400,
+        "id": "power",
+        "kind": "skill",
+        "minute": 24.0
+      },
+      {
+        "cost": 400,
+        "id": "ore_spawn_2",
+        "kind": "skill",
+        "minute": 26.5
+      },
+      {
+        "cost": 400,
+        "id": "health_3",
+        "kind": "skill",
+        "minute": 29.0
+      },
+      {
+        "cost": 400,
+        "id": "drain_1",
+        "kind": "skill",
+        "minute": 31.6
+      },
+      {
+        "cost": 400,
+        "id": "drop_chance_1",
+        "kind": "skill",
+        "minute": 34.4
+      },
+      {
+        "cost": 400,
+        "id": "drop_amount_1",
+        "kind": "skill",
+        "minute": 36.3
+      },
+      {
+        "cost": 400,
+        "id": "break_heal",
+        "kind": "skill",
+        "minute": 38.2
+      },
+      {
+        "cost": 400,
+        "id": "value_2",
+        "kind": "skill",
+        "minute": 40.2
+      },
+      {
+        "cost": 400,
+        "id": "income_4",
+        "kind": "skill",
+        "minute": 42.1
+      },
+      {
+        "cost": 800,
+        "id": "axe",
+        "kind": "main",
+        "minute": 45.8
+      },
+      {
+        "cost": 800,
+        "id": "speed_2",
+        "kind": "skill",
+        "minute": 48.7
+      },
+      {
+        "cost": 900,
+        "id": "laser",
+        "kind": "aux",
+        "minute": 50.7
+      },
+      {
+        "cost": 800,
+        "id": "rare_1",
+        "kind": "skill",
+        "minute": 52.6
+      },
+      {
+        "cost": 800,
+        "id": "brilliant",
+        "kind": "skill",
+        "minute": 54.6
+      },
+      {
+        "cost": 800,
+        "id": "drop_chance_2",
+        "kind": "skill",
+        "minute": 57.5
+      },
+      {
+        "cost": 800,
+        "id": "health_4",
+        "kind": "skill",
+        "minute": 59.5
+      },
+      {
+        "cost": 800,
+        "id": "drain_2",
+        "kind": "skill",
+        "minute": 60.5
+      },
+      {
+        "cost": 800,
+        "id": "spent_range",
+        "kind": "skill",
+        "minute": 62.8
+      },
+      {
+        "cost": 800,
+        "id": "break_heal_chance",
+        "kind": "skill",
+        "minute": 65.0
+      },
+      {
+        "cost": 800,
+        "id": "income_5",
+        "kind": "skill",
+        "minute": 66.8
+      },
+      {
+        "cost": 800,
+        "id": "value_3",
+        "kind": "skill",
+        "minute": 66.8
+      },
+      {
+        "cost": 800,
+        "id": "drop_amount_2",
+        "kind": "skill",
+        "minute": 66.8
+      },
+      {
+        "cost": 1200,
+        "id": "shock",
+        "kind": "skill",
+        "minute": 69.2
+      },
+      {
+        "cost": 800,
+        "id": "shock_power_1",
+        "kind": "skill",
+        "minute": 70.4
+      },
+      {
+        "cost": 800,
+        "id": "shock_range_1",
+        "kind": "skill",
+        "minute": 71.5
+      },
+      {
+        "cost": 800,
+        "id": "shock_chance_1",
+        "kind": "skill",
+        "minute": 72.7
+      },
+      {
+        "cost": 1600,
+        "id": "combo",
+        "kind": "skill",
+        "minute": 76.0
+      },
+      {
+        "cost": 1300,
+        "id": "beer",
+        "kind": "aux",
+        "minute": 77.2
+      },
+      {
+        "cost": 1360,
+        "id": "resonance",
+        "kind": "skill",
+        "minute": 78.5
+      },
+      {
+        "cost": 1800,
+        "id": "power_3",
+        "kind": "skill",
+        "minute": 81.0
+      },
+      {
+        "cost": 1800,
+        "id": "range_3",
+        "kind": "skill",
+        "minute": 83.6
+      },
+      {
+        "cost": 1800,
+        "id": "combo_power_1",
+        "kind": "skill",
+        "minute": 84.9
+      },
+      {
+        "cost": 1800,
+        "id": "combo_time_1",
+        "kind": "skill",
+        "minute": 87.4
+      },
+      {
+        "cost": 1800,
+        "id": "shock_power_2",
+        "kind": "skill",
+        "minute": 88.7
+      },
+      {
+        "cost": 1800,
+        "id": "shock_range_2",
+        "kind": "skill",
+        "minute": 91.2
+      },
+      {
+        "cost": 1800,
+        "id": "shock_chance_2",
+        "kind": "skill",
+        "minute": 92.5
+      },
+      {
+        "cost": 1800,
+        "id": "resonance_amount_1",
+        "kind": "skill",
+        "minute": 93.9
+      },
+      {
+        "cost": 1800,
+        "id": "resonance_chance_1",
+        "kind": "skill",
+        "minute": 95.2
+      },
+      {
+        "cost": 1800,
+        "id": "rare_2",
+        "kind": "skill",
+        "minute": 96.5
+      },
+      {
+        "cost": 1800,
+        "id": "ore_spawn_3",
+        "kind": "skill",
+        "minute": 97.8
+      },
+      {
+        "cost": 1800,
+        "id": "brilliant_chance_1",
+        "kind": "skill",
+        "minute": 100.4
+      },
+      {
+        "cost": 1800,
+        "id": "brilliant_value_1",
+        "kind": "skill",
+        "minute": 101.7
+      },
+      {
+        "cost": 1800,
+        "id": "drop_chance_3",
+        "kind": "skill",
+        "minute": 103.1
+      },
+      {
+        "cost": 1800,
+        "id": "drop_amount_3",
+        "kind": "skill",
+        "minute": 105.6
+      },
+      {
+        "cost": 1800,
+        "id": "value_4",
+        "kind": "skill",
+        "minute": 106.9
+      },
+      {
+        "cost": 1800,
+        "id": "recovery",
+        "kind": "skill",
+        "minute": 108.3
+      },
+      {
+        "cost": 1800,
+        "id": "drain_3",
+        "kind": "skill",
+        "minute": 109.7
+      },
+      {
+        "cost": 1800,
+        "id": "spent_range_more",
+        "kind": "skill",
+        "minute": 111.2
+      },
+      {
+        "cost": 1800,
+        "id": "break_heal_amount",
+        "kind": "skill",
+        "minute": 113.3
+      },
+      {
+        "cost": 2340,
+        "id": "revive",
+        "kind": "skill",
+        "minute": 113.3
+      },
+      {
+        "cost": 2700,
+        "id": "golden_day",
+        "kind": "skill",
+        "minute": 113.3
+      },
+      {
+        "cost": 3600,
+        "id": "extra",
+        "kind": "skill",
+        "minute": 113.3
+      },
+      {
+        "cost": 4000,
+        "id": "ore_damage",
+        "kind": "skill",
+        "minute": 115.1
+      },
+      {
+        "cost": 4000,
+        "id": "crowd",
+        "kind": "skill",
+        "minute": 116.8
+      },
+      {
+        "cost": 4000,
+        "id": "combo_power_2",
+        "kind": "skill",
+        "minute": 118.6
+      },
+      {
+        "cost": 4000,
+        "id": "combo_time_2",
+        "kind": "skill",
+        "minute": 120.3
+      },
+      {
+        "cost": 4000,
+        "id": "shock_power_3",
+        "kind": "skill",
+        "minute": 122.1
+      },
+      {
+        "cost": 4000,
+        "id": "shock_range_3",
+        "kind": "skill",
+        "minute": 123.8
+      },
+      {
+        "cost": 4000,
+        "id": "shock_chance_3",
+        "kind": "skill",
+        "minute": 125.7
+      },
+      {
+        "cost": 4000,
+        "id": "extra_count_1",
+        "kind": "skill",
+        "minute": 125.7
+      },
+      {
+        "cost": 4000,
+        "id": "extra_chance_1",
+        "kind": "skill",
+        "minute": 127.5
+      },
+      {
+        "cost": 4000,
+        "id": "resonance_amount_2",
+        "kind": "skill",
+        "minute": 129.4
+      },
+      {
+        "cost": 4000,
+        "id": "resonance_chance_2",
+        "kind": "skill",
+        "minute": 129.4
+      },
+      {
+        "cost": 4000,
+        "id": "rare_3",
+        "kind": "skill",
+        "minute": 131.2
+      },
+      {
+        "cost": 4000,
+        "id": "gem_gold_2",
+        "kind": "skill",
+        "minute": 133.1
+      },
+      {
+        "cost": 4000,
+        "id": "golden_chance",
+        "kind": "skill",
+        "minute": 133.1
+      },
+      {
+        "cost": 4000,
+        "id": "brilliant_chance_2",
+        "kind": "skill",
+        "minute": 134.9
+      },
+      {
+        "cost": 4000,
+        "id": "spent_threshold",
+        "kind": "skill",
+        "minute": 136.9
+      },
+      {
+        "cost": 4000,
+        "id": "low_health",
+        "kind": "skill",
+        "minute": 138.7
+      },
+      {
+        "cost": 4000,
+        "id": "revive_heal",
+        "kind": "skill",
+        "minute": 138.7
+      },
+      {
+        "cost": 4000,
+        "id": "recovery_more",
+        "kind": "skill",
+        "minute": 140.7
+      },
+      {
+        "cost": 4000,
+        "id": "brilliant_value_2",
+        "kind": "skill",
+        "minute": 140.7
+      },
+      {
+        "cost": 8500,
+        "id": "hammer",
+        "kind": "main",
+        "minute": 143.0
+      },
+      {
+        "cost": 5000,
+        "id": "healing",
+        "kind": "skill",
+        "minute": 145.5
+      },
+      {
+        "cost": 9000,
+        "id": "range_2",
+        "kind": "skill",
+        "minute": 145.5
+      },
+      {
+        "cost": 9000,
+        "id": "speed_3",
+        "kind": "skill",
+        "minute": 145.5
+      },
+      {
+        "cost": 9000,
+        "id": "speed_4",
+        "kind": "skill",
+        "minute": 148.0
+      },
+      {
+        "cost": 9000,
+        "id": "combo_speed",
+        "kind": "skill",
+        "minute": 148.0
+      },
+      {
+        "cost": 9000,
+        "id": "extra_count_2",
+        "kind": "skill",
+        "minute": 150.5
+      },
+      {
+        "cost": 9000,
+        "id": "extra_chance_2",
+        "kind": "skill",
+        "minute": 150.5
+      },
+      {
+        "cost": 9000,
+        "id": "healing_amount_1",
+        "kind": "skill",
+        "minute": 150.5
+      },
+      {
+        "cost": 9000,
+        "id": "healing_chance_1",
+        "kind": "skill",
+        "minute": 150.5
+      },
+      {
+        "cost": 9000,
+        "id": "resonance_amount_3",
+        "kind": "skill",
+        "minute": 153.0
+      },
+      {
+        "cost": 9000,
+        "id": "resonance_chance_3",
+        "kind": "skill",
+        "minute": 153.0
+      },
+      {
+        "cost": 9000,
+        "id": "ore_spawn_4",
+        "kind": "skill",
+        "minute": 153.0
+      },
+      {
+        "cost": 9000,
+        "id": "low_health_speed",
+        "kind": "skill",
+        "minute": 155.1
+      },
+      {
+        "cost": 9000,
+        "id": "revive_count",
+        "kind": "skill",
+        "minute": 155.1
+      },
+      {
+        "cost": 9000,
+        "id": "brilliant_value_3",
+        "kind": "skill",
+        "minute": 155.1
+      },
+      {
+        "cost": 9000,
+        "id": "brilliant_chance_3",
+        "kind": "skill",
+        "minute": 155.1
+      },
+      {
+        "cost": 9000,
+        "id": "golden_pity",
+        "kind": "skill",
+        "minute": 155.1
+      },
+      {
+        "cost": 12600,
+        "id": "critical",
+        "kind": "skill",
+        "minute": 155.1
+      },
+      {
+        "cost": 12000,
+        "id": "detector",
+        "kind": "aux",
+        "minute": 158.0
+      },
+      {
+        "cost": 22000,
+        "id": "first_hit",
+        "kind": "skill",
+        "minute": 158.0
+      },
+      {
+        "cost": 22000,
+        "id": "power_side_1",
+        "kind": "skill",
+        "minute": 158.0
+      },
+      {
+        "cost": 22000,
+        "id": "extra_count_3",
+        "kind": "skill",
+        "minute": 158.0
+      },
+      {
+        "cost": 22000,
+        "id": "extra_chance_3",
+        "kind": "skill",
+        "minute": 158.0
+      },
+      {
+        "cost": 22000,
+        "id": "crit_chance_1",
+        "kind": "skill",
+        "minute": 158.0
+      },
+      {
+        "cost": 22000,
+        "id": "crit_power_1",
+        "kind": "skill",
+        "minute": 158.0
+      },
+      {
+        "cost": 22000,
+        "id": "healing_amount_2",
+        "kind": "skill",
+        "minute": 158.0
+      },
+      {
+        "cost": 22000,
+        "id": "low_health_threshold",
+        "kind": "skill",
+        "minute": 160.9
+      },
+      {
+        "cost": 22000,
+        "id": "gem_buff",
+        "kind": "skill",
+        "minute": 160.9
+      },
+      {
+        "cost": 22000,
+        "id": "healing_chance_2",
+        "kind": "skill",
+        "minute": 160.9
+      },
+      {
+        "cost": 33000,
+        "id": "bomb",
+        "kind": "skill",
+        "minute": 160.9
+      },
+      {
+        "cost": 65000,
+        "id": "jackhammer",
+        "kind": "main",
+        "minute": 163.8
+      },
+      {
+        "cost": 180000,
+        "id": "speed_5",
+        "kind": "skill",
+        "minute": 166.5
+      },
+      {
+        "cost": 180000,
+        "id": "power_side_2",
+        "kind": "skill",
+        "minute": 171.8
+      },
+      {
+        "cost": 180000,
+        "id": "streak",
+        "kind": "skill",
+        "minute": 174.5
+      },
+      {
+        "cost": 180000,
+        "id": "crit_chance_2",
+        "kind": "skill",
+        "minute": 177.6
+      },
+      {
+        "cost": 180000,
+        "id": "crit_power_2",
+        "kind": "skill",
+        "minute": 177.6
+      },
+      {
+        "cost": 180000,
+        "id": "extra_critical",
+        "kind": "skill",
+        "minute": 180.4
+      },
+      {
+        "cost": 180000,
+        "id": "execute",
+        "kind": "skill",
+        "minute": 183.1
+      },
+      {
+        "cost": 180000,
+        "id": "ore_spawn_5",
+        "kind": "skill",
+        "minute": 185.8
+      },
+      {
+        "cost": 180000,
+        "id": "bomb_chance_1",
+        "kind": "skill",
+        "minute": 185.8
+      },
+      {
+        "cost": 180000,
+        "id": "bomb_amount_1",
+        "kind": "skill",
+        "minute": 188.6
+      },
+      {
+        "cost": 300000,
+        "id": "crusher",
+        "kind": "aux",
+        "minute": 191.4
+      },
+      {
+        "cost": 400000,
+        "id": "drill",
+        "kind": "main",
+        "minute": 194.1
+      },
+      {
+        "cost": 310000,
+        "id": "xray",
+        "kind": "aux",
+        "minute": 196.8
+      },
+      {
+        "cost": 450000,
+        "id": "finisher",
+        "kind": "skill",
+        "minute": 199.6
+      },
+      {
+        "cost": 450000,
+        "id": "crit_chance_3",
+        "kind": "skill",
+        "minute": 202.3
+      },
+      {
+        "cost": 450000,
+        "id": "crit_power_3",
+        "kind": "skill",
+        "minute": 202.3
+      },
+      {
+        "cost": 450000,
+        "id": "crit_gold",
+        "kind": "skill",
+        "minute": 205.1
+      },
+      {
+        "cost": 450000,
+        "id": "execute_chance_1",
+        "kind": "skill",
+        "minute": 206.8
+      },
+      {
+        "cost": 450000,
+        "id": "execute_gold",
+        "kind": "skill",
+        "minute": 206.8
+      },
+      {
+        "cost": 450000,
+        "id": "bomb_chance_2",
+        "kind": "skill",
+        "minute": 209.6
+      },
+      {
+        "cost": 450000,
+        "id": "bomb_amount_2",
+        "kind": "skill",
+        "minute": 209.6
+      },
+      {
+        "cost": 450000,
+        "id": "gold_stone",
+        "kind": "skill",
+        "minute": 212.4
+      },
+      {
+        "cost": 550000,
+        "id": "pin",
+        "kind": "aux",
+        "minute": 212.4
+      },
+      {
+        "cost": 1000000,
+        "id": "range_4",
+        "kind": "skill",
+        "minute": 215.2
+      },
+      {
+        "cost": 1000000,
+        "id": "execute_chance_2",
+        "kind": "skill",
+        "minute": 217.9
+      },
+      {
+        "cost": 1000000,
+        "id": "bomb_chance_3",
+        "kind": "skill",
+        "minute": 220.7
+      },
+      {
+        "cost": 1000000,
+        "id": "bomb_amount_3",
+        "kind": "skill",
+        "minute": 223.4
+      },
+      {
+        "cost": 1000000,
+        "id": "gold_stone_chance_1",
+        "kind": "skill",
+        "minute": 226.2
+      },
+      {
+        "cost": 1000000,
+        "id": "gold_stone_amount_1",
+        "kind": "skill",
+        "minute": 228.9
+      },
+      {
+        "cost": 2100000,
+        "id": "gold_stone_chance_2",
+        "kind": "skill",
+        "minute": 234.3
+      },
+      {
+        "cost": 2100000,
+        "id": "gold_stone_amount_2",
+        "kind": "skill",
+        "minute": 237.1
+      },
+      {
+        "cost": 3500000,
+        "id": "detonator",
+        "kind": "aux",
+        "minute": 242.2
+      },
+      {
+        "cost": 10000000,
+        "id": "gold_pickaxe",
+        "kind": "main",
+        "minute": 245.0
+      }
+    ],
+    "rounds": 182,
+    "seed": 202,
+    "snapshots": [
+      {
+        "attacks": 3146,
+        "aux": 0,
+        "bosses": 0,
+        "damage": 2.6,
+        "gold": 2831,
+        "main": "pickaxe",
+        "minute": 30,
+        "nodes": 15,
+        "radius": 0.475,
+        "speed": 1.16,
+        "stones": 1085
+      },
+      {
+        "attacks": 6150,
+        "aux": 1,
+        "bosses": 0,
+        "damage": 4.42,
+        "gold": 11169,
+        "main": "axe",
+        "minute": 60,
+        "nodes": 26,
+        "radius": 0.475,
+        "speed": 1.386,
+        "stones": 2952
+      },
+      {
+        "attacks": 9286,
+        "aux": 2,
+        "bosses": 1,
+        "damage": 5.78,
+        "gold": 34218,
+        "main": "axe",
+        "minute": 90,
+        "nodes": 43,
+        "radius": 0.57,
+        "speed": 1.386,
+        "stones": 5083
+      },
+      {
+        "attacks": 12334,
+        "aux": 2,
+        "bosses": 2,
+        "damage": 5.78,
+        "gold": 82956,
+        "main": "axe",
+        "minute": 120,
+        "nodes": 64,
+        "radius": 0.57,
+        "speed": 1.386,
+        "stones": 7859
+      },
+      {
+        "attacks": 15832,
+        "aux": 2,
+        "bosses": 2,
+        "damage": 9.52,
+        "gold": 204452,
+        "main": "hammer",
+        "minute": 150,
+        "nodes": 86,
+        "radius": 0.665,
+        "speed": 1.64,
+        "stones": 12414
+      },
+      {
+        "attacks": 20595,
+        "aux": 3,
+        "bosses": 4,
+        "damage": 19.0,
+        "gold": 1555003,
+        "main": "jackhammer",
+        "minute": 180,
+        "nodes": 115,
+        "radius": 0.665,
+        "speed": 2.07,
+        "stones": 24282
+      },
+      {
+        "attacks": 26614,
+        "aux": 5,
+        "bosses": 5,
+        "damage": 30.0,
+        "gold": 7093457,
+        "main": "drill",
+        "minute": 210,
+        "nodes": 128,
+        "radius": 0.665,
+        "speed": 4.5,
+        "stones": 43100
+      },
+      {
+        "attacks": 32899,
+        "aux": 6,
+        "bosses": 6,
+        "damage": 30.0,
+        "gold": 21635495,
+        "main": "drill",
+        "minute": 240,
+        "nodes": 137,
+        "radius": 0.76,
+        "speed": 4.5,
+        "stones": 70409
+      },
+      {
+        "attacks": 39060,
+        "aux": 7,
+        "bosses": 6,
+        "damage": 60.0,
+        "gold": 110923844,
+        "main": "gold_pickaxe",
+        "minute": 270,
+        "nodes": 137,
+        "radius": 0.76,
+        "speed": 5.4,
+        "stones": 123551
+      }
+    ],
+    "wallet": 138294756,
+    "won": true
+  },
+  {
+    "active_minutes": 190.0,
+    "all_unlocked_minute": 190.5,
+    "aux": 7,
+    "boss_failures": 0,
+    "efficiency": 1.15,
+    "lifetime_gold": 159781264,
+    "main": "gold_pickaxe",
+    "milestones": [
+      {
+        "boss": 1,
+        "fight_seconds": 37.9,
+        "minute": 54.0,
+        "nodes": 32,
+        "power": 4.42
+      },
+      {
+        "boss": 2,
+        "fight_seconds": 46.8,
+        "minute": 88.6,
+        "nodes": 59,
+        "power": 5.78
+      },
+      {
+        "boss": 3,
+        "fight_seconds": 23.9,
+        "minute": 117.0,
+        "nodes": 91,
+        "power": 9.52
+      },
+      {
+        "boss": 4,
+        "fight_seconds": 24.9,
+        "minute": 133.6,
+        "nodes": 111,
+        "power": 15.96
+      },
+      {
+        "boss": 5,
+        "fight_seconds": 16.6,
+        "minute": 156.8,
+        "nodes": 121,
+        "power": 30.0
+      },
+      {
+        "boss": 6,
+        "fight_seconds": 32.8,
+        "minute": 182.0,
+        "nodes": 136,
+        "power": 30.0
+      },
+      {
+        "boss": 7,
+        "fight_seconds": 22.4,
+        "minute": 225.5,
+        "nodes": 137,
+        "power": 60.0
+      }
+    ],
+    "minutes": 225.8,
+    "paid_nodes": 137,
+    "policy": "balanced",
+    "purchases": [
+      {
+        "cost": 60,
+        "id": "speed",
+        "kind": "skill",
+        "minute": 1.9
+      },
+      {
+        "cost": 60,
+        "id": "vitality",
+        "kind": "skill",
+        "minute": 2.7
+      },
+      {
+        "cost": 60,
+        "id": "income_2",
+        "kind": "skill",
+        "minute": 4.2
+      },
+      {
+        "cost": 60,
+        "id": "rich_ore",
+        "kind": "skill",
+        "minute": 5.0
+      },
+      {
+        "cost": 160,
+        "id": "power_tip",
+        "kind": "skill",
+        "minute": 6.5
+      },
+      {
+        "cost": 160,
+        "id": "reach",
+        "kind": "skill",
+        "minute": 8.1
+      },
+      {
+        "cost": 160,
+        "id": "health_2",
+        "kind": "skill",
+        "minute": 9.6
+      },
+      {
+        "cost": 160,
+        "id": "gem_gold_1",
+        "kind": "skill",
+        "minute": 11.3
+      },
+      {
+        "cost": 160,
+        "id": "gold_drop",
+        "kind": "skill",
+        "minute": 13.0
+      },
+      {
+        "cost": 160,
+        "id": "value_1",
+        "kind": "skill",
+        "minute": 13.9
+      },
+      {
+        "cost": 160,
+        "id": "income_1",
+        "kind": "skill",
+        "minute": 14.8
+      },
+      {
+        "cost": 160,
+        "id": "income_3",
+        "kind": "skill",
+        "minute": 15.7
+      },
+      {
+        "cost": 400,
+        "id": "power",
+        "kind": "skill",
+        "minute": 18.1
+      },
+      {
+        "cost": 400,
+        "id": "ore_spawn_2",
+        "kind": "skill",
+        "minute": 20.6
+      },
+      {
+        "cost": 400,
+        "id": "health_3",
+        "kind": "skill",
+        "minute": 22.3
+      },
+      {
+        "cost": 400,
+        "id": "drain_1",
+        "kind": "skill",
+        "minute": 24.1
+      },
+      {
+        "cost": 400,
+        "id": "drop_chance_1",
+        "kind": "skill",
+        "minute": 26.0
+      },
+      {
+        "cost": 400,
+        "id": "drop_amount_1",
+        "kind": "skill",
+        "minute": 27.9
+      },
+      {
+        "cost": 400,
+        "id": "break_heal",
+        "kind": "skill",
+        "minute": 29.8
+      },
+      {
+        "cost": 400,
+        "id": "value_2",
+        "kind": "skill",
+        "minute": 30.8
+      },
+      {
+        "cost": 400,
+        "id": "income_4",
+        "kind": "skill",
+        "minute": 32.8
+      },
+      {
+        "cost": 800,
+        "id": "axe",
+        "kind": "main",
+        "minute": 34.7
+      },
+      {
+        "cost": 800,
+        "id": "speed_2",
+        "kind": "skill",
+        "minute": 36.7
+      },
+      {
+        "cost": 900,
+        "id": "laser",
+        "kind": "aux",
+        "minute": 38.7
+      },
+      {
+        "cost": 800,
+        "id": "rare_1",
+        "kind": "skill",
+        "minute": 39.7
+      },
+      {
+        "cost": 800,
+        "id": "brilliant",
+        "kind": "skill",
+        "minute": 41.7
+      },
+      {
+        "cost": 800,
+        "id": "drop_chance_2",
+        "kind": "skill",
+        "minute": 42.7
+      },
+      {
+        "cost": 800,
+        "id": "health_4",
+        "kind": "skill",
+        "minute": 44.7
+      },
+      {
+        "cost": 800,
+        "id": "drain_2",
+        "kind": "skill",
+        "minute": 45.8
+      },
+      {
+        "cost": 800,
+        "id": "spent_range",
+        "kind": "skill",
+        "minute": 46.9
+      },
+      {
+        "cost": 800,
+        "id": "break_heal_chance",
+        "kind": "skill",
+        "minute": 49.2
+      },
+      {
+        "cost": 800,
+        "id": "income_5",
+        "kind": "skill",
+        "minute": 50.4
+      },
+      {
+        "cost": 800,
+        "id": "value_3",
+        "kind": "skill",
+        "minute": 51.6
+      },
+      {
+        "cost": 800,
+        "id": "drop_amount_2",
+        "kind": "skill",
+        "minute": 52.8
+      },
+      {
+        "cost": 1200,
+        "id": "shock",
+        "kind": "skill",
+        "minute": 54.2
+      },
+      {
+        "cost": 800,
+        "id": "shock_power_1",
+        "kind": "skill",
+        "minute": 54.2
+      },
+      {
+        "cost": 800,
+        "id": "shock_range_1",
+        "kind": "skill",
+        "minute": 55.4
+      },
+      {
+        "cost": 800,
+        "id": "shock_chance_1",
+        "kind": "skill",
+        "minute": 55.4
+      },
+      {
+        "cost": 1600,
+        "id": "combo",
+        "kind": "skill",
+        "minute": 57.8
+      },
+      {
+        "cost": 1300,
+        "id": "beer",
+        "kind": "aux",
+        "minute": 58.9
+      },
+      {
+        "cost": 1360,
+        "id": "resonance",
+        "kind": "skill",
+        "minute": 60.2
+      },
+      {
+        "cost": 1800,
+        "id": "power_3",
+        "kind": "skill",
+        "minute": 62.8
+      },
+      {
+        "cost": 1800,
+        "id": "range_3",
+        "kind": "skill",
+        "minute": 64.1
+      },
+      {
+        "cost": 1800,
+        "id": "combo_power_1",
+        "kind": "skill",
+        "minute": 65.5
+      },
+      {
+        "cost": 1800,
+        "id": "combo_time_1",
+        "kind": "skill",
+        "minute": 66.7
+      },
+      {
+        "cost": 1800,
+        "id": "shock_power_2",
+        "kind": "skill",
+        "minute": 68.1
+      },
+      {
+        "cost": 1800,
+        "id": "shock_range_2",
+        "kind": "skill",
+        "minute": 70.7
+      },
+      {
+        "cost": 1800,
+        "id": "shock_chance_2",
+        "kind": "skill",
+        "minute": 70.7
+      },
+      {
+        "cost": 1800,
+        "id": "resonance_amount_1",
+        "kind": "skill",
+        "minute": 72.1
+      },
+      {
+        "cost": 1800,
+        "id": "resonance_chance_1",
+        "kind": "skill",
+        "minute": 73.4
+      },
+      {
+        "cost": 1800,
+        "id": "rare_2",
+        "kind": "skill",
+        "minute": 74.8
+      },
+      {
+        "cost": 1800,
+        "id": "ore_spawn_3",
+        "kind": "skill",
+        "minute": 76.1
+      },
+      {
+        "cost": 1800,
+        "id": "brilliant_chance_1",
+        "kind": "skill",
+        "minute": 77.4
+      },
+      {
+        "cost": 1800,
+        "id": "brilliant_value_1",
+        "kind": "skill",
+        "minute": 77.4
+      },
+      {
+        "cost": 1800,
+        "id": "drop_chance_3",
+        "kind": "skill",
+        "minute": 78.8
+      },
+      {
+        "cost": 1800,
+        "id": "drop_amount_3",
+        "kind": "skill",
+        "minute": 80.1
+      },
+      {
+        "cost": 1800,
+        "id": "value_4",
+        "kind": "skill",
+        "minute": 81.5
+      },
+      {
+        "cost": 1800,
+        "id": "recovery",
+        "kind": "skill",
+        "minute": 82.8
+      },
+      {
+        "cost": 1800,
+        "id": "drain_3",
+        "kind": "skill",
+        "minute": 82.8
+      },
+      {
+        "cost": 1800,
+        "id": "spent_range_more",
+        "kind": "skill",
+        "minute": 84.5
+      },
+      {
+        "cost": 1800,
+        "id": "break_heal_amount",
+        "kind": "skill",
+        "minute": 84.5
+      },
+      {
+        "cost": 2340,
+        "id": "revive",
+        "kind": "skill",
+        "minute": 86.5
+      },
+      {
+        "cost": 2700,
+        "id": "golden_day",
+        "kind": "skill",
+        "minute": 88.8
+      },
+      {
+        "cost": 3600,
+        "id": "extra",
+        "kind": "skill",
+        "minute": 88.8
+      },
+      {
+        "cost": 4000,
+        "id": "ore_damage",
+        "kind": "skill",
+        "minute": 88.8
+      },
+      {
+        "cost": 4000,
+        "id": "crowd",
+        "kind": "skill",
+        "minute": 88.8
+      },
+      {
+        "cost": 4000,
+        "id": "combo_power_2",
+        "kind": "skill",
+        "minute": 90.8
+      },
+      {
+        "cost": 4000,
+        "id": "combo_time_2",
+        "kind": "skill",
+        "minute": 92.8
+      },
+      {
+        "cost": 4000,
+        "id": "shock_power_3",
+        "kind": "skill",
+        "minute": 92.8
+      },
+      {
+        "cost": 4000,
+        "id": "shock_range_3",
+        "kind": "skill",
+        "minute": 94.8
+      },
+      {
+        "cost": 4000,
+        "id": "shock_chance_3",
+        "kind": "skill",
+        "minute": 94.8
+      },
+      {
+        "cost": 4000,
+        "id": "extra_count_1",
+        "kind": "skill",
+        "minute": 96.9
+      },
+      {
+        "cost": 4000,
+        "id": "extra_chance_1",
+        "kind": "skill",
+        "minute": 96.9
+      },
+      {
+        "cost": 4000,
+        "id": "resonance_amount_2",
+        "kind": "skill",
+        "minute": 98.9
+      },
+      {
+        "cost": 4000,
+        "id": "resonance_chance_2",
+        "kind": "skill",
+        "minute": 98.9
+      },
+      {
+        "cost": 4000,
+        "id": "rare_3",
+        "kind": "skill",
+        "minute": 101.0
+      },
+      {
+        "cost": 4000,
+        "id": "gem_gold_2",
+        "kind": "skill",
+        "minute": 101.0
+      },
+      {
+        "cost": 4000,
+        "id": "golden_chance",
+        "kind": "skill",
+        "minute": 103.1
+      },
+      {
+        "cost": 4000,
+        "id": "brilliant_chance_2",
+        "kind": "skill",
+        "minute": 103.1
+      },
+      {
+        "cost": 4000,
+        "id": "spent_threshold",
+        "kind": "skill",
+        "minute": 103.1
+      },
+      {
+        "cost": 4000,
+        "id": "low_health",
+        "kind": "skill",
+        "minute": 105.3
+      },
+      {
+        "cost": 4000,
+        "id": "revive_heal",
+        "kind": "skill",
+        "minute": 105.3
+      },
+      {
+        "cost": 4000,
+        "id": "recovery_more",
+        "kind": "skill",
+        "minute": 105.3
+      },
+      {
+        "cost": 4000,
+        "id": "brilliant_value_2",
+        "kind": "skill",
+        "minute": 107.9
+      },
+      {
+        "cost": 8500,
+        "id": "hammer",
+        "kind": "main",
+        "minute": 107.9
+      },
+      {
+        "cost": 5000,
+        "id": "healing",
+        "kind": "skill",
+        "minute": 110.3
+      },
+      {
+        "cost": 9000,
+        "id": "range_2",
+        "kind": "skill",
+        "minute": 110.3
+      },
+      {
+        "cost": 9000,
+        "id": "speed_3",
+        "kind": "skill",
+        "minute": 110.3
+      },
+      {
+        "cost": 9000,
+        "id": "speed_4",
+        "kind": "skill",
+        "minute": 112.8
+      },
+      {
+        "cost": 9000,
+        "id": "combo_speed",
+        "kind": "skill",
+        "minute": 112.8
+      },
+      {
+        "cost": 9000,
+        "id": "extra_count_2",
+        "kind": "skill",
+        "minute": 112.8
+      },
+      {
+        "cost": 9000,
+        "id": "extra_chance_2",
+        "kind": "skill",
+        "minute": 115.4
+      },
+      {
+        "cost": 9000,
+        "id": "healing_amount_1",
+        "kind": "skill",
+        "minute": 115.4
+      },
+      {
+        "cost": 9000,
+        "id": "healing_chance_1",
+        "kind": "skill",
+        "minute": 115.4
+      },
+      {
+        "cost": 9000,
+        "id": "resonance_amount_3",
+        "kind": "skill",
+        "minute": 115.4
+      },
+      {
+        "cost": 9000,
+        "id": "resonance_chance_3",
+        "kind": "skill",
+        "minute": 117.2
+      },
+      {
+        "cost": 9000,
+        "id": "ore_spawn_4",
+        "kind": "skill",
+        "minute": 117.2
+      },
+      {
+        "cost": 9000,
+        "id": "low_health_speed",
+        "kind": "skill",
+        "minute": 117.2
+      },
+      {
+        "cost": 9000,
+        "id": "revive_count",
+        "kind": "skill",
+        "minute": 117.2
+      },
+      {
+        "cost": 9000,
+        "id": "brilliant_value_3",
+        "kind": "skill",
+        "minute": 117.2
+      },
+      {
+        "cost": 9000,
+        "id": "brilliant_chance_3",
+        "kind": "skill",
+        "minute": 117.2
+      },
+      {
+        "cost": 9000,
+        "id": "golden_pity",
+        "kind": "skill",
+        "minute": 117.2
+      },
+      {
+        "cost": 12600,
+        "id": "critical",
+        "kind": "skill",
+        "minute": 120.1
+      },
+      {
+        "cost": 12000,
+        "id": "detector",
+        "kind": "aux",
+        "minute": 120.1
+      },
+      {
+        "cost": 22000,
+        "id": "first_hit",
+        "kind": "skill",
+        "minute": 120.1
+      },
+      {
+        "cost": 22000,
+        "id": "power_side_1",
+        "kind": "skill",
+        "minute": 120.1
+      },
+      {
+        "cost": 22000,
+        "id": "extra_count_3",
+        "kind": "skill",
+        "minute": 120.1
+      },
+      {
+        "cost": 22000,
+        "id": "extra_chance_3",
+        "kind": "skill",
+        "minute": 120.1
+      },
+      {
+        "cost": 22000,
+        "id": "crit_chance_1",
+        "kind": "skill",
+        "minute": 123.0
+      },
+      {
+        "cost": 22000,
+        "id": "crit_power_1",
+        "kind": "skill",
+        "minute": 123.0
+      },
+      {
+        "cost": 22000,
+        "id": "healing_amount_2",
+        "kind": "skill",
+        "minute": 123.0
+      },
+      {
+        "cost": 22000,
+        "id": "low_health_threshold",
+        "kind": "skill",
+        "minute": 123.0
+      },
+      {
+        "cost": 22000,
+        "id": "gem_buff",
+        "kind": "skill",
+        "minute": 123.0
+      },
+      {
+        "cost": 22000,
+        "id": "healing_chance_2",
+        "kind": "skill",
+        "minute": 123.0
+      },
+      {
+        "cost": 33000,
+        "id": "bomb",
+        "kind": "skill",
+        "minute": 125.9
+      },
+      {
+        "cost": 65000,
+        "id": "jackhammer",
+        "kind": "main",
+        "minute": 125.9
+      },
+      {
+        "cost": 180000,
+        "id": "speed_5",
+        "kind": "skill",
+        "minute": 128.7
+      },
+      {
+        "cost": 180000,
+        "id": "power_side_2",
+        "kind": "skill",
+        "minute": 133.9
+      },
+      {
+        "cost": 180000,
+        "id": "streak",
+        "kind": "skill",
+        "minute": 133.9
+      },
+      {
+        "cost": 180000,
+        "id": "crit_chance_2",
+        "kind": "skill",
+        "minute": 136.6
+      },
+      {
+        "cost": 180000,
+        "id": "crit_power_2",
+        "kind": "skill",
+        "minute": 139.4
+      },
+      {
+        "cost": 180000,
+        "id": "extra_critical",
+        "kind": "skill",
+        "minute": 139.4
+      },
+      {
+        "cost": 180000,
+        "id": "execute",
+        "kind": "skill",
+        "minute": 142.1
+      },
+      {
+        "cost": 180000,
+        "id": "ore_spawn_5",
+        "kind": "skill",
+        "minute": 144.9
+      },
+      {
+        "cost": 180000,
+        "id": "bomb_chance_1",
+        "kind": "skill",
+        "minute": 144.9
+      },
+      {
+        "cost": 180000,
+        "id": "bomb_amount_1",
+        "kind": "skill",
+        "minute": 147.6
+      },
+      {
+        "cost": 300000,
+        "id": "crusher",
+        "kind": "aux",
+        "minute": 147.6
+      },
+      {
+        "cost": 400000,
+        "id": "drill",
+        "kind": "main",
+        "minute": 150.4
+      },
+      {
+        "cost": 310000,
+        "id": "xray",
+        "kind": "aux",
+        "minute": 153.1
+      },
+      {
+        "cost": 450000,
+        "id": "finisher",
+        "kind": "skill",
+        "minute": 155.9
+      },
+      {
+        "cost": 450000,
+        "id": "crit_chance_3",
+        "kind": "skill",
+        "minute": 157.0
+      },
+      {
+        "cost": 450000,
+        "id": "crit_power_3",
+        "kind": "skill",
+        "minute": 157.0
+      },
+      {
+        "cost": 450000,
+        "id": "crit_gold",
+        "kind": "skill",
+        "minute": 157.0
+      },
+      {
+        "cost": 450000,
+        "id": "execute_chance_1",
+        "kind": "skill",
+        "minute": 159.8
+      },
+      {
+        "cost": 450000,
+        "id": "execute_gold",
+        "kind": "skill",
+        "minute": 162.6
+      },
+      {
+        "cost": 450000,
+        "id": "bomb_chance_2",
+        "kind": "skill",
+        "minute": 162.6
+      },
+      {
+        "cost": 450000,
+        "id": "bomb_amount_2",
+        "kind": "skill",
+        "minute": 162.6
+      },
+      {
+        "cost": 450000,
+        "id": "gold_stone",
+        "kind": "skill",
+        "minute": 165.4
+      },
+      {
+        "cost": 550000,
+        "id": "pin",
+        "kind": "aux",
+        "minute": 165.4
+      },
+      {
+        "cost": 1000000,
+        "id": "range_4",
+        "kind": "skill",
+        "minute": 168.2
+      },
+      {
+        "cost": 1000000,
+        "id": "execute_chance_2",
+        "kind": "skill",
+        "minute": 170.9
+      },
+      {
+        "cost": 1000000,
+        "id": "bomb_chance_3",
+        "kind": "skill",
+        "minute": 170.9
+      },
+      {
+        "cost": 1000000,
+        "id": "bomb_amount_3",
+        "kind": "skill",
+        "minute": 173.7
+      },
+      {
+        "cost": 1000000,
+        "id": "gold_stone_chance_1",
+        "kind": "skill",
+        "minute": 173.7
+      },
+      {
+        "cost": 1000000,
+        "id": "gold_stone_amount_1",
+        "kind": "skill",
+        "minute": 176.5
+      },
+      {
+        "cost": 2100000,
+        "id": "gold_stone_chance_2",
+        "kind": "skill",
+        "minute": 179.2
+      },
+      {
+        "cost": 2100000,
+        "id": "gold_stone_amount_2",
+        "kind": "skill",
+        "minute": 182.2
+      },
+      {
+        "cost": 3500000,
+        "id": "detonator",
+        "kind": "aux",
+        "minute": 184.9
+      },
+      {
+        "cost": 10000000,
+        "id": "gold_pickaxe",
+        "kind": "main",
+        "minute": 190.4
+      }
+    ],
+    "rounds": 138,
+    "seed": 505,
+    "snapshots": [
+      {
+        "attacks": 4159,
+        "aux": 0,
+        "bosses": 0,
+        "damage": 2.6,
+        "gold": 4488,
+        "main": "pickaxe",
+        "minute": 30,
+        "nodes": 19,
+        "radius": 0.475,
+        "speed": 1.16,
+        "stones": 1564
+      },
+      {
+        "attacks": 8123,
+        "aux": 2,
+        "bosses": 1,
+        "damage": 4.42,
+        "gold": 22802,
+        "main": "axe",
+        "minute": 60,
+        "nodes": 37,
+        "radius": 0.475,
+        "speed": 1.386,
+        "stones": 4354
+      },
+      {
+        "attacks": 12114,
+        "aux": 2,
+        "bosses": 2,
+        "damage": 5.78,
+        "gold": 76419,
+        "main": "axe",
+        "minute": 90,
+        "nodes": 63,
+        "radius": 0.57,
+        "speed": 1.386,
+        "stones": 7937
+      },
+      {
+        "attacks": 16670,
+        "aux": 2,
+        "bosses": 3,
+        "damage": 9.52,
+        "gold": 429181,
+        "main": "hammer",
+        "minute": 120,
+        "nodes": 98,
+        "radius": 0.665,
+        "speed": 1.64,
+        "stones": 15150
+      },
+      {
+        "attacks": 23975,
+        "aux": 4,
+        "bosses": 4,
+        "damage": 19.0,
+        "gold": 2759641,
+        "main": "jackhammer",
+        "minute": 150,
+        "nodes": 120,
+        "radius": 0.665,
+        "speed": 2.07,
+        "stones": 32791
+      },
+      {
+        "attacks": 31729,
+        "aux": 6,
+        "bosses": 5,
+        "damage": 30.0,
+        "gold": 16362512,
+        "main": "drill",
+        "minute": 180,
+        "nodes": 136,
+        "radius": 0.76,
+        "speed": 4.5,
+        "stones": 68895
+      },
+      {
+        "attacks": 39812,
+        "aux": 7,
+        "bosses": 6,
+        "damage": 60.0,
+        "gold": 104424620,
+        "main": "gold_pickaxe",
+        "minute": 210,
+        "nodes": 137,
+        "radius": 0.76,
+        "speed": 5.4,
+        "stones": 123678
+      }
+    ],
+    "wallet": 128023044,
+    "won": true
+  }
+]

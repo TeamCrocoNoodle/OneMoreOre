@@ -4,31 +4,58 @@ extends RefCounted
 ## A deterministic spherical Voronoi shell. Every cell is a solid, independent
 ## stone plate, with a large planar face, clipped corners, and a pale chamfer.
 ## Vertices are local to the returned center so a mined plate can become debris.
-static func build_layer(radius: float, layer_index: int, seed_value: int, piece_count: int = 0, thickness: float = 0.0) -> Array[Dictionary]:
-	if radius <= 0.0:
-		return []
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_value + layer_index * 7919
-	var count: int = maxi(piece_count, 8) if piece_count > 0 else [38, 30, 24][clampi(layer_index, 0, 2)]
-	var depth := clampf(thickness, radius * 0.015, radius * 0.98) if thickness > 0.0 else minf(0.63, radius * 0.42)
-	# Scale angular irregularity with cell spacing: dense shells should not
-	# collapse nearby seed points into tiny slivers or nearly coincident faces.
-	var jitter := minf(0.19, 0.16 * sqrt(38.0 / float(count)))
-	var relief := minf(radius * 0.07, depth * 0.40)
-	var bevel_depth := minf(radius * 0.022, depth * 0.13)
-	var backing_radius := radius - (relief * 0.9286 + bevel_depth + minf(depth * 0.08, radius * 0.01))
-	var inner_radius := radius - depth
-	var directions: Array[Vector3] = []
-	var rotation := Basis.from_euler(Vector3(rng.randf_range(-0.5, 0.5), rng.randf_range(-PI, PI), rng.randf_range(-0.3, 0.3)))
-	for i in count:
-		var height := 1.0 - 2.0 * (float(i) + 0.5) / float(count)
-		var angle := float(i) * 2.3999632297
-		var width := sqrt(1.0 - height * height)
-		var direction := Vector3(cos(angle) * width, height, sin(angle) * width)
-		direction += Vector3(rng.randf_range(-jitter, jitter), rng.randf_range(-jitter, jitter), rng.randf_range(-jitter, jitter))
-		directions.append((rotation * direction).normalized())
+static func build_layer(radius: float, layer_index: int, seed_value: int, piece_count: int = 0, thickness: float = 0.0, appearance: Dictionary = {}) -> Array[Dictionary]:
+	var builder := LayerBuilder.new(radius,layer_index,seed_value,piece_count,thickness,appearance)
 	var result: Array[Dictionary] = []
-	for i in count:
+	while builder.cursor < builder.count:
+		var cell := builder.next_cell()
+		if not cell.is_empty(): result.append(cell)
+	return result
+
+class LayerBuilder extends RefCounted:
+	var rng := RandomNumberGenerator.new()
+	var radius: float
+	var layer_index: int
+	var seed_value: int
+	var appearance: Dictionary
+	var count := 0
+	var cursor := 0
+	var depth: float
+	var relief: float
+	var bevel_depth: float
+	var backing_radius: float
+	var inner_radius: float
+	var directions: Array[Vector3] = []
+
+	func _init(p_radius: float, p_layer: int, p_seed: int, piece_count: int, thickness: float, p_appearance: Dictionary = {}) -> void:
+		radius = p_radius
+		layer_index = p_layer
+		seed_value = p_seed
+		appearance = p_appearance
+		if radius <= 0: return
+		rng.seed = seed_value + layer_index * 7919
+		count = maxi(piece_count, 8) if piece_count > 0 else [38, 30, 24][clampi(layer_index, 0, 2)]
+		depth = clampf(thickness, radius * 0.015, radius * 0.98) if thickness > 0.0 else minf(0.63, radius * 0.42)
+		# Scale angular irregularity with cell spacing: dense shells should not
+		# collapse nearby seed points into tiny slivers or nearly coincident faces.
+		var jitter := minf(0.19, 0.16 * sqrt(38.0 / float(count)))
+		relief = minf(radius * 0.07 * float(appearance.get("relief",1.0)), depth * 0.40)
+		bevel_depth = minf(radius * 0.022 * float(appearance.get("bevel",1.0)), depth * 0.13)
+		backing_radius = radius - (relief * 0.9286 + bevel_depth + minf(depth * 0.08, radius * 0.01))
+		inner_radius = radius - depth
+		var rotation := Basis.from_euler(Vector3(rng.randf_range(-0.5, 0.5), rng.randf_range(-PI, PI), rng.randf_range(-0.3, 0.3)))
+		for i in count:
+			var height := 1.0 - 2.0 * (float(i) + 0.5) / float(count)
+			var angle := float(i) * 2.3999632297
+			var width := sqrt(1.0 - height * height)
+			var direction := Vector3(cos(angle) * width, height, sin(angle) * width)
+			direction += Vector3(rng.randf_range(-jitter, jitter), rng.randf_range(-jitter, jitter), rng.randf_range(-jitter, jitter))
+			directions.append((rotation * direction).normalized())
+
+	func next_cell() -> Dictionary:
+		if cursor >= count: return {}
+		var i := cursor
+		cursor += 1
 		var normal := directions[i]
 		var tangent := normal.cross(Vector3.UP).normalized()
 		if tangent.length_squared() < 0.1:
@@ -39,9 +66,9 @@ static func build_layer(radius: float, layer_index: int, seed_value: int, piece_
 			if i == j:
 				continue
 			var plane := normal - directions[j]
-			polygon = _clip_polygon(polygon, tangent.dot(plane), bitangent.dot(plane), normal.dot(plane))
+			polygon = RockGeometry._clip_polygon(polygon, tangent.dot(plane), bitangent.dot(plane), normal.dot(plane))
 		if polygon.size() < 3:
-			continue
+			return {}
 		# Chamfer the silhouette corners as well as the face perimeter. This
 		# prevents the regular hexagon / soccer-ball appearance of raw Voronoi.
 		var corners: Array[Vector2] = []
@@ -49,7 +76,7 @@ static func build_layer(radius: float, layer_index: int, seed_value: int, piece_
 			var previous := polygon[posmod(k - 1, polygon.size())]
 			var current := polygon[k]
 			var following := polygon[(k + 1) % polygon.size()]
-			var cut := rng.randf_range(0.065, 0.16)
+			var cut := rng.randf_range(0.065, 0.16)*float(appearance.get("corners",1.0))
 			corners.append(current.lerp(previous, cut) * 0.945)
 			corners.append(current.lerp(following, cut) * 0.945)
 		var face_distance := radius + relief * rng.randf_range(-0.9286, 0.0714)
@@ -59,7 +86,7 @@ static func build_layer(radius: float, layer_index: int, seed_value: int, piece_
 		var lower := PackedVector3Array()
 		var back := PackedVector3Array()
 		var footprint := PackedVector3Array()
-		var face_width := rng.randf_range(0.905, 0.945)
+		var face_width := rng.randf_range(0.905, 0.945)+(float(appearance.get("face",0.925))-0.925)
 		for corner_index in corners.size():
 			var corner := corners[corner_index]
 			var planar := tangent * corner.x + bitangent * corner.y
@@ -96,12 +123,12 @@ static func build_layer(radius: float, layer_index: int, seed_value: int, piece_
 		var face_center := normal * face_distance - center
 		for k in front.size():
 			var next := (k + 1) % front.size()
-			_triangle(surface, face_center, front[k], front[next], normal, Color(0.7143, 0.7143, 0.7143))
+			RockGeometry._triangle(surface, face_center, front[k], front[next], normal, Color(0.7143, 0.7143, 0.7143))
 			var bevel_color := Color(1.0, 1.0, 0.9643) if k % 2 == 0 else Color(0.8786, 0.8929, 0.8714)
-			_quad(surface, front[k], shoulder[k], shoulder[next], front[next], normal, bevel_color)
-			_quad(surface, shoulder[k], lower[k], lower[next], shoulder[next], normal, Color(0.5143, 0.5429, 0.5643))
-			_quad(surface, lower[k], back[k], back[next], lower[next], normal, Color(0.3643, 0.3929, 0.4357))
-			_triangle(surface, normal * inner_radius - center, back[next], back[k], -normal, Color(0.3214, 0.35, 0.3929))
+			RockGeometry._quad(surface, front[k], shoulder[k], shoulder[next], front[next], normal, bevel_color)
+			RockGeometry._quad(surface, shoulder[k], lower[k], lower[next], shoulder[next], normal, Color(0.5143, 0.5429, 0.5643))
+			RockGeometry._quad(surface, lower[k], back[k], back[next], lower[next], normal, Color(0.3643, 0.3929, 0.4357))
+			RockGeometry._triangle(surface, normal * inner_radius - center, back[next], back[k], -normal, Color(0.3214, 0.35, 0.3929))
 		var mesh := surface.commit()
 		var collision := ConvexPolygonShape3D.new()
 		var hull := PackedVector3Array()
@@ -110,7 +137,7 @@ static func build_layer(radius: float, layer_index: int, seed_value: int, piece_
 		hull.append_array(lower)
 		hull.append_array(back)
 		collision.points = hull
-		result.append({
+		return {
 			"mesh": mesh,
 			"collision": collision,
 			"direction": normal,
@@ -126,8 +153,7 @@ static func build_layer(radius: float, layer_index: int, seed_value: int, piece_
 			"thickness": depth,
 			"piece_index": i,
 			"seed": seed_value + i * 127 + layer_index * 7919,
-		})
-	return result
+		}
 
 
 static func _clip_polygon(points: Array[Vector2], a: float, b: float, c: float) -> Array[Vector2]:

@@ -22,7 +22,7 @@ func _run() -> void:
 	var streams := 0
 	for kind: String in RewardAudio.CUE_KINDS:
 		var bank: Array = audio._streams[kind]
-		var expected_count := 6 if kind in ["pickup", "row", "countdown", "auction_bid"] else (3 if kind in ["tick", "confirm"] else 1)
+		var expected_count := 7 if kind in ["pickup", "row"] else 6 if kind in ["countdown", "auction_bid"] else (3 if kind in ["tick", "confirm"] else 1)
 		_check(bank.size() == expected_count, kind + ": expected bounded variation bank")
 		for variant in bank.size():
 			var stream: AudioStreamWAV = bank[variant]
@@ -126,7 +126,7 @@ func _run() -> void:
 	RewardAudio._shared_bank.clear()
 	# Let the mixer consume queued playback releases before a very fast
 	# headless process exits; this is not part of the production cue path.
-	var release_deadline := Time.get_ticks_usec() + 25000
+	var release_deadline := Time.get_ticks_usec() + 150000
 	while Time.get_ticks_usec() < release_deadline:
 		await process_frame
 	quit(0 if failures == 0 else 1)

@@ -14,7 +14,7 @@ const CRACK_GLOW_RATIO := 1.7
 const SHEET_OPACITY := 0.26
 const TIER_COLORS: Array[Color] = [
 	Color("f3faff"), Color("64ff86"), Color("4896ff"),
-	Color("ffe15b"), Color("be65ff"), Color("ff4c61")
+	Color("ffe15b"), Color("be65ff"), Color("ff4c61"), Color("f1ddff")
 ]
 
 var current_tier: int = -1
@@ -115,7 +115,7 @@ func set_cracks(segments: Array[Dictionary], latest_impact: Vector3) -> void:
 func pulse(tier: int, damage_ratio: float, broken: bool = false) -> void:
 	if not _configured:
 		return
-	current_tier = clampi(tier, 0, 5)
+	current_tier = clampi(tier, 0, TIER_COLORS.size()-1)
 	pulse_count += 1
 	_damage = clampf(damage_ratio, 0.0, 1.0)
 	_broken = broken
@@ -123,6 +123,7 @@ func pulse(tier: int, damage_ratio: float, broken: bool = false) -> void:
 	_duration = 1.10 if broken else 0.90
 	for material in [_beam_material, _crack_material, _dust_material, _glow_material, _source_material]:
 		material.set_shader_parameter("light_color", TIER_COLORS[current_tier])
+		material.set_shader_parameter("prismatic", current_tier == 6)
 	if broken:
 		# Destruction keeps the final hit's tier/provenance but never uploads
 		# geometry that the owning stone will immediately hide and free.

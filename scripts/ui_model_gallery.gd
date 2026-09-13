@@ -39,7 +39,7 @@ func ensure_ready() -> void:
 	var coin_crop := _frame_model(coin_scene, coin)
 	_coin_texture = coin_crop.texture
 	_coin_span = coin_crop.span
-	for tier in 6:
+	for tier in Gem.Rarity.COUNT:
 		var gem_scene := _create_viewport("GemViewport%d" % tier, GEM_RESOLUTION, tier)
 		var jewel := Gem.new()
 		jewel.name = "PreviewGem%d" % tier
@@ -69,7 +69,7 @@ func get_coin_texture() -> Texture2D:
 
 func get_gem_texture(tier: int) -> Texture2D:
 	ensure_ready()
-	return _gem_textures[clampi(tier, 0, 5)] if _gem_textures.size() == 6 else null
+	return _gem_textures[clampi(tier, 0, Gem.EXOTIC)] if _gem_textures.size() == Gem.Rarity.COUNT else null
 
 
 func draw_coin(canvas: CanvasItem, center: Vector2, radius: float, tint: Color = Color.WHITE) -> void:
@@ -79,9 +79,9 @@ func draw_coin(canvas: CanvasItem, center: Vector2, radius: float, tint: Color =
 
 func draw_gem(canvas: CanvasItem, center: Vector2, radius: float, tier: int, tint: Color = Color.WHITE) -> void:
 	ensure_ready()
-	if _gem_textures.size() != 6:
+	if _gem_textures.size() != Gem.Rarity.COUNT:
 		return
-	var grade := clampi(tier, 0, 5)
+	var grade := clampi(tier, 0, Gem.EXOTIC)
 	_draw_model(canvas, center, radius, _gem_textures[grade], _gem_spans[grade], tint)
 
 

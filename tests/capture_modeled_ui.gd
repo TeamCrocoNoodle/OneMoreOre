@@ -45,7 +45,7 @@ func _run() -> void:
 	_present_satchel()
 	await _save("modeled_hud_six")
 	game._open_upgrades()
-	await _hover(game.skill_ui.get_node_screen("appraisal"))
+	await _hover(game.skill_ui.get_node_screen("rich_ore"))
 	await _save("modeled_skill_cost")
 	await _click(game.skill_ui.get_tab_rect("tools").get_center())
 	await create_timer(0.2).timeout

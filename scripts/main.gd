@@ -15,6 +15,14 @@ const GemFlightOverlay = preload("res://scripts/gem_flight_overlay.gd")
 const SkillTreeModel = preload("res://scripts/skill_tree.gd")
 const SkillTreeUI = preload("res://scripts/skill_tree_ui.gd")
 const ModelGallery = preload("res://scripts/ui_model_gallery.gd")
+const MiningSkills = preload("res://scripts/mining_skills.gd")
+const SkillBalance = preload("res://scripts/skill_balance.gd")
+const MainTools = preload("res://scripts/main_tools.gd")
+const AuxTools = preload("res://scripts/aux_tools.gd")
+const AuxRuntime = preload("res://scripts/aux_runtime.gd")
+const OreProgression = preload("res://scripts/ore_progression.gd")
+const BossCampaign = preload("res://scripts/boss_campaign.gd")
+const BossRuntime = preload("res://scripts/boss_runtime.gd")
 const ROCK_RADIUS := 2.6
 const LAYER_COUNT := 3
 const LAYER_COUNTS := [38, 24, 12]
@@ -60,11 +68,13 @@ var rock_seed := 0
 var showcase_mode := false
 var showcase_on_start := false
 var active_rock_radius := ROCK_RADIUS
+var ore_profile: Dictionary = OreProgression.profile(0)
+var active_layer_counts: Array = LAYER_COUNTS.duplicate()
 var showcase_covers: Array[StaticBody3D] = []
 var light_pulse_history: Array[int] = []
 var gems_collected_this_rock := 0
 var special_collected_count := 0
-var collected_by_rarity := PackedInt32Array([0, 0, 0, 0, 0, 0])
+var collected_by_rarity := Gem.Rarity.empty_counts()
 var pending_rock_number := -1
 var hit_count := 0
 var broken_count := 0
@@ -90,7 +100,7 @@ var round_state := RoundModel.new()
 var hud: Node
 var reward_audio: Node
 var flight_overlay: Node
-var displayed_gems := PackedInt32Array([0, 0, 0, 0, 0, 0])
+var displayed_gems := Gem.Rarity.empty_counts()
 var _last_warning_second := 6
 var _wait_for_mine_release := false
 var _wait_for_navigation_release := false
@@ -98,6 +108,24 @@ var upgrades := SkillTreeModel.new()
 var upgrade_stats: Dictionary = upgrades.stats()
 var skill_ui: Node
 var model_gallery: Node
+var mining_skills := MiningSkills.new()
+var _reactions: Array[Dictionary] = []
+var main_tools := MainTools.new()
+var aux_tools := AuxTools.new()
+var auxiliary: Node3D
+var _tool_impact_queue: Array[Dictionary] = []
+var ore_building := false
+var _ore_builder: RefCounted
+var _ore_build_layer := 0
+var _ore_gem_plan: Dictionary = {}
+var _last_presented_ore_stage := 0
+var campaign := BossCampaign.new()
+var campaign_enabled := true
+var boss: Node3D
+var _pending_boss := false
+var _ore_counted_number := -1
+var backdrop_material: ShaderMaterial
+const ORE_BUILD_BUDGET_USEC := 5000
 
 func _ready() -> void:
 	capture_mode = "--capture-sequence" in OS.get_cmdline_user_args()
@@ -151,10 +179,17 @@ func _ready() -> void:
 		skill_ui.model_gallery = model_gallery
 		add_child(skill_ui)
 		skill_ui.setup(upgrades)
+		skill_ui.setup_tools(main_tools,aux_tools)
 		skill_ui.purchase_requested.connect(_purchase_upgrade)
+		skill_ui.tool_action_requested.connect(_tool_action)
 		skill_ui.closed.connect(_close_upgrades)
 		skill_ui.cue.connect(reward_audio.play_cue)
+		auxiliary = AuxRuntime.new()
+		add_child(auxiliary)
+		boss = BossRuntime.new()
+		add_child(boss)
 		_apply_upgrade_stats()
+		hud.set_ore_progress(_progress_status())
 		hud.set_upgrades_available(true)
 	_warm_gem_renderer.call_deferred()
 
@@ -193,6 +228,7 @@ func _warm_gem_renderer() -> void:
 	warm_effects.position.z = 1.2
 	warmup.add_child(warm_effects)
 	effects.append_render_warmup(warm_effects)
+	if is_instance_valid(auxiliary): auxiliary.append_render_warmup(warm_effects)
 	var warm_light := GemLight.new()
 	warm_effects.add_child(warm_light)
 	warm_light.position.z = 1.2
@@ -288,7 +324,7 @@ func _create_stage() -> void:
 	var canvas := ColorRect.new()
 	canvas.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var backdrop_material := ShaderMaterial.new()
+	backdrop_material = ShaderMaterial.new()
 	backdrop_material.shader = preload("res://shaders/backdrop.gdshader")
 	canvas.material = backdrop_material
 	backdrop.add_child(canvas)
@@ -347,7 +383,16 @@ func _light(angles: Vector3, color: Color, energy: float, shadows: bool = false)
 	light.shadow_normal_bias = 0.8
 	add_child(light)
 
-func _spawn_rock(seed_override: int = -1, showcase: bool = false) -> void:
+func _clear_ore_scene() -> void:
+	ore_building = false
+	_ore_builder = null
+	_ore_gem_plan.clear()
+	if is_instance_valid(hud): hud.set_ore_building(false,0)
+	if is_instance_valid(auxiliary): auxiliary.clear_world()
+	_tool_impact_queue.clear()
+	pickaxe.cancel_swing()
+	_reactions.clear()
+	mining_skills.clear_target()
 	effects.clear_fragments()
 	for remnant in effects.get_children():
 		if remnant.has_meta("gem_light_pulse") or remnant.get_script() == preload("res://scripts/gem_light.gd"):
@@ -370,8 +415,16 @@ func _spawn_rock(seed_override: int = -1, showcase: bool = false) -> void:
 	gems.clear()
 	showcase_covers.clear()
 	light_pulse_history.clear()
+
+func _spawn_rock(seed_override: int = -1, showcase: bool = false) -> void:
+	if is_instance_valid(boss) and boss.active: return
+	if _try_spawn_boss(): return
+	if is_instance_valid(boss): boss.clear()
+	_clear_ore_scene()
+	_set_stage_theme({})
 	showcase_mode = showcase
-	active_rock_radius = SHOWCASE_RADIUS if showcase else ROCK_RADIUS
+	ore_profile = OreProgression.profile(round_state.lifetime_mining_gold if round_enabled else 0,_max_gem_grade())
+	active_rock_radius = SHOWCASE_RADIUS if showcase else float(ore_profile.radius)
 	hovered = null
 	broken_count = 0
 	gems_collected_this_rock = 0
@@ -384,36 +437,113 @@ func _spawn_rock(seed_override: int = -1, showcase: bool = false) -> void:
 	wobble_velocity = Vector3.ZERO
 	rock_motion.rotation = Vector3.ZERO
 	squash = 0.0
-	var layer_counts: Array = SHOWCASE_LAYER_COUNTS if showcase else LAYER_COUNTS
+	var layer_counts: Array = SHOWCASE_LAYER_COUNTS if showcase else ore_profile.layers
+	active_layer_counts = layer_counts.duplicate()
+	var stride: float = 0.78 if showcase else float(ore_profile.stride)
+	var thickness: float = 0.86 if showcase else float(ore_profile.thickness)
+	if not showcase and int(ore_profile.index) > 0:
+		# Build larger ores across frames. They appear as they assemble, while
+		# mining and the round clock wait until all hidden contents are sealed.
+		ore_building = true
+		_ore_build_layer = 0
+		_ore_builder = Geometry.LayerBuilder.new(active_rock_radius,0,rock_seed,active_layer_counts[0],thickness,ore_profile)
+		spawn_time = 0.0
+		completion_time = -1.0
+		if is_instance_valid(hud): hud.set_ore_building(true,0)
+		_resize()
+		ground_shadow.position = Vector3(0,-active_rock_radius*1.092,-0.2)
+		ground_shadow.scale = Vector3.ONE*(active_rock_radius/SHOWCASE_RADIUS)
+		return
 	for layer in range(layer_counts.size()):
-		var radius := active_rock_radius - float(layer) * 0.78
-		var cells: Array[Dictionary] = Geometry.build_layer(radius, layer, rock_seed, layer_counts[layer], 0.86)
+		var radius := active_rock_radius - float(layer) * stride
+		var cells: Array[Dictionary] = Geometry.build_layer(radius, layer, rock_seed, layer_counts[layer], thickness,{} if showcase else ore_profile)
 		for data in cells:
-			var chunk := Chunk.new()
-			shell.add_child(chunk)
-			chunk.configure(data, layer)
-			chunk.set_meta("stone_color", data.color)
-			chunk.set_meta("outward", data.direction)
-			chunks.append(chunk)
+			_add_ore_cell(data,layer)
 	_place_gems(rock_seed)
-	if round_enabled and not showcase_mode and int(upgrade_stats.stone_health_reduction) > 0:
+	_complete_ore_spawn()
+
+func _add_ore_cell(data: Dictionary, layer: int) -> void:
+	if not showcase_mode:
+		data.color = OreProgression.color_for(ore_profile,data.color,layer,int(data.seed))
+		data["theme"] = ore_profile.theme
+		data["accent"] = ore_profile.accent
+		if round_enabled:
+			data["health"] = SkillBalance.Balance.stone_health(int(ore_profile.index),layer,int(data.seed))
+			data["cover_health"] = float(ore_profile.get("cover_health",Chunk.GEM_COVER_HEALTH))
+	var chunk := Chunk.new()
+	shell.add_child(chunk)
+	chunk.configure(data,layer)
+	chunk.set_meta("stone_color",data.color)
+	chunk.set_meta("outward",data.direction)
+	chunks.append(chunk)
+
+func _advance_ore_build() -> void:
+	if is_instance_valid(boss) and boss.building:
+		boss.advance_build()
+		return
+	if not ore_building or not focused: return
+	var deadline := Time.get_ticks_usec()+ORE_BUILD_BUDGET_USEC
+	while ore_building and Time.get_ticks_usec() < deadline:
+		if _ore_build_layer < active_layer_counts.size():
+			if _ore_builder.cursor < _ore_builder.count:
+				var data: Dictionary = _ore_builder.next_cell()
+				if not data.is_empty(): _add_ore_cell(data,_ore_build_layer)
+			else:
+				_ore_build_layer += 1
+				if _ore_build_layer < active_layer_counts.size():
+					_ore_builder = Geometry.LayerBuilder.new(active_rock_radius-_ore_build_layer*float(ore_profile.stride),_ore_build_layer,rock_seed,active_layer_counts[_ore_build_layer],ore_profile.thickness,ore_profile)
+		elif _ore_gem_plan.is_empty():
+			_ore_gem_plan = _plan_gems(rock_seed)
+		elif int(_ore_gem_plan.made) < _ore_gem_plan.grades.size():
+			_create_planned_gem(_ore_gem_plan)
+		elif int(_ore_gem_plan.placed) < gems.size():
+			_contain_planned_gem(_ore_gem_plan)
+		elif int(_ore_gem_plan.special_index) < chunks.size():
+			var chunk: StaticBody3D = chunks[int(_ore_gem_plan.special_index)]
+			_ore_gem_plan.special_index += 1
+			_configure_special_stone(chunk,_ore_gem_plan.special_random)
+			_apply_stone_health_reduction(chunk)
+		else:
+			ore_building = false
+			_ore_builder = null
+			_ore_gem_plan.clear()
+			_complete_ore_spawn(true)
+	if is_instance_valid(hud): hud.set_ore_building(ore_building,float(chunks.size())/maxi(1,int(ore_profile.pieces)))
+
+func _complete_ore_spawn(assembled: bool = false) -> void:
+	if not assembled and round_enabled and not showcase_mode:
+		_place_special_stones(rock_seed)
 		for chunk in chunks:
-			if not chunk.is_gem_cover:
-				chunk.max_health = maxf(1.0, chunk.max_health - float(upgrade_stats.stone_health_reduction))
-				chunk.health = chunk.max_health
+			_apply_stone_health_reduction(chunk)
 	ground_shadow.position = Vector3(0, -active_rock_radius * 1.092, -0.2)
 	ground_shadow.scale = Vector3.ONE * (active_rock_radius / SHOWCASE_RADIUS)
 	_resize()
 	rock_number += 1
 	completion_time = -1.0
+	if is_instance_valid(auxiliary): auxiliary.on_rock_changed()
+	if int(ore_profile.index) > _last_presented_ore_stage and is_instance_valid(hud):
+		_last_presented_ore_stage = ore_profile.index
+		_skill_notice(get_viewport().get_visible_rect().size*Vector2(0.5,0.23),ore_profile.title+" 발견!",ore_profile.accent)
+		reward_audio.play_cue("pickup",mini(5,int(ore_profile.index)))
 	if rock_number > 1:
 		audio.play_respawn()
+		if assembled:
+			spawn_time = 0.70
+			return
 		spawn_time = 0.0
 		rock_motion.scale = Vector3.ONE * 0.01
 		spawn_tween = create_tween()
 		spawn_tween.tween_property(rock_motion, "scale", Vector3.ONE, 0.65).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 func _place_gems(seed_value: int) -> void:
+	var plan := _plan_gems(seed_value)
+	for i in plan.grades.size(): _create_planned_gem(plan)
+	if showcase_mode:
+		_place_showcase_gems()
+		return
+	for i in gems.size(): _contain_planned_gem(plan)
+
+func _plan_gems(seed_value: int) -> Dictionary:
 	var layout_rng := RandomNumberGenerator.new()
 	layout_rng.seed = seed_value ^ 0x5F3759DF
 	# The regular ore starts with four finds below the intact outside layer.
@@ -423,53 +553,95 @@ func _place_gems(seed_value: int) -> void:
 	if showcase_mode:
 		grades.assign([Gem.COMMON, Gem.SPECIAL, Gem.RARE, Gem.LEGENDARY, Gem.MYTHIC, Gem.ANCIENT])
 	else:
-		var common_count := COMMON_GEM_COUNT + (int(upgrade_stats.extra_common_gems) if round_enabled else 0)
-		for i in common_count + SPECIAL_GEM_COUNT:
-			grades.append(Gem.COMMON if i < common_count else Gem.SPECIAL)
-			bands.append(1 + i % (LAYER_COUNT - 1))
+		var loot := OreProgression.gem_plan(ore_profile,upgrade_stats if round_enabled else {},layout_rng)
+		grades.assign(loot.grades)
+		bands.assign(loot.bands)
+	if not showcase_mode:
+		for i in grades.size(): grades[i] = mini(grades[i],_max_gem_grade())
 	for i in range(bands.size() - 1, 0, -1):
 		var j := layout_rng.randi_range(0, i)
 		var swap := bands[i]
 		bands[i] = bands[j]
 		bands[j] = swap
-	for i in grades.size():
-		var jewel := Gem.new()
-		var shape := i % 5 if showcase_mode else layout_rng.randi_range(0, 5)
-		jewel.configure(grades[i], shape)
-		jewel.rotation = Vector3(layout_rng.randf_range(-0.5, 0.5), layout_rng.randf_range(-PI, PI), layout_rng.randf_range(-0.5, 0.5))
-		shell.add_child(jewel)
-		gems.append(jewel)
-	if showcase_mode:
-		_place_showcase_gems()
-		return
 	var occupied: Array[StaticBody3D] = []
-	for i in range(gems.size()):
-		var candidates: Array[StaticBody3D] = []
-		var largest_socket := 0.0
-		for chunk in chunks:
-			if chunk.layer_index == bands[i] and not occupied.has(chunk):
-				largest_socket = maxf(largest_socket, chunk.gem_socket_radius)
-		for chunk in chunks:
-			if chunk.layer_index == bands[i] and not occupied.has(chunk) and chunk.gem_socket_radius >= largest_socket * 0.72:
-				candidates.append(chunk)
-		assert(not candidates.is_empty(), "Every depth needs a solid stone that can contain a gem")
-		# Prefer separated directions across depths as well as distinct hosts,
-		# so one excavation tunnel is unlikely to reveal every find.
-		var spaced: Array[StaticBody3D] = []
-		for candidate in candidates:
-			var separated := true
-			for other in occupied:
-				if Vector3(candidate.direction).dot(other.direction) > 0.80:
-					separated = false
-					break
-			if separated:
-				spaced.append(candidate)
-		if not spaced.is_empty():
-			candidates = spaced
-		var host: StaticBody3D = candidates[layout_rng.randi_range(0, candidates.size() - 1)]
-		var contained: bool = host.contain_gem(gems[i])
-		assert(contained, "The selected stone must contain its gem")
-		occupied.append(host)
+	var special_random := RandomNumberGenerator.new()
+	special_random.seed = seed_value ^ 0x1E4F893
+	return {"random":layout_rng,"grades":grades,"bands":bands,"made":0,"placed":0,"occupied":occupied,"special_index":0,"special_random":special_random}
+
+func _create_planned_gem(plan: Dictionary) -> void:
+	var layout_rng: RandomNumberGenerator = plan.random
+	var grades: Array[int] = plan.grades
+	var i: int = plan.made
+	plan.made += 1
+	var jewel := Gem.new()
+	var shape := i % 5 if showcase_mode else layout_rng.randi_range(0, 5)
+	jewel.configure(grades[i], shape)
+	if round_enabled and not showcase_mode and float(upgrade_stats.brilliant) > 0 and layout_rng.randf() < SkillBalance.value("brilliant_chance") + float(upgrade_stats.brilliant_chance_bonus):
+		jewel.set_meta("value_multiplier", 1.0 + SkillBalance.value("brilliant_value") + float(upgrade_stats.brilliant_value_bonus))
+		jewel.set_meta("brilliant", true)
+	jewel.rotation = Vector3(layout_rng.randf_range(-0.5, 0.5), layout_rng.randf_range(-PI, PI), layout_rng.randf_range(-0.5, 0.5))
+	shell.add_child(jewel)
+	if ore_building:
+		jewel.hide()
+		jewel.collision_layer = 0
+	gems.append(jewel)
+
+func _contain_planned_gem(plan: Dictionary) -> void:
+	var layout_rng: RandomNumberGenerator = plan.random
+	var bands: Array[int] = plan.bands
+	var occupied: Array[StaticBody3D] = plan.occupied
+	var i: int = plan.placed
+	plan.placed += 1
+	var candidates: Array[StaticBody3D] = []
+	var largest_socket := 0.0
+	for chunk in chunks:
+		if chunk.layer_index == bands[i] and not occupied.has(chunk):
+			largest_socket = maxf(largest_socket, chunk.gem_socket_radius)
+	for chunk in chunks:
+		if chunk.layer_index == bands[i] and not occupied.has(chunk) and chunk.gem_socket_radius >= largest_socket * 0.72:
+			candidates.append(chunk)
+	assert(not candidates.is_empty(), "Every depth needs a solid stone that can contain a gem")
+	# Prefer separated directions across depths as well as distinct hosts,
+	# so one excavation tunnel is unlikely to reveal every find.
+	var spaced: Array[StaticBody3D] = []
+	for candidate in candidates:
+		var separated := true
+		for other in occupied:
+			if Vector3(candidate.direction).dot(other.direction) > 0.80:
+				separated = false
+				break
+		if separated:
+			spaced.append(candidate)
+	if not spaced.is_empty():
+		candidates = spaced
+	var host: StaticBody3D = candidates[layout_rng.randi_range(0, candidates.size() - 1)]
+	var contained: bool = host.contain_gem(gems[i])
+	assert(contained, "The selected stone must contain its gem")
+	occupied.append(host)
+
+func _place_special_stones(seed_value: int) -> void:
+	var layout := RandomNumberGenerator.new()
+	layout.seed = seed_value ^ 0x1E4F893
+	for chunk in chunks:
+		_configure_special_stone(chunk,layout)
+
+func _apply_stone_health_reduction(chunk: StaticBody3D) -> void:
+	if not chunk.is_gem_cover and int(upgrade_stats.stone_health_reduction) > 0:
+		chunk.max_health = maxf(1.0,chunk.max_health-float(upgrade_stats.stone_health_reduction))
+		chunk.health = chunk.max_health
+
+func _configure_special_stone(chunk: StaticBody3D, layout: RandomNumberGenerator) -> void:
+	if chunk.is_gem_cover: return
+	var ticket := layout.randf()
+	for kind: String in ["resonance", "healing", "bomb", "gold_stone"]:
+		if float(upgrade_stats[kind]) <= 0:
+			continue
+		var chance := SkillBalance.value("special_spawn") + float(upgrade_stats[kind + "_chance_bonus"])
+		if ticket < chance:
+			chunk.configure_special(kind)
+			chunk.set_meta("stone_color", chunk.stone_color)
+			break
+		ticket -= chance
 
 func _place_showcase_gems() -> void:
 	# Six front stones contain one gem each for testing all the light tiers.
@@ -518,8 +690,8 @@ func _resize() -> void:
 	var aspect := viewport_size.x / maxf(viewport_size.y, 1)
 	# KEEP_HEIGHT retains landscape composition; portrait increases height to fit the rock.
 	camera.keep_aspect = Camera3D.KEEP_HEIGHT
-	var framing := 12.0 if showcase_mode else 9.2
-	var width := 11.6 if showcase_mode else 7.0
+	var framing := 12.0 if showcase_mode else maxf(9.2,active_rock_radius*2.74)
+	var width := 11.6 if showcase_mode else maxf(7.0,active_rock_radius*2.43)
 	camera.size = maxf(framing, width / aspect)
 	if aim_position != Vector2.ZERO:
 		aim_position = aim_position.clamp(Vector2.ZERO, viewport_size)
@@ -528,6 +700,9 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F11:
 		var fullscreen := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if fullscreen else DisplayServer.WINDOW_MODE_FULLSCREEN)
+		return
+	if round_enabled and not _upgrade_window_open() and _aux_input(event):
+		get_viewport().set_input_as_handled()
 		return
 	var upgrade_shortcut: bool = (event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_U) or (event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_Y)
 	if upgrade_shortcut:
@@ -545,7 +720,7 @@ func _input(event: InputEvent) -> void:
 		if not _round_allows_mining():
 			return
 		if event is InputEventMouseButton or event is InputEventMouseMotion or event is InputEventScreenTouch or event is InputEventScreenDrag or event is InputEventPanGesture:
-			if is_instance_valid(hud) and hud.is_pointer_blocked(event.position):
+			if _aim_over_hud(event.position):
 				if not event is InputEventPanGesture:
 					aim_position = event.position
 					using_controller = false
@@ -602,7 +777,7 @@ func _input(event: InputEvent) -> void:
 			controller_id = event.device
 	elif event is InputEventKey and event.pressed and not event.echo:
 		if event.physical_keycode == KEY_R:
-			_reset_rock()
+			if not round_enabled: _reset_rock()
 		elif event.physical_keycode == KEY_G:
 			if not round_enabled:
 				_spawn_rock(capture_seed, true)
@@ -620,6 +795,10 @@ func _notification(what: int) -> void:
 		if round_enabled:
 			impact_pending = false
 			pending_rock_number = -1
+			_tool_impact_queue.clear()
+			if is_instance_valid(pickaxe):
+				pickaxe.cancel_swing()
+			if is_instance_valid(auxiliary): auxiliary.pause_feedback()
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		focused = true
 
@@ -637,6 +816,12 @@ func _orbit(amount: Vector2) -> void:
 	idle_time = 0.0
 
 func _request_swing() -> void:
+	if round_enabled and aux_tools.is_owned("detonator") and Input.is_physical_key_pressed(KEY_SPACE):
+		return
+	# Finish the previous cycle's deferred contacts before accepting another.
+	# Even an unusually slow physics frame cannot accumulate unlimited bursts.
+	if not _tool_impact_queue.is_empty():
+		return
 	if not _round_allows_mining() or _wait_for_mine_release or (not focused and not capture_mode) or completion_time >= 0.0 or spawn_time < 0.68 or swing_cooldown > 0.0 or pickaxe.is_swinging or dragging or touch_rotating:
 		return
 	if _aim_over_hud(aim_position):
@@ -650,17 +835,21 @@ func _request_swing() -> void:
 		pickaxe.set_contact_point(contact.position)
 	else:
 		pickaxe.clear_contact_point()
+	var speed := mining_skills.speed(round_state.remaining, round_state.duration) * (2.0 if mining_skills.extra_charges > 0 else 1.0) if round_enabled else 1.0
+	pickaxe.speed_multiplier = speed
 	pickaxe.swing()
-	swing_cooldown = 0.30 / (float(upgrade_stats.attack_speed) if round_enabled else 1.0)
+	swing_cooldown = minf(0.30, pickaxe.get_cycle_duration()) / speed
 	idle_time = 0.0
 
 func _on_pickaxe_impact() -> void:
 	# The tool follows the cursor during the swing. Mine where its tip struck,
 	# while retaining the original rock number so a reset cannot inherit a hit.
 	pending_aim = pickaxe.get_target_screen()
+	_tool_impact_queue.append({"aim": pending_aim, "rock": pending_rock_number})
 	impact_pending = true
 
 func _process(delta: float) -> void:
+	_advance_ore_build()
 	if _wait_for_mine_release and not Input.is_action_pressed("mine") and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and touch_id < 0:
 		_wait_for_mine_release = false
 	elapsed += delta
@@ -702,8 +891,9 @@ func _process(delta: float) -> void:
 		if completion_time > 2.4 and _round_allows_mining():
 			_spawn_rock()
 	if round_enabled and is_instance_valid(hud):
-		hud.set_timer(round_state.remaining, round_state.duration, round_state.phase != RoundModel.Phase.READY and focused)
-		hud.set_upgrades_available(round_state.phase in [RoundModel.Phase.READY, RoundModel.Phase.COMPLETE] and not _upgrade_window_open() and not hud.auction_ui.is_open)
+		hud.set_skill_status(mining_skills.combo, mining_skills.combo_remaining, mining_skills.extra_charges, mining_skills.buff, mining_skills.buff_remaining, round_state.bonus_gold)
+		hud.set_timer(round_state.seconds_remaining(), round_state.seconds_capacity(), round_state.phase != RoundModel.Phase.READY and focused and not ore_building)
+		hud.set_upgrades_available(round_state.phase in [RoundModel.Phase.READY, RoundModel.Phase.COMPLETE] and not campaign.won and not _upgrade_window_open() and not hud.auction_ui.is_open)
 		hud.set_auction_available(round_state.can_auction() and not _upgrade_window_open())
 		if round_state.phase == RoundModel.Phase.DRAINING and collecting_gems.is_empty():
 			_begin_settlement()
@@ -712,14 +902,23 @@ func _process(delta: float) -> void:
 
 func _physics_process(_delta: float) -> void:
 	_advance_round(_delta)
+	if is_instance_valid(boss): boss.advance(_delta)
+	if is_instance_valid(auxiliary): auxiliary.advance(_delta)
 	if not _round_allows_mining() or (round_enabled and not focused):
 		impact_pending = false
+		_tool_impact_queue.clear()
+		pickaxe.cancel_swing()
 		marker.hide()
 		return
 	if impact_pending:
 		impact_pending = false
-		if pending_rock_number == rock_number:
-			_mine_at(pending_aim)
+		var impact := {"aim": pending_aim, "rock": pending_rock_number}
+		if not _tool_impact_queue.is_empty():
+			impact = _tool_impact_queue.pop_front()
+			impact_pending = not _tool_impact_queue.is_empty()
+		if int(impact.rock) == rock_number:
+			_mine_at(impact.aim)
+	_drain_reactions()
 	var result := {} if _aim_over_hud(aim_position) else ray_at(aim_position)
 	pickaxe.set_target(aim_position)
 	if result.is_empty():
@@ -745,7 +944,24 @@ func ray_at(screen_position: Vector2) -> Dictionary:
 	return get_world_3d().direct_space_state.intersect_ray(query)
 
 func _aim_over_hud(screen_position: Vector2) -> bool:
-	return round_enabled and is_instance_valid(hud) and hud.is_pointer_blocked(screen_position)
+	return round_enabled and ((is_instance_valid(hud) and hud.is_pointer_blocked(screen_position)) or (is_instance_valid(auxiliary) and auxiliary.hud.is_pointer_blocked(screen_position)))
+
+func _aux_input(event: InputEvent) -> bool:
+	# Let settlement/auction buttons keep their normal Space/accept input.
+	if not _round_allows_mining(): return false
+	var id := ""
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.physical_keycode == KEY_R: id = "crusher"
+		if event.physical_keycode == KEY_SPACE and aux_tools.is_owned("detonator"): id = "detonator"
+	elif event is InputEventJoypadButton and event.pressed:
+		if event.button_index == JOY_BUTTON_X: id = "crusher"
+		if event.button_index == JOY_BUTTON_LEFT_STICK: id = "detonator"
+		if not id.is_empty():
+			using_controller = true
+			controller_id = event.device
+	if id.is_empty(): return false
+	if is_instance_valid(auxiliary): auxiliary.activate(id)
+	return true
 
 func _mine_at(screen_position: Vector2) -> bool:
 	if not _round_allows_mining() or (round_enabled and not focused) or completion_time >= 0.0 or spawn_time < 0.68:
@@ -756,6 +972,10 @@ func _mine_at(screen_position: Vector2) -> bool:
 	if result.is_empty():
 		return false
 	var body: StaticBody3D = result.collider
+	if body.has_meta("splitting_pin") and is_instance_valid(auxiliary):
+		return auxiliary.strike_pin(body)
+	if body.has_meta("boss_wire") and is_instance_valid(boss):
+		return boss.cut_wire(int(body.get_meta("boss_wire")))
 	if gems.has(body):
 		return _collect_gem(body)
 	if not body.has_method("hit"):
@@ -764,14 +984,24 @@ func _mine_at(screen_position: Vector2) -> bool:
 	# Resolve all surface contacts before breaking anything. A wide strike must
 	# not drill through newly exposed layers or hit the same chunk twice.
 	var surrounding := _area_targets(screen_position, result)
-	_damage_chunk(result, screen_position)
+	var context := mining_skills.begin_attack(body.get_instance_id()) if round_enabled else {}
+	context["count"] = surrounding.size() + 1
+	context["reaction_marks"] = {}
+	context["reaction_budget"] = {"used": 0}
+	_damage_chunk(result, screen_position, context)
 	for contact: Dictionary in surrounding:
-		_damage_chunk(contact.hit, contact.screen)
+		_damage_chunk(contact.hit, contact.screen, context)
+	if bool(context.get("shock", false)):
+		var reach := mining_skills.radius(round_state.spent) * (SkillBalance.value("shock_range") + mining_skills.amount("shock_range_bonus"))
+		var power := float(context.get("primary_damage", upgrade_stats.damage)) * (SkillBalance.value("shock_damage") + mining_skills.amount("shock_damage_bonus"))
+		_queue_area(result.position, power, reach, context, [body])
+		effects.skill_burst(result.position, result.normal, Color("87d9ef"), reach)
+		_skill_notice(screen_position, "충격파", Color("87d9ef"))
 	return true
 
 func _area_targets(screen_position: Vector2, primary: Dictionary) -> Array[Dictionary]:
 	var contacts: Array[Dictionary] = []
-	var radius := float(upgrade_stats.attack_radius) if round_enabled else 0.0
+	var radius := mining_skills.radius(round_state.spent) if round_enabled else 0.0
 	if radius <= 0.0 or primary.is_empty():
 		return contacts
 	var selected: Array = [primary.collider]
@@ -788,14 +1018,16 @@ func _area_targets(screen_position: Vector2, primary: Dictionary) -> Array[Dicti
 				continue
 			selected.append(hit.collider)
 			contacts.append({"hit": hit, "screen": sample})
-			if contacts.size() == 2:
+			if contacts.size() == 8:
 				return contacts
 	return contacts
 
-func _damage_chunk(result: Dictionary, screen_position: Vector2) -> void:
+func _damage_chunk(result: Dictionary, screen_position: Vector2, context: Dictionary = {}, damage_override: float = -1.0) -> void:
 	var body: StaticBody3D = result.collider
 	if not is_instance_valid(body) or body.is_queued_for_deletion() or not chunks.has(body):
 		return
+	if is_instance_valid(boss) and boss.active and not boss.filter_hit(body,context): return
+	if round_enabled and round_state.phase != RoundModel.Phase.MINING: return
 	hit_count += 1
 	var point: Vector3 = result.position
 	var normal: Vector3 = result.normal
@@ -803,7 +1035,35 @@ func _damage_chunk(result: Dictionary, screen_position: Vector2) -> void:
 	var color: Color = body.get_meta("stone_color")
 	var placement: Transform3D = body.mesh_instance.global_transform
 	var damage := float(upgrade_stats.damage) if round_enabled else 1.0
+	var executed := false
+	var critical := bool(context.get("critical", false)) and damage_override < 0
+	if round_enabled and damage_override < 0:
+		var modified := mining_skills.damage(context, body.get_instance_id(), body.impact_count == 0, body.is_gem_cover, body.health / body.max_health, int(context.get("count", 1)))
+		damage = float(modified.damage)
+		executed = bool(modified.execute)
+		if executed:
+			damage = body.health
+	elif damage_override >= 0:
+		damage = damage_override
+	if not context.has("primary_damage"):
+		context["primary_damage"] = damage
+	var received := minf(damage, body.health)
 	var broken: bool = body.hit(damage, point)
+	if round_enabled:
+		if executed or critical:
+			_skill_notice(screen_position, "처형!" if executed else "치명타!", Color("ffba6b") if executed else Color("ffe39a"))
+		var kind := str(body.get_meta("special_kind", ""))
+		if kind == "resonance":
+			_queue_special(body, point, received * (SkillBalance.value("resonance_damage") + mining_skills.amount("resonance_damage_bonus")), context)
+		if broken:
+			var reward := mining_skills.on_break(critical, executed)
+			if kind == "healing":
+				reward.heal += SkillBalance.value("healing_amount") * (1.0 + mining_skills.amount("healing_amount_bonus"))
+			elif kind == "gold_stone":
+				reward.gold += roundi(SkillBalance.value("gold_stone_amount") * (1.0 + mining_skills.amount("gold_stone_bonus")))
+			elif kind == "bomb":
+				_queue_special(body, point, SkillBalance.value("bomb_damage") * (1.0 + mining_skills.amount("bomb_damage_bonus")), context)
+			_apply_skill_reward(reward, screen_position)
 	var auto_collected := false
 	if body.is_gem_cover and body.light_node != null:
 		var tier: int = body.light_node.current_tier
@@ -814,7 +1074,8 @@ func _damage_chunk(result: Dictionary, screen_position: Vector2) -> void:
 			audio.play_resonance(tier, 1.0 - body.health / body.max_health)
 	effects.impact(point, normal, broken, color, body.is_gem_cover)
 	if not broken and not body.is_gem_cover:
-		audio.play_hit(0.9, layer)
+		if is_instance_valid(boss) and boss.active: boss.audio.play(boss.stage,"hit")
+		else: audio.play_hit(0.9, layer)
 	if broken:
 		if round_enabled and not body.is_gem_cover and round_state.record_stone():
 			hud.set_stones(round_state.ordinary_stones)
@@ -833,7 +1094,8 @@ func _damage_chunk(result: Dictionary, screen_position: Vector2) -> void:
 		# The discovery sound includes its own contact. Ordinary fractures,
 		# or a failed gem release, still receive the stone destruction sound.
 		if not auto_collected:
-			audio.play_break(layer)
+			if is_instance_valid(boss) and boss.active: boss.audio.play(boss.stage,"break")
+			else: audio.play_break(layer)
 		var fracture_started := Time.get_ticks_usec() if capture_mode else 0
 		var fragments: Array[Dictionary] = body.build_fracture_fragments()
 		effects.shed_fragments(fragments, body.mesh_instance.material_override, placement, normal, point)
@@ -847,6 +1109,7 @@ func _damage_chunk(result: Dictionary, screen_position: Vector2) -> void:
 				capture_fracture_count = fragments.size()
 				_capture_fracture_motion("fracture_gem")
 		chunks.erase(body)
+		if is_instance_valid(boss) and boss.active: boss.on_chunk_broken(body)
 		body.queue_free()
 		broken_count += 1
 		_check_exhausted()
@@ -857,15 +1120,15 @@ func _damage_chunk(result: Dictionary, screen_position: Vector2) -> void:
 	if controller_id >= 0 and using_controller and not auto_collected:
 		Input.start_joy_vibration(controller_id, 0.28 if broken else 0.1, 0.52 if broken else 0.25, 0.10 if broken else 0.055)
 
-func _collect_gem(jewel: StaticBody3D, discovery_position: Vector3 = Vector3.INF) -> bool:
+func _collect_gem(jewel: StaticBody3D, discovery_position: Vector3 = Vector3.INF, recovery: float = 1.0, bulk: bool = false) -> bool:
 	if not _round_allows_mining() or not gems.has(jewel) or not jewel.begin_collection():
 		return false
 	_start_round()
 	if round_enabled:
-		round_state.record_gem(jewel.grade)
-		var recovered := round_state.recover(float(upgrade_stats.recovery_per_gem))
-		if recovered > 0.0 and round_state.remaining > 5.0:
-			_last_warning_second = 6
+		round_state.record_gem(jewel.grade, float(jewel.get_meta("value_multiplier", 1.0)),recovery)
+		_apply_skill_reward(mining_skills.on_gem(), camera.unproject_position(jewel.global_position))
+		if jewel.get_meta("brilliant", false):
+			_skill_notice(camera.unproject_position(jewel.global_position), "찬란함!", Color("fff0b1"))
 	var special: bool = jewel.grade >= Gem.SPECIAL
 	var location := jewel.global_position
 	gems.erase(jewel)
@@ -875,18 +1138,156 @@ func _collect_gem(jewel: StaticBody3D, discovery_position: Vector3 = Vector3.INF
 	# Retain the aggregate enhanced-reward count; rarity totals remain exact.
 	if special:
 		special_collected_count += 1
-	audio.play_discovery(special, jewel.variant)
-	effects.gem_burst(discovery_position if discovery_position.is_finite() else location, special, jewel.light_tier)
-	camera_shake = 0.10 if special else 0.045
+	if not bulk:
+		audio.play_discovery(special, jewel.variant)
+		effects.gem_burst(discovery_position if discovery_position.is_finite() else location, special, jewel.light_tier)
+		camera_shake = 0.10 if special else 0.045
 	if jewel.get_parent() != self:
 		jewel.reparent(self)
 	collecting_gems.append({"node": jewel, "start": jewel.position, "age": 0.0, "life": 0.70 if round_enabled else (1.65 if special else 1.15), "special": special, "emerging": jewel.is_emerging,
 		"tier": jewel.grade, "delivered": false, "flight_started": false})
 	hovered = null
-	if controller_id >= 0 and using_controller:
+	if controller_id >= 0 and using_controller and not bulk:
 		Input.start_joy_vibration(controller_id, 0.45 if special else 0.2, 0.65 if special else 0.35, 0.18 if special else 0.10)
 	_check_exhausted()
 	return true
+
+func _skill_notice(screen: Vector2, message: String, color: Color) -> void:
+	if is_instance_valid(hud):
+		hud.skill_notice(screen, message, color)
+
+func remove_with_auxiliary(targets: Array, recovery: float = 1.0, crush: bool = false) -> Dictionary:
+	# Commit extraction in the activation frame. Rendering uses bounded shared
+	# particles; a whole ore never builds seventy fracture meshes in one frame.
+	if not _round_allows_mining() or not focused or targets.is_empty():
+		return {}
+	_start_round()
+	if is_instance_valid(boss) and boss.active:
+		if crush: return {}
+		var before := chunks.size()
+		for target in targets:
+			if not is_instance_valid(target) or not chunks.has(target) or not boss.active: continue
+			var point: Vector3 = target.to_global(target.face_center)
+			_damage_chunk({"collider":target,"position":point,"normal":camera.global_basis.z},camera.unproject_position(point),{"secondary":true},SkillBalance.Balance.boss_aux_damage(float(upgrade_stats.damage),target.max_health))
+		return {"removed":before-chunks.size(),"gems":0}
+	_tool_impact_queue.clear()
+	impact_pending = false
+	pickaxe.cancel_swing()
+	_reactions.clear()
+	var removed: Array[StaticBody3D] = []
+	var points: Array[Vector3] = []
+	var reward := {"gold":0,"heal":0.0}
+	var context := {"secondary":true,"reaction_marks":{},"reaction_budget":{"used":0}}
+	var collected_before := collected_count
+	for candidate in targets:
+		var body := candidate as StaticBody3D
+		if not is_instance_valid(body) or not chunks.has(body) or body.destroyed: continue
+		var point: Vector3 = body.mesh_instance.to_global(body.face_center)
+		body.set_meta("aux_received_damage",body.health)
+		body.destroyed = true
+		body.health = 0.0
+		body.collision_layer = 0
+		body.hide()
+		body.set_process(false)
+		if is_instance_valid(body.light_node): body.light_node.clear()
+		if body.cover_gem != null:
+			var jewel: StaticBody3D = body.cover_gem.get_ref()
+			if is_instance_valid(jewel) and gems.has(jewel):
+				var exit := point+camera.global_basis.z*0.30
+				if jewel.release_from_chunk(self,to_local(exit)):
+					_collect_gem(jewel,exit,recovery,true)
+		if not crush and round_enabled:
+			if not body.is_gem_cover: round_state.record_stone()
+			var earned := mining_skills.on_break(false,false)
+			reward.gold += int(earned.gold)
+			reward.heal += float(earned.heal)
+			var kind := str(body.get_meta("special_kind",""))
+			if kind == "healing": reward.heal += SkillBalance.value("healing_amount")*(1.0+mining_skills.amount("healing_amount_bonus"))
+			if kind == "gold_stone": reward.gold += roundi(SkillBalance.value("gold_stone_amount")*(1.0+mining_skills.amount("gold_stone_bonus")))
+		chunks.erase(body)
+		removed.append(body)
+		points.append(point)
+		broken_count += 1
+	# Special-stone propagation sees only surviving neighbours and retains the
+	# existing three-reactions-per-frame limit.
+	for body in removed:
+		if not crush:
+			var kind := str(body.get_meta("special_kind",""))
+			if kind == "bomb":
+				_queue_special(body,body.global_position,SkillBalance.value("bomb_damage")*(1.0+mining_skills.amount("bomb_damage_bonus")),context)
+			elif kind == "resonance":
+				_queue_special(body,body.global_position,float(body.get_meta("aux_received_damage"))*(SkillBalance.value("resonance_damage")+mining_skills.amount("resonance_damage_bonus")),context)
+		body.queue_free()
+	if round_enabled:
+		hud.set_stones(round_state.ordinary_stones)
+		_apply_skill_reward(reward,get_viewport().get_visible_rect().size*0.5)
+	if not crush:
+		for i in mini(6,points.size()):
+			var at := points[i*points.size()/mini(6,points.size())]
+			effects.impact(at,(at-shell.global_position).normalized(),true,Color("819093"))
+	_check_exhausted()
+	return {"stones":removed.size(),"gems":collected_count-collected_before}
+
+func _apply_skill_reward(reward: Dictionary, screen: Vector2) -> void:
+	var gold := int(reward.get("gold", 0))
+	if round_state.record_bonus_gold(gold):
+		_skill_notice(screen, "+%d G" % gold, Color("efd08d"))
+		reward_audio.play_cue("tick", 0)
+	var restored := round_state.recover(float(reward.get("heal", 0.0)))
+	if restored > 0:
+		_skill_notice(screen + Vector2(0, 23), "+%s 체력" % snappedf(restored, 0.1), Color("a7efc0"))
+		if round_state.seconds_remaining() > 5.0:
+			_last_warning_second = 6
+		reward_audio.play_cue("confirm", 0)
+
+func _queue_special(source: StaticBody3D, point: Vector3, damage: float, context: Dictionary) -> void:
+	if not context.has("reaction_marks"):
+		context["reaction_marks"] = {}
+	if not context.has("reaction_budget"):
+		context["reaction_budget"] = {"used": 0}
+	var marks: Dictionary = context.reaction_marks
+	var id := source.get_instance_id()
+	if marks.has(id):
+		return
+	marks[id] = true
+	_queue_area(source.global_position, damage, SkillBalance.value("neighbor_radius"), context, [source])
+	var color := Color("9fddea") if source.get_meta("special_kind") == "resonance" else Color("f3a76b")
+	effects.skill_burst(point, (source.global_basis * source.direction).normalized(), color, SkillBalance.value("neighbor_radius"))
+
+func _queue_area(point: Vector3, damage: float, radius: float, context: Dictionary, excluded: Array) -> void:
+	if damage <= 0.0:
+		return
+	var budget: Dictionary = context.reaction_budget
+	var nearby: Array[Dictionary] = []
+	for target in chunks:
+		if excluded.has(target) or target.destroyed or target.is_queued_for_deletion():
+			continue
+		var distance := target.global_position.distance_to(point)
+		if distance <= radius:
+			nearby.append({"target": target, "distance": distance})
+	nearby.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.distance) < float(b.distance))
+	for entry in nearby:
+		if int(budget.used) >= 96 or _reactions.size() >= 256:
+			break
+		budget.used += 1
+		_reactions.append({"target": weakref(entry.target), "damage": damage, "rock": rock_number,
+			"context": {"secondary": true, "reaction_marks": context.reaction_marks, "reaction_budget": budget}})
+
+func _drain_reactions() -> void:
+	# One source can propagate once per original attack. At most three reactions
+	# are resolved per physics frame, including all existing fracture/VFX work.
+	if round_enabled and round_state.phase != RoundModel.Phase.MINING:
+		_reactions.clear()
+		return
+	for i in 3:
+		if _reactions.is_empty():
+			break
+		var reaction: Dictionary = _reactions.pop_front()
+		var target: StaticBody3D = reaction.target.get_ref()
+		if not is_instance_valid(target) or target.destroyed or reaction.rock != rock_number or not chunks.has(target):
+			continue
+		var point: Vector3 = target.to_global(target.face_center)
+		_damage_chunk({"collider": target, "position": point, "normal": (target.global_basis * target.direction).normalized()}, camera.unproject_position(point), reaction.context, float(reaction.damage))
 
 func _update_collections(delta: float) -> void:
 	for i in range(collecting_gems.size() - 1, -1, -1):
@@ -919,10 +1320,18 @@ func _update_collections(delta: float) -> void:
 		jewel.scale = Vector3.ONE * maxf(0.001, grow * shrink)
 
 func _check_exhausted() -> void:
+	if is_instance_valid(boss) and boss.active:
+		boss.check_victory()
+		return
 	# A find never removes unmined stone. Both excavation and collection must finish.
-	if completion_time < 0.0 and chunks.is_empty() and gems.is_empty():
+	if not ore_building and completion_time < 0.0 and chunks.is_empty() and gems.is_empty():
 		completion_time = 0.0
 		marker.hide()
+		if round_enabled and campaign_enabled and round_state.phase == RoundModel.Phase.MINING and _ore_counted_number != rock_number:
+			_ore_counted_number = rock_number
+			campaign.record_ore(int(ore_profile.index))
+			_pending_boss = campaign.eligible(int(ore_profile.index))
+			hud.set_ore_progress(_progress_status())
 
 func _reset_rock() -> void:
 	if _round_allows_mining():
@@ -932,7 +1341,7 @@ func _upgrade_window_open() -> bool:
 	return is_instance_valid(skill_ui) and bool(skill_ui.is_open)
 
 func _open_upgrades() -> void:
-	if not round_enabled or not focused or _upgrade_window_open() or not is_instance_valid(skill_ui):
+	if not round_enabled or campaign.won or not focused or _upgrade_window_open() or not is_instance_valid(skill_ui):
 		return
 	if round_state.phase not in [RoundModel.Phase.READY, RoundModel.Phase.COMPLETE]:
 		return
@@ -948,6 +1357,7 @@ func _open_upgrades() -> void:
 	skill_ui.open_tree(round_state.wallet_gold)
 
 func _clear_upgrade_input() -> void:
+	_tool_impact_queue.clear()
 	mouse_down = false
 	dragging = false
 	touch_id = -1
@@ -978,7 +1388,7 @@ func _purchase_upgrade(node_id: String) -> bool:
 		return false
 	round_state.wallet_gold = int(result.gold)
 	_apply_upgrade_stats()
-	if round_state.phase == RoundModel.Phase.READY and node_id in ["rich_ore", "soft_ore"]:
+	if round_state.phase == RoundModel.Phase.READY and (upgrades.get_node(node_id).category == "ore" or node_id.begins_with("brilliant")):
 		# This ore has not been touched yet. Apply its new composition now.
 		_spawn_rock(rock_seed)
 	hud.set_wallet(round_state.wallet_gold)
@@ -987,23 +1397,59 @@ func _purchase_upgrade(node_id: String) -> bool:
 	return true
 
 func _apply_upgrade_stats() -> void:
-	upgrade_stats = upgrades.stats()
+	upgrade_stats = aux_tools.apply_to(main_tools.apply_to(upgrades.stats()))
+	mining_skills.configure(upgrade_stats)
 	round_state.apply_stats(upgrade_stats)
+	pickaxe.set_tool(main_tools.equipped)
+	audio.set_tool(main_tools.equipped)
 	pickaxe.speed_multiplier = float(upgrade_stats.attack_speed)
+	if is_instance_valid(auxiliary): auxiliary.configure()
 	if is_instance_valid(hud):
-		hud.set_timer(round_state.remaining, round_state.duration, round_state.phase != RoundModel.Phase.READY and focused)
+		hud.set_timer(round_state.seconds_remaining(), round_state.seconds_capacity(), round_state.phase != RoundModel.Phase.READY and focused and not ore_building)
+
+func _tool_action(id: String) -> bool:
+	if not round_enabled or not _upgrade_window_open() or skill_ui.selected_tab != "tools" or round_state.phase not in [RoundModel.Phase.READY, RoundModel.Phase.COMPLETE]:
+		return false
+	var changed := false
+	if not AuxTools.definition(id).is_empty():
+		var result := aux_tools.acquire(id,round_state.wallet_gold)
+		changed = bool(result.ok)
+		if changed:
+			round_state.wallet_gold = int(result.gold)
+			if is_instance_valid(auxiliary): auxiliary.acquired(id)
+	elif main_tools.is_owned(id):
+		changed = main_tools.equip(id)
+	else:
+		var result := main_tools.acquire(id, round_state.wallet_gold)
+		changed = bool(result.ok)
+		if changed:
+			round_state.wallet_gold = int(result.gold)
+	if changed:
+		_clear_upgrade_input()
+		_apply_upgrade_stats()
+		hud.set_wallet(round_state.wallet_gold)
+		hud.set_auction_available(round_state.can_auction())
+		reward_audio.play_cue("pickup", 3)
+	skill_ui.refresh(round_state.wallet_gold)
+	return changed
 
 func _round_allows_mining() -> bool:
-	return not round_enabled or (not _upgrade_window_open() and round_state.phase in [RoundModel.Phase.READY, RoundModel.Phase.MINING])
+	return not ore_building and not (campaign_enabled and campaign.won) and (not round_enabled or (not _upgrade_window_open() and round_state.phase in [RoundModel.Phase.READY, RoundModel.Phase.MINING]))
 
 func _start_round() -> void:
 	if round_enabled:
 		round_state.start()
 
 func _advance_round(delta: float) -> void:
-	if not round_enabled or not focused:
+	if not round_enabled or not focused or ore_building:
 		return
-	if round_state.advance(delta):
+	if round_state.phase == RoundModel.Phase.MINING:
+		mining_skills.advance(delta)
+	var drains: bool = not is_instance_valid(boss) or not boss.active or boss.time_drain_enabled()
+	if round_state.advance(delta if drains else 0.0):
+		if is_instance_valid(boss) and boss.active: boss.defeat()
+		_tool_impact_queue.clear()
+		pickaxe.cancel_swing()
 		mouse_down = false
 		dragging = false
 		touch_id = -1
@@ -1017,7 +1463,11 @@ func _advance_round(delta: float) -> void:
 		hovered = null
 		reward_audio.play_cue("timeout", 0)
 	elif round_state.phase == RoundModel.Phase.MINING:
-		var second := ceili(round_state.remaining)
+		if round_state.last_advance_revives > 0:
+			_last_warning_second = 6
+			_skill_notice(get_viewport().get_visible_rect().size * Vector2(0.5, 0.30), "부활!", Color("a7efc0"))
+			reward_audio.play_cue("total", 0)
+		var second := ceili(round_state.seconds_remaining())
 		if second >= 1 and second <= 5 and second != _last_warning_second:
 			_last_warning_second = second
 			reward_audio.play_cue("countdown", 5 - second)
@@ -1066,13 +1516,17 @@ func _begin_settlement() -> void:
 	hud.show_settlement(round_state.begin_settlement())
 
 func _finish_settlement() -> void:
+	var previous_stage := int(ore_profile.index)
 	if round_enabled and round_state.commit_settlement():
 		hud.set_wallet(round_state.wallet_gold)
 		hud.set_auction_available(round_state.can_auction())
+		var progress := _progress_status()
+		hud.set_ore_progress(progress,progress.index > previous_stage)
+		if campaign.last_result == "victory" and not campaign.won: _open_upgrades.call_deferred()
 
 
 func _start_auction() -> void:
-	if not round_enabled or _upgrade_window_open() or not hud.auction_ui.is_open or hud.auction_ui.mode != hud.auction_ui.Mode.PREVIEW:
+	if not round_enabled or campaign.won or _upgrade_window_open() or not hud.auction_ui.is_open or hud.auction_ui.mode != hud.auction_ui.Mode.PREVIEW:
 		return
 	var result: Dictionary = round_state.begin_auction()
 	if result.is_empty():
@@ -1087,8 +1541,14 @@ func _finish_auction() -> void:
 		hud.apply_auction_result(round_state.last_report)
 
 func _next_round() -> void:
-	if not round_enabled or hud.auction_ui.is_open or not round_state.new_round():
+	if not round_enabled or campaign.won or hud.auction_ui.is_open or not round_state.new_round():
 		return
+	campaign.new_round()
+	_pending_boss = false
+	if is_instance_valid(boss): boss.clear()
+	_apply_upgrade_stats()
+	mining_skills.reset_round()
+	if is_instance_valid(auxiliary): auxiliary.reset_round()
 	mouse_down = false
 	dragging = false
 	touch_id = -1
@@ -1101,7 +1561,8 @@ func _next_round() -> void:
 	_spawn_rock()
 	pickaxe.show()
 	hud.begin_round(round_state.round_index, round_state.wallet_gold)
-	hud.set_timer(round_state.remaining, round_state.duration, false)
+	hud.set_timer(round_state.seconds_remaining(), round_state.seconds_capacity(), false)
+	hud.set_ore_progress(_progress_status())
 
 func _capture_tick(delta: float) -> void:
 	# Move between three parts of one cap while demonstrating all six colors.
@@ -1267,3 +1728,28 @@ func _capture(label: String) -> void:
 		var region := Rect2i(Vector2i(center * pixel_scale) - Vector2i(230, 200), Vector2i(460, 400))
 		region = region.intersection(Rect2i(Vector2i.ZERO, screenshot.get_size()))
 		screenshot.get_region(region).save_png("res://artifacts/" + label + "_detail.png")
+
+func _max_gem_grade() -> int:
+	return mini(campaign.cleared,Gem.EXOTIC) if campaign_enabled and round_enabled else Gem.EXOTIC
+
+func _progress_status() -> Dictionary:
+	var result := OreProgression.status(round_state.lifetime_mining_gold,_max_gem_grade())
+	return campaign.decorate_status(result) if campaign_enabled else result
+
+func _try_spawn_boss() -> bool:
+	if not _pending_boss or not campaign_enabled or not round_enabled or not is_instance_valid(boss): return false
+	_pending_boss = false
+	if round_state.phase != RoundModel.Phase.MINING or not campaign.begin(int(ore_profile.index)): return false
+	boss.start(campaign.cleared,int(rng.randi()))
+	return true
+
+func _set_stage_theme(definition: Dictionary) -> void:
+	if backdrop_material == null: return
+	backdrop_material.set_shader_parameter("boss_strength",0.0 if definition.is_empty() else 1.0)
+	if not definition.is_empty(): backdrop_material.set_shader_parameter("boss_tint",definition.back)
+
+func _set_boss_skill_rules(enabled: bool) -> void:
+	var disabled: Array[String] = []
+	if enabled: disabled.append("ore")
+	upgrade_stats = aux_tools.apply_to(main_tools.apply_to(upgrades.stats(disabled)))
+	mining_skills.configure(upgrade_stats)

@@ -1,0 +1,94 @@
+"""Build the review tables from exported production values and final pacing runs."""
+from pathlib import Path
+import json
+
+ROOT = Path(__file__).resolve().parents[2]
+OUT = ROOT / 'docs/balance'
+values = json.loads((OUT / 'values.json').read_text(encoding='utf-8'))
+cases = [('balanced',101,100),('balanced',404,100),('economy',303,100),('auction',606,100),('balanced',202,85),('balanced',505,115)]
+runs = [json.loads((ROOT / f'artifacts/balance/campaign_{p}_{s}_{e}.json').read_text(encoding='utf-8')) for p,s,e in cases]
+assert all(r['won'] and r['paid_nodes'] == 137 and r['aux'] == 7 and r['main'] == 'gold_pickaxe' and 0 < r['all_unlocked_minute'] < r['minutes'] for r in runs)
+(OUT / 'simulations.json').write_text(json.dumps(runs,ensure_ascii=False,indent=2),encoding='utf-8')
+
+def gold(n): return f'{n:,}'
+def table(headers, rows):
+    return '\n'.join(['| '+' | '.join(headers)+' |','| '+' | '.join(['---']*len(headers))+' |']+['| '+' | '.join(map(str,row))+' |' for row in rows])
+def minutes(n): return f'{n:.1f}분'
+names = {e['id']:e['title'] for e in values['main_tools']+values['aux_tools']}
+base = runs[0]
+buy_times = {p['id']:p['minute'] for p in base['purchases']}
+checkpoints = {p['minute']:p for p in base['snapshots']}
+text = f'''# 기초 밸런스 v1 — 2026-09-13
+
+정산·구매를 포함한 약 4시간 15분~4시간 30분의 일반적인 첫 캠페인을 목표로 한다. 실행 중 잠시 멈춘 시간은 제외한다. 시간으로 구매나 보스 등장을 잠그지 않고, 획득 Gold·실제 원석 파괴·구매 선택으로 성장한다.
+
+최종 구성은 **유료 스킬 137개 전부 + 황금 곡괭이 한 개 장착 + 보조 도구 7종 동시 장착**이다. 이전 주 도구는 수집을 강제하지 않고, 소유했다면 무료로 재장착할 수 있다. 스킬 가격 합계는 **{gold(values['total_skill_gold'])} G**, 이 최종 구성의 총 구매 비용은 **{gold(values['total_final_build_gold'])} G**다. 중간 주 도구 구매비는 후자의 금액에서 제외한다.
+
+## 시간대별 경험과 모델 결과
+
+{table(['구간','의도','기본 경로의 결과'],[
+('0~30분','조각을 여러 번 치며 발견·판매·구매 학습',f"시작 3~4타/일반 조각, 30분에 스킬 {checkpoints[30]['nodes']}개"),
+('30~60분','새 도구와 자동 채굴 첫 해금',f"도끼 {buy_times['axe']}분, 레이저 {buy_times['laser']}분"),
+('1~2시간','충격파·콤보·공명·추가타격으로 가속',f"충격파 {buy_times['shock']}분, 추가타격 {buy_times['extra']}분, 120분에 스킬 {checkpoints[120]['nodes']}개"),
+('2~3시간','넓은 타격과 기계 도구로 원석 분쇄',f"180분에 주 도구 {1+sum(p['kind']=='main' and p['minute']<=180 for p in base['purchases'])}/6, 보조 도구 {checkpoints[180]['aux']}/7, 스킬 {checkpoints[180]['nodes']}/137"),
+('3~4시간','전부 강화하고 폭발·연쇄 파괴',f"기폭장치 {buy_times['detonator']}분, 최종 구성 {base['all_unlocked_minute']}분"),
+('4시간 이후','완성된 장비로 마지막 원석과 보스',f"기본 경로 최종 승리 {base['minutes']}분")])}
+
+다음은 **오프라인 수치 모델의 추정치**다. 사람이 4시간씩 실제 플레이한 측정값이 아니다. 실제 GDScript의 구매·스킬 피해/확률·회복·보석 배치 규칙·정산·경매를 사용한다. 조준과 가림은 구형 가상 조각/상위층 연결로 근사하고, 보스는 체력·공격력·기믹별 행동 시간을 모델링했다. 실제 물리 raycast, 손의 피로, 발견 전략과 보스 숙련도는 별도 플레이테스트가 필요하다.
+
+{table(['경로 / seed','채굴 효율','엔딩','모든 최종 구성','보스 실패'],[(r['policy']+' / '+str(r['seed']),f"{r['efficiency']:.2f}×",minutes(r['minutes']),minutes(r['all_unlocked_minute']),r['boss_failures']) for r in runs])}
+
+기본 효율은 도구의 실제 스윙 주기에 프레임 여유 1/60초, 조각 변경 0.14초, 회전 0.65초, 명중률 94%를 적용한다. 정산·다음 채굴에 7초+행당 0.75초, 구매가 있는 방문에 4초+구매당 2초를 더한다. 일반 원석 교체 2.4초, 분쇄 0.85초, 폭파 1.1초를 포함한다. 경매 경로는 매번 참여하며 6초를 추가한다. 탐지기·엑스레이 정보 활용에 따른 추가 속도는 반영하지 않는다. 난수 seed·구매 순서와 각 구매 시점은 [simulations.json](simulations.json)에 남겼다. 효율 ±15%에서는 약 3시간 46분~4시간 50분이다. 능숙한 플레이를 강제로 4시간 동안 붙잡는 제한은 없다.
+
+## 주 도구
+
+{table(['도구','Gold','타격 공격력 배율','속도 배율','범위 배율'],[(t['title'],gold(t['price']),t['power'],t['speed'],t['radius']) for t in values['main_tools']])}
+
+도끼는 자체 치명타 +20%p, 착암기는 3점사다. 황금 곡괭이는 단일 접촉 DPS가 모든 이전 도구보다 1.8배 이상 높고 넓은 범위도 갖는다. 모두 강화하면 기본 타격 공격력 60, 속도 배율 5.4, 기본 공격 반경 1.368이다. 콤보·치명타·체력 조건·광물 축복은 추가로 적용된다.
+
+## 보조 도구
+
+{table(['도구','Gold','동작'],[(t['title'],gold(t['price']),t['headline']) for t in values['aux_tools']])}
+
+레이저 10~16초 간격, 맥주 최대 체력 +6, 정 등장 확률 35%·3타·반경 2.1. 분쇄기는 남은 보석 가치 50% 회수·30초 재사용 대기시간, 기폭장치는 라운드당 1회다. 분쇄 대기시간은 원석 교체·재설정으로 초기화되지 않고 정상적인 새 라운드에 초기화된다. 포커스 이탈·메뉴·원석 준비 중에는 시간이 멈춘다. 보스에서 분쇄는 불가능하다. 다른 보조 도구의 보스 조각당 피해는 `min(조각 최대 HP ×25%, max(4, 주 도구 기본 공격력 ×2))`이며 보호/면역을 통과하지 않는다.
+
+## 원석·보석
+
+{table(['원석','누적 정산 Gold + 이전 보스 처치','조각 수','일반 조각 기본 HP','보석 조각 HP','보장 / 최대 보석'],[(o['title'],gold(o['gold']),o['pieces'],o['stone_health'],o['cover_health'],f"{len(o['gems'])} / {o['gem_cap']}") for o in values['ores']])}
+
+일반 조각은 안쪽 층당 HP +6%, 다섯 조각 중 하나는 +12%의 변동을 적용한다. 시작 일반 조각은 3~4타, 시작 보석 조각은 기본 도구로 12타다. 최종 일반 조각은 모든 강화와 황금 곡괭이로 한 번에 부서지고 보석 조각은 기본 피해 기준 3타다. 보석은 모두 바깥층 안쪽에 숨긴다. 보석 등장 강화는 노드당 +1.2%p, 전부 합쳐 +6%p이며 단계별 최대 수량을 지킨다. 보스가 해금하지 않은 희귀도는 어떤 스킬로도 앞서 나오지 않는다.
+
+{table(['등급','개당 Gold'],list(zip(['일반','특별','희귀','전설','신화','고대','이형'],map(gold,values['gem_gold']))))}
+
+일반 돌 조각은 1 G. 보석 가치·찬란함·총수입·황금의 날은 실제 정산 순서대로 반영한다. 경매 확률 23/25/25/25/2와 연속 전액 손실 보호는 유지한다. 경매로 인한 지갑 변동은 원석 난이도를 올리지 않는다.
+
+## 보스
+
+{table(['보스','해당 광맥 원석 파괴 수','조각당 HP','첫 처치 Gold','기본 경로 처치'],[(boss['title'],boss['goal'],boss['health'],gold(boss['reward']),minutes(m['minute'])) for boss,m in zip(values['bosses'],base['milestones'])])}
+
+첫 보스는 조각당 14→7→3.5 HP로 두 번 재생한다. 수호석 보스는 채굴 속도가 조금 느려도 진행이 막히지 않도록 조각당 28 HP로 조정했다. 시한핵의 별도 60초·가시 최소 3초 안전창 등 기믹 시간은 유지한다. 포격 투사체는 현재 기본 공격력 기준 최대 두 번의 평타로 요격할 수 있게 했다. 보스 보상은 스킬 배율로 부풀리지 않으며, 최종 구성 구매는 최종 보상 없이 가능하다.
+
+## 스킬과 회복
+
+공격력 노드 +0.8, 속도 +16%, 범위 +25%, 최대 체력 +4, 총수입 +12%, 보석 가치 +20%. 충격파 기본 확률 8%에서 최대 20%, 폭탄 돌 기본 피해 35에서 최대 71.75로 연쇄 파괴가 후반에도 의미 있게 작동한다. 콤보 기본 유지 6초·최소 2초, 축복은 5초다. 모든 효과·확률은 [values.json](values.json), 각 노드의 확정 가격·효과·설명은 [skills.csv](skills.csv)에 있다.
+
+첫 이웃은 60 G다. 연결 깊이가 커질수록 가격을 높이고 고유 효과는 별도 가중치를 적용한다. 격자·연결·이웃 공개 구조와 전 노드 구매 가능성은 유지한다. 스킬 137개를 전부 구매하는 데 {gold(values['total_skill_gold'])} G가 든다.
+
+최대 체력은 스킬 전부와 맥주로 52, 초당 소모는 0.82, 부활은 2회·각 최대 체력의 25%다. 일반 회복의 라운드별 누적 한도는 최대 체력의 80%(최종 41.6)다. 돌/보석/회복 돌 모두 이 한도를 공유하며, 부활·보스 입장 회복은 별도다. 관련 스킬 상세에 한도를 표시한다. 회복 이벤트가 무한히 들어와도 보스 없는 라운드는 약 **145.9초** 이내에 정산되어 무한 채굴이 되지 않는다.
+
+## 다시 검증하기
+
+```powershell
+godot --headless --path . --script res://tests/validate_balance.gd
+godot --headless --path . --script res://tools/balance/simulate_campaign.gd -- --seed=101 --efficiency=1.0 --policy=balanced
+godot --headless --path . --script res://tools/balance/export_balance.gd
+python tools/balance/write_report.py
+godot --path . --script res://tests/capture_balance.gd
+```
+
+`write_report.py`는 위 표의 여섯 경로 JSON이 모두 필요하다. `tools/balance/run_balance.ps1 -Godot <실행파일> -Python <실행파일>`로 여섯 경로·회복 한도 검증·값 내보내기·문서 생성을 한 번에 재현할 수 있다. 기존 구매·정산·보스·원석·채굴·UI 검증도 함께 실행했다. 가로/세로 실제 GPU 캡처 7개에서 10,000,000 G 가격표, 황금 곡괭이 정보, 분쇄 대기시간 설명을 확인했다. 모델과 효과음을 새로 만들거나 다시 인코딩하지 않았다.
+
+이번 작업은 수치 밸런스와 이를 지키는 제한을 적용한 것이다. 현재 프로토타입은 실행 중 라운드 사이 진행도를 유지하며, 앱 종료 후 자동 저장은 아직 없다.
+'''
+(OUT/'README.md').write_text(text,encoding='utf-8')
+print('BALANCE_REPORT_OK',OUT/'README.md')

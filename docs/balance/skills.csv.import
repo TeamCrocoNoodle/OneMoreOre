@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://bnxghvme4sr3o"
+
+[deps]
+
+files=["res://docs/balance/skills.name.translation", "res://docs/balance/skills.category.translation", "res://docs/balance/skills.depth.translation", "res://docs/balance/skills.gold.translation", "res://docs/balance/skills.effects.translation", "res://docs/balance/skills.description.translation"]
+
+source_file="res://docs/balance/skills.csv"
+dest_files=["res://docs/balance/skills.name.translation", "res://docs/balance/skills.category.translation", "res://docs/balance/skills.depth.translation", "res://docs/balance/skills.gold.translation", "res://docs/balance/skills.effects.translation", "res://docs/balance/skills.description.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

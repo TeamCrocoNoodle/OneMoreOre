@@ -241,7 +241,7 @@ func gem_burst(point: Vector3, special: bool = true, tier: int = -1) -> void:
 	set_process(true)
 	var palette := [Color("ffce64"), Color("fff1c0"), Color("f5a6ff")] if special else [Color("7ffff0"), Color("d7fff5"), Color("bdf7ea")]
 	if tier >= 0:
-		var tint: Color = preload("res://scripts/gem.gd").LIGHT_COLORS[clampi(tier, 0, 5)]
+		var tint: Color = preload("res://scripts/gem.gd").LIGHT_COLORS[clampi(tier, 0, 6)]
 		palette = [tint, tint.lightened(0.40), tint.lightened(0.72)]
 	for i in range(100 if special else 32):
 		var direction := _random_direction()
@@ -252,6 +252,12 @@ func _spawn(kind: int, point: Vector3, velocity: Vector3, color: Color, size: fl
 	if particles.size() >= 480:
 		particles.pop_front()
 	particles.append({"kind": kind, "position": point, "velocity": velocity, "color": color, "size": size, "age": 0.0, "life": life, "spin": rng.randf_range(-6.0, 6.0)})
+
+func skill_burst(point: Vector3, normal: Vector3, color: Color, radius: float) -> void:
+	_ring(point, normal, true)
+	rings[-1].size = minf(radius, 2.5)
+	for i in 12:
+		_spawn(1, point, _random_direction() * rng.randf_range(1.5, 4.0), color, 0.035, 0.28)
 
 func _ring(point: Vector3, normal: Vector3, broken: bool) -> void:
 	set_process(true)

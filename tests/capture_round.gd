@@ -59,7 +59,7 @@ func _run() -> void:
 		if jewel.grade == Gem.SPECIAL:
 			targets.append(jewel)
 	if game.showcase_mode or not game.round_enabled or targets.size() != 4 or game.round_state.phase != RoundModel.Phase.READY:
-		_fail("Expected the untouched timed starter with three white and one green gem")
+		_fail("Expected the untouched timed starter with four white gems before the first boss")
 		return
 	report = {"seed": game.rock_seed, "radius": game.active_rock_radius, "initial_chunks": game.chunks.size(), "initial_gems": initial_gems, "mining_method": "Main._mine_at real physics rays through the normal buried starter", "clock_method": "Manual _advance_round; no cargo or report injection"}
 	await _save("round_ready")
@@ -74,7 +74,7 @@ func _run() -> void:
 			continue
 		if not await _excavate(jewel, i == 0, jewel.grade == Gem.SPECIAL):
 			return
-	if game.round_state.gem_counts[0] != 3 or game.round_state.gem_counts[1] != 1 or not game.collecting_gems.is_empty():
+	if game.round_state.gem_counts[0] != 4 or game.round_state.gem_counts[1] != 0 or not game.collecting_gems.is_empty():
 		_fail("All four actually excavated starter gems must arrive before settlement")
 		return
 	game.hud._process(0.45)
@@ -90,8 +90,8 @@ func _run() -> void:
 	var expected_counts: PackedInt32Array = game.round_state.gem_counts.duplicate()
 	var expected_stones: int = game.round_state.ordinary_stones
 	var expected_gold := expected_stones
-	var prices := [10, 50, 200, 1000, 5000, 25000]
-	for tier in 6:
+	var prices := RoundModel.GEM_GOLD
+	for tier in prices.size():
 		expected_gold += expected_counts[tier] * prices[tier]
 	report["mined"] = {"ordinary_stones": expected_stones, "gem_counts": Array(expected_counts), "unit_gem_gold": prices, "predicted_gold": expected_gold, "hits": game.hit_count, "broken_chunks": game.broken_count}
 	game._advance_round(4.75)

@@ -6,6 +6,7 @@ uniform vec4 deep_color : source_color = vec4(0.06, 0.22, 0.29, 1.0);
 uniform vec4 edge_color : source_color = vec4(0.72, 0.95, 0.94, 1.0);
 uniform float crystal_radius = 0.4;
 uniform float hovered : hint_range(0.0, 1.0) = 0.0;
+uniform bool exotic = false;
 varying vec3 crystal_position;
 varying vec3 crystal_normal;
 varying vec3 local_view;
@@ -87,6 +88,13 @@ void fragment() {
 	float inner_sheen = pow(inner_value, 3.0) * (0.055 + 0.10 * smoothstep(-0.65, 0.8, p.y));
 	float polish = studio * 0.21 + window * 0.28;
 	float crown_glint = smoothstep(0.62, 0.88, n.y) * smoothstep(0.40, 0.75, p.y);
+	if (exotic) {
+		// Opaline cuts: pale mint, rose and lilac surrounded by dark mineral edges.
+		vec3 spectrum = 0.5 + 0.5 * cos(6.28318 * (dot(p, vec3(0.31,0.44,0.23)) + eye.x * 0.17 + vec3(0.0,0.33,0.67)));
+		vec3 opal = mix(vec3(0.98), spectrum, 0.35);
+		body = mix(vec3(0.018,0.012,0.035), opal, smoothstep(0.24,0.58,depth));
+		body = mix(body, vec3(0.025,0.018,0.05), clamp(bevel * 0.86 + rim * 0.35,0.0,0.92));
+	}
 	ALBEDO = mix(body, body * vec3(1.10, 1.07, 1.01), hovered);
 	ROUGHNESS = 0.38;
 	METALLIC = 0.0;

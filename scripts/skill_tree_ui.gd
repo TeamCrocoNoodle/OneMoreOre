@@ -2,6 +2,7 @@ extends CanvasLayer
 ## Skill graph presentation. Only the adjacent check button requests a purchase.
 
 signal purchase_requested(id: String)
+signal tool_action_requested(id: String)
 signal closed
 signal cue(kind: String, tier: int)
 
@@ -12,7 +13,8 @@ const TEXT := Color("f4f4ef")
 const MUTED := Color("a5a8a5")
 const GRID_STEP := 132.0
 const NODE_SIZE := 64.0
-const CATEGORY_COLORS := {"health": Color("342c32"), "attack": Color("23303b"), "gold": Color("253932"), "ore": Color("352a23")}
+const CATEGORY_COLORS := {"health": Color("26372e"), "attack": Color("3b3026"), "gold": Color("332b3e"), "ore": Color("24363f")}
+const CATEGORY_ACCENTS := {"health": Color("9bbd85"), "attack": Color("d7a66a"), "gold": Color("bca0d0"), "ore": Color("82bdcd")}
 
 class GraphCanvas extends Control:
 	var presenter: Node
@@ -68,6 +70,7 @@ var _purchase_pending := false
 var _hover_pin := ""
 var _pointer_position := Vector2.INF
 var _hover_pin_position := Vector2.INF
+var _view_buttons: Array[Button] = []
 
 
 func _ready() -> void:
@@ -95,6 +98,7 @@ func _ready() -> void:
 	tools_panel.name = "ToolsDisplay"
 	tools_panel.model_gallery = model_gallery
 	_canvas.add_child(tools_panel)
+	tools_panel.action_requested.connect(func(id: String): tool_action_requested.emit(id))
 	_header = HeaderCanvas.new()
 	_header.presenter = self
 	_header.name = "UpgradeNavigation"
@@ -116,6 +120,22 @@ func _ready() -> void:
 	_confirm = _button("✓")
 	_confirm.name = "ConfirmSkillPurchase"
 	_confirm.pressed.connect(_confirm_purchase)
+	for label: String in ["−", "+", "⌂"]:
+		var button := _button(label)
+		button.name = "GraphView" + str(_view_buttons.size())
+		var index := _view_buttons.size()
+		button.pressed.connect(func():
+			if index == 2:
+				_user_view = false
+				hovered_id = ""
+				_hover_pin = ""
+				_cancel_selection()
+				_fit_graph()
+				_layout_nodes()
+			else:
+				_zoom_at(_graph_center, 1.25 if index == 1 else 0.8)
+		)
+		_view_buttons.append(button)
 	_close = _button("닫기 ×")
 	_close.name = "CloseSkillTree"
 	_close.pressed.connect(close_tree)
@@ -198,14 +218,23 @@ func setup(model: RefCounted) -> void:
 		_buttons[id] = button
 	_canvas.move_child(_detail_blocker, -1)
 	_canvas.move_child(_confirm, -1)
+	for button in _view_buttons:
+		_canvas.move_child(button, -1)
 	_canvas.move_child(_header, -1)
 	refresh(_gold)
+
+
+func setup_tools(model: RefCounted, auxiliary: RefCounted = null) -> void:
+	tools_panel.set_shop_state(model, _gold)
+	if auxiliary != null: tools_panel.set_aux_shop(auxiliary)
 
 
 func select_tab(id: String) -> void:
 	if id not in ["skills", "tools"] or selected_tab == id:
 		return
 	selected_tab = id
+	for button in _view_buttons:
+		button.visible = id == "skills"
 	selected_id = ""
 	hovered_id = ""
 	_hover_pin = ""
@@ -286,6 +315,8 @@ func close_tree() -> void:
 
 func refresh(gold: int) -> void:
 	_gold = maxi(gold, 0)
+	if is_instance_valid(tools_panel):
+		tools_panel.set_wallet(_gold)
 	if _model == null:
 		return
 	var previous_visible := _visible_ids.duplicate()
@@ -354,23 +385,27 @@ func _layout() -> void:
 	_header.position = Vector2.ZERO
 	_header.size = Vector2(_view.x, _header_height) * _scale
 	_graph_center = Vector2(_view.x * 0.5, (_view.y - 70) * 0.5 + (22 if narrow else 0))
+	_close.add_theme_font_size_override("font_size", int((27 if narrow else 17) * _scale))
 	_close.position = Vector2(_view.x - (80 if narrow else 120), 8 if narrow else 12) * _scale
 	_close.size = Vector2(58 if narrow else 98, 58) * _scale
 	_close.text = "×" if narrow else "닫기 ×"
-	_close.add_theme_font_size_override("font_size", int((27 if narrow else 17) * _scale))
 	var tab_y := 66.0 if narrow else 12.0
 	var tab_width := 142.0 if narrow else 152.0
 	var tab_gap := 18.0 if narrow else 24.0
 	var tab_start := (_view.x - tab_width * 2 - tab_gap) * 0.5
 	for index in 2:
 		var id: String = ["skills", "tools"][index]
+		_tab_buttons[id].add_theme_font_size_override("font_size", int(21 * _scale))
 		_tab_buttons[id].position = Vector2(tab_start + index * (tab_width + tab_gap), tab_y) * _scale
 		_tab_buttons[id].size = Vector2(tab_width, 58) * _scale
-		_tab_buttons[id].add_theme_font_size_override("font_size", int(21 * _scale))
 	var content_top := _header_height + 22
 	tools_panel.set_layout(Rect2(Vector2(22, content_top) * _scale, Vector2(maxf(_view.x - 44, 1), maxf(_view.y - content_top - 22, 1)) * _scale), _scale)
 	_header.queue_redraw()
 	_confirm.add_theme_font_size_override("font_size", int(29 * _scale))
+	for i in _view_buttons.size():
+		_view_buttons[i].add_theme_font_size_override("font_size", int(22 * _scale))
+		_view_buttons[i].position = Vector2(_view.x - 142 + i * 43, _header_height + 10) * _scale
+		_view_buttons[i].size = Vector2(38, 38) * _scale
 	if not _user_view:
 		_fit_graph()
 	_layout_nodes()
@@ -390,8 +425,9 @@ func _fit_graph() -> void:
 		else:
 			bounds = bounds.expand(point)
 	var footprint := bounds.size + Vector2.ONE * (NODE_SIZE + 26)
-	_zoom = clampf(minf((_view.x - 56) / maxf(footprint.x, 1), (_view.y - 256) / maxf(footprint.y, 1)), 0.55, 1.0)
-	_pan = -bounds.get_center() * _zoom
+	var area := Rect2(28, _header_height + 66, _view.x - 56, _view.y - _header_height - 112)
+	_zoom = clampf(minf(area.size.x / maxf(footprint.x, 1), area.size.y / maxf(footprint.y, 1)), 0.12, 1.0)
+	_pan = area.get_center() - _graph_center - bounds.get_center() * _zoom
 
 
 func _layout_nodes() -> void:
@@ -400,9 +436,9 @@ func _layout_nodes() -> void:
 		_ensure_detail_space(inspected)
 	for id in _buttons:
 		var center := get_node_screen(id) / _scale
-		var visual_size := maxf(52, NODE_SIZE * _zoom)
+		var visual_size := NODE_SIZE * _zoom
 		_node_rects[id] = Rect2(center - Vector2.ONE * visual_size * 0.5, Vector2.ONE * visual_size)
-		var hit_size := maxf(58, visual_size)
+		var hit_size := maxf(58, visual_size) if _zoom >= 0.75 else visual_size + 4.0
 		_buttons[id].position = (center - Vector2.ONE * hit_size * 0.5) * _scale
 		_buttons[id].size = Vector2.ONE * hit_size * _scale
 	_refresh_detail()
@@ -412,6 +448,11 @@ func _layout_nodes() -> void:
 func _choose_node(id: String) -> void:
 	if not is_open or selected_tab != "skills" or not _model.is_visible(id):
 		return
+	if _zoom < 0.75:
+		_zoom = 0.85
+		_pan = -Vector2(_model.get_node(id).grid) * GRID_STEP * _zoom
+		_user_view = true
+		_layout_nodes()
 	if not selected_id.is_empty():
 		_cancel_selection()
 		return
@@ -451,14 +492,12 @@ func _cancel_selection() -> void:
 func _hover_node(id: String) -> void:
 	if not is_open or selected_tab != "skills" or _dragging:
 		return
+	if not _hover_pin.is_empty():
+		return
 	_using_controller = false
 	hovered_id = id
-	if _ensure_detail_space(id):
-		# Keep the inspected detail stable during a small automatic upward pan;
-		# the next real pointer motion resumes ordinary hover hit testing.
-		_hover_pin = id
-		_hover_pin_position = _pointer_position
-		_layout_nodes()
+	# MouseMotion owns automatic panning after recording the current pointer.
+	# Native mouse_entered can arrive before _input has updated that position.
 	_refresh_detail()
 
 
@@ -476,6 +515,8 @@ func _focus_node(id: String) -> void:
 	if selected_tab != "skills":
 		return
 	_focused_id = id
+	if _using_controller:
+		_reveal_node(id)
 	_refresh_detail()
 
 
@@ -581,7 +622,9 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("ui_cancel"):
-		if selected_tab == "skills" and not selected_id.is_empty():
+		if selected_tab == "tools" and tools_panel.cancel_selection():
+			pass
+		elif selected_tab == "skills" and not selected_id.is_empty():
 			_cancel_selection()
 		else:
 			close_tree()
@@ -601,6 +644,9 @@ func _input(event: InputEvent) -> void:
 	if selected_tab == "tools":
 		# The display owns scrolling and native item/button keyboard navigation.
 		return
+	if _node_pointer_press(event):
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventMouseMotion:
 		_pointer_position = event.position
 		var pinned := not _hover_pin.is_empty() and _pointer_position.distance_squared_to(_hover_pin_position) < 1.0
@@ -618,6 +664,11 @@ func _input(event: InputEvent) -> void:
 			_refresh_detail()
 	if event.is_action_pressed("ui_accept"):
 		_using_controller = true
+		for button in _view_buttons:
+			if button.has_focus():
+				button.pressed.emit()
+				get_viewport().set_input_as_handled()
+				return
 		if _close.has_focus():
 			close_tree()
 		elif _tab_buttons.skills.has_focus() or _tab_buttons.tools.has_focus():
@@ -656,6 +707,30 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 
 
+func _node_pointer_press(event: InputEvent) -> bool:
+	var pressed: bool = (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT) or (event is InputEventScreenTouch and event.pressed)
+	if not pressed:
+		return false
+	var point: Vector2 = event.position
+	if point.y < _header_height * _scale or (_confirm.visible and _confirm.get_global_rect().has_point(point)):
+		return false
+	for button in _view_buttons:
+		if button.visible and button.get_global_rect().has_point(point):
+			return false
+	# Hover may pan a low card upward to fit its description. Its original
+	# pointer position still selects that same card until the pointer moves.
+	if not _hover_pin.is_empty() and point.distance_squared_to(_hover_pin_position) < 1.0:
+		_choose_node(_hover_pin)
+		return true
+	if _detail_blocker.visible and _detail_blocker.get_global_rect().has_point(point):
+		return false
+	for id in _visible_ids:
+		if _buttons[id].get_global_rect().has_point(point):
+			_choose_node(id)
+			return true
+	return false
+
+
 func _tab_shortcut(event: InputEvent) -> bool:
 	var cycle := false
 	if event is InputEventKey and (event.keycode in [KEY_Q, KEY_E] or event.physical_keycode in [KEY_Q, KEY_E]):
@@ -688,17 +763,24 @@ func _move_focus(direction: Vector2) -> void:
 			best_score = score
 	if not best.is_empty():
 		_focused_id = best
-		var point := get_node_screen(best) / _scale
-		var safe := Rect2(64, _header_height + 46, maxf(_view.x - 128, 1), maxf(_view.y - _header_height - 244, 1))
-		_pan += point.clamp(safe.position, safe.end) - point
-		_layout_nodes()
+		_reveal_node(best)
 		_buttons[best].grab_focus()
 	_refresh_detail()
 
 
+func _reveal_node(id: String) -> void:
+	_user_view = true
+	if _zoom < 0.75:
+		_zoom = 0.85
+	var point := get_node_screen(id) / _scale
+	var safe := Rect2(64, _header_height + 46, maxf(_view.x - 128, 1), maxf(_view.y - _header_height - 244, 1))
+	_pan += point.clamp(safe.position, safe.end) - point
+	_layout_nodes()
+
+
 func _zoom_at(point: Vector2, factor: float) -> void:
 	_cancel_selection()
-	var next := clampf(_zoom * factor, 0.55, 1.55)
+	var next := clampf(_zoom * factor, 0.12, 1.55)
 	_pan = point - _graph_center - (point - _graph_center - _pan) * next / _zoom
 	_zoom = next
 	_user_view = true
@@ -787,7 +869,7 @@ func _draw_graph(c: Control) -> void:
 	if selected_tab != "skills":
 		c.draw_set_transform(Vector2.ZERO)
 		return
-	_text(c, "끌어서 이동 · 스크롤로 확대", Vector2(28, _header_height + 27), 13, MUTED, false)
+	_text(c, "끌어서 이동 · 확대/축소", Vector2(20, _header_height + 29), 12, MUTED, false)
 	if _model != null:
 		for edge: Array in _model.get_edges():
 			if not _model.is_visible(edge[0]) or not _model.is_visible(edge[1]):
@@ -818,6 +900,7 @@ func _draw_node(c: Control, id: String) -> void:
 	style.set_border_width_all(2 if highlighted or owned else 1)
 	style.set_corner_radius_all(5)
 	c.draw_style_box(style, r)
+	c.draw_rect(Rect2(r.position + Vector2(2, 4), Vector2(maxf(2, _zoom * 3), r.size.y - 8)), CATEGORY_ACCENTS.get(str(node.category), GOLD))
 	if pulse > 0:
 		var glow := StyleBoxFlat.new()
 		glow.bg_color = Color(GOLD, pulse * 0.08)
@@ -825,7 +908,10 @@ func _draw_node(c: Control, id: String) -> void:
 		glow.set_border_width_all(2)
 		glow.set_corner_radius_all(6)
 		c.draw_style_box(glow, r.grow((1 - pulse) * 12 + 3))
-	_draw_icon(c, str(node.icon), r.get_center(), r.size.x * 0.30, TEXT if owned or highlighted else GOLD.darkened(0.08))
+	if _zoom >= 0.28:
+		_draw_icon(c, str(node.icon), r.get_center(), r.size.x * 0.29, TEXT if owned or highlighted else GOLD.darkened(0.08))
+	if int(node.get("rank", 0)) > 0 and _zoom >= 0.75:
+		_text(c, str(node.rank), r.position + Vector2(8, 13), 10, MUTED)
 	if owned and id != "origin":
 		_text(c, "✓", r.end - Vector2(3, 3), 12, GOLD, true, HORIZONTAL_ALIGNMENT_RIGHT)
 
@@ -858,6 +944,101 @@ func _draw_detail(c: Control) -> void:
 
 
 func _draw_icon(c: Control, id: String, p: Vector2, radius: float, color: Color) -> void:
+	if id.contains("/"):
+		var parts := id.split("/")
+		_draw_icon(c, parts[0], p - Vector2(0.15, 0.12) * radius, radius * 0.90, color)
+		var badge := p + Vector2(0.71, 0.66) * radius
+		var r := radius * 0.45
+		c.draw_circle(badge, r * 1.15, Color("121a1b"))
+		match parts[1]:
+			"power": _arrow(c, badge, r, color)
+			"speed": _line(c, [Vector2(-0.7, 0.5), Vector2(0, 0), Vector2(-0.7, -0.5), Vector2(0.6, 0)], badge, r, color, 2)
+			"reach":
+				c.draw_arc(badge, r, 0.0, TAU, 16, color, 1.5, true)
+				_plus(c, badge, r * 0.5, color)
+			"heal", "count": _plus(c, badge, r * 0.85, Color("b5dfb5") if parts[1] == "heal" else color)
+			"gold": _coin(c, badge, r)
+			"critical": _spark(c, badge, r, color)
+			"down": _line(c, [Vector2(-0.7, -0.2), Vector2(0, 0.5), Vector2(0.7, -0.2)], badge, r, color, 2)
+			"time", "pity":
+				c.draw_arc(badge, r, 0.0, TAU, 16, color, 1.5, true)
+				_line(c, [Vector2(0, -0.6), Vector2.ZERO, Vector2(0.45, 0.2)], badge, r, color, 1.5)
+			"chance":
+				for offset: Vector2 in [Vector2(-0.45, -0.45), Vector2.ZERO, Vector2(0.45, 0.45)]:
+					c.draw_circle(badge + offset * r, maxf(1, r * 0.18), color)
+		return
+	match id:
+		"gold":
+			_coin(c, p + Vector2(-0.35, 0.23) * radius, radius * 0.65)
+			_coin(c, p + Vector2(0.35, -0.22) * radius, radius * 0.65)
+			return
+		"rare", "brilliant", "blessing":
+			model_gallery.draw_gem(c, p, radius * 0.92, 2 if id == "rare" else 0)
+			_spark(c, p + Vector2(0.7, -0.7) * radius, radius * 0.40, color)
+			if id == "blessing":
+				_plus(c, p + Vector2(-0.7, 0.5) * radius, radius * 0.36, color)
+			return
+		"golden_day":
+			_coin(c, p, radius * 0.72)
+			for i in 8:
+				var d := Vector2.from_angle(TAU * i / 8.0)
+				c.draw_line(p + d * radius * 0.86, p + d * radius * 1.13, color, 1.7, true)
+			return
+		"combo":
+			c.draw_arc(p - Vector2(radius * 0.32, 0), radius * 0.66, -0.5, TAU - 0.8, 20, color, 2.7, true)
+			c.draw_arc(p + Vector2(radius * 0.32, 0), radius * 0.66, 2.8, TAU + 2.5, 20, color, 2.7, true)
+			return
+		"shock", "resonance":
+			for i in 3:
+				c.draw_arc(p - Vector2(radius * 0.65, 0), radius * (0.48 + i * 0.37), -1.0, 1.0, 12, color, 2.0, true)
+			if id == "resonance":
+				_stone_icon(c, p - Vector2(radius * 0.5, 0), radius * 0.42, color)
+			return
+		"critical":
+			_spark(c, p, radius, color)
+			_line(c, [Vector2(0, -0.47), Vector2(0, 0.1)], p, radius, Color("162024"), 2.5)
+			return
+		"execute":
+			_stone_icon(c, p, radius, color.darkened(0.35))
+			_line(c, [Vector2(-0.7, -0.8), Vector2(0.7, 0.8)], p, radius, color, 3)
+			_line(c, [Vector2(0.7, -0.8), Vector2(-0.7, 0.8)], p, radius, color, 3)
+			return
+		"extra", "streak":
+			_pickaxe(c, p - Vector2(radius * 0.3, 0), radius * 0.75, Color(color, 0.45))
+			_pickaxe(c, p + Vector2(radius * 0.28, 0), radius * 0.85, color)
+			if id == "streak":
+				for i in 3:
+					c.draw_circle(p + Vector2(-0.6 + i * 0.5, 0.85) * radius, radius * 0.09, color)
+			return
+		"first", "finisher", "crowd", "stone", "healing", "gold_stone":
+			_stone_icon(c, p, radius * 0.83, color)
+			match id:
+				"first": _spark(c, p + Vector2(0.2, -0.75) * radius, radius * 0.44, TEXT)
+				"finisher":
+					c.draw_rect(Rect2(p + Vector2(-0.8, 0.82) * radius, Vector2(1.6, 0.16) * radius), Color(color, 0.25))
+					c.draw_rect(Rect2(p + Vector2(-0.8, 0.82) * radius, Vector2(0.4, 0.16) * radius), color)
+				"crowd":
+					_stone_icon(c, p + Vector2(-0.7, 0.5) * radius, radius * 0.44, TEXT)
+					_stone_icon(c, p + Vector2(0.65, 0.5) * radius, radius * 0.44, TEXT)
+				"healing": _plus(c, p, radius * 0.48, Color("b2e2b6"))
+				"gold_stone": _coin(c, p, radius * 0.58)
+			return
+		"bomb":
+			c.draw_circle(p + Vector2(0, radius * 0.15), radius * 0.68, color)
+			_line(c, [Vector2(0, -0.48), Vector2(0.22, -0.85), Vector2(0.62, -0.85)], p, radius, color, 2)
+			_spark(c, p + Vector2(0.68, -0.85) * radius, radius * 0.23, TEXT)
+			return
+		"drain":
+			_line(c, [Vector2(-0.65, -0.8), Vector2(0.65, -0.8), Vector2(-0.6, 0.8), Vector2(0.6, 0.8), Vector2(-0.65, -0.8)], p, radius, color, 2)
+			return
+		"low_health", "revive":
+			_draw_icon(c, "vitality", p, radius * 0.77, color)
+			if id == "revive":
+				c.draw_arc(p, radius * 1.12, -0.3, 5.2, 22, color, 2, true)
+				_arrow(c, p + Vector2(-0.75, -0.78) * radius, radius * 0.38, color)
+			else:
+				c.draw_rect(Rect2(p + Vector2(-0.8, 0.80) * radius, Vector2(0.5, 0.15) * radius), color)
+			return
 	match id:
 		"vitality", "recovery":
 			var heart := PackedVector2Array([Vector2(0, 0.76), Vector2(-0.85, -0.05), Vector2(-0.83, -0.52), Vector2(-0.48, -0.76), Vector2(-0.14, -0.65), Vector2(0, -0.40), Vector2(0.14, -0.65), Vector2(0.48, -0.76), Vector2(0.83, -0.52), Vector2(0.85, -0.05)])
@@ -895,6 +1076,19 @@ func _draw_icon(c: Control, id: String, p: Vector2, radius: float, color: Color)
 func _pickaxe(c: Control, p: Vector2, r: float, color: Color) -> void:
 	_line(c, [Vector2(-0.53, 0.78), Vector2(0.30, -0.34)], p, r, color, 4)
 	_polygon(c, PackedVector2Array([Vector2(-0.69, -0.47), Vector2(-0.13, -0.76), Vector2(0.39, -0.58), Vector2(0.80, -0.02), Vector2(0.35, -0.30), Vector2(-0.15, -0.43)]), p, r, color)
+
+func _plus(c: Control, p: Vector2, r: float, color: Color) -> void:
+	c.draw_line(p - Vector2(r, 0), p + Vector2(r, 0), color, 2.4, true)
+	c.draw_line(p - Vector2(0, r), p + Vector2(0, r), color, 2.4, true)
+
+func _spark(c: Control, p: Vector2, r: float, color: Color) -> void:
+	var points := PackedVector2Array()
+	for i in 8:
+		points.append(Vector2.from_angle(i * TAU / 8.0) * (1.0 if i % 2 == 0 else 0.31))
+	_polygon(c, points, p, r, color)
+
+func _stone_icon(c: Control, p: Vector2, r: float, color: Color) -> void:
+	_polygon(c, PackedVector2Array([Vector2(-0.94, -0.30), Vector2(-0.34, -0.89), Vector2(0.59, -0.69), Vector2(0.98, 0.32), Vector2(0.29, 0.83), Vector2(-0.68, 0.61)]), p, r, Color(color, 0.6))
 
 
 func _arrow(c: Control, p: Vector2, r: float, color: Color) -> void:

@@ -64,7 +64,7 @@ func play_cue(kind: String, tier: int = 0) -> void:
 			if _started_usec[i] < _started_usec[voice]:
 				voice = i
 	var variants: Array = _streams[kind]
-	var index := clampi(tier, 0, 5) if kind in ["pickup", "row", "countdown", "auction_bid"] else int(_variation_cursor.get(kind, 0)) % variants.size()
+	var index := clampi(tier, 0, variants.size()-1) if kind in ["pickup", "row", "countdown", "auction_bid"] else int(_variation_cursor.get(kind, 0)) % variants.size()
 	_variation_cursor[kind] = int(_variation_cursor.get(kind, 0)) + 1
 	var player := _players[voice]
 	player.stop()
@@ -95,7 +95,7 @@ static func _prepare_bank() -> void:
 		return
 	for kind: String in CUE_KINDS:
 		var variants: Array[AudioStreamWAV] = []
-		var count := 6 if kind in ["pickup", "row", "countdown", "auction_bid"] else (3 if kind in ["tick", "confirm"] else 1)
+		var count := 7 if kind in ["pickup", "row"] else 6 if kind in ["countdown", "auction_bid"] else (3 if kind in ["tick", "confirm"] else 1)
 		for variant in count:
 			variants.append(_synthesize(kind, variant))
 		_shared_bank[kind] = variants

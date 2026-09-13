@@ -1,0 +1,203 @@
+{
+  "source": "Original oscillator/resonator synthesis; no recorded PCM",
+  "sounds": {
+    "laser_ready": {
+      "duration_seconds": 0.26,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -4.5,
+      "rms_dbfs": -22.362,
+      "dc_offset": 2.1939e-05,
+      "last_8ms_silent": true,
+      "sha256_pcm": "b3dfd2eeb62042ec661362cc17d1fa98a3aed5433b1620759d9d22112620999b"
+    },
+    "laser_fire": {
+      "duration_seconds": 0.36,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -4.5,
+      "rms_dbfs": -20.604,
+      "dc_offset": -2.837e-06,
+      "last_8ms_silent": true,
+      "sha256_pcm": "320faae7b3dd8a0d9d3556f5b1b1a3fca40f118202699f847d8d08ff27fd7bc0"
+    },
+    "beer": {
+      "duration_seconds": 0.68,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -4.5,
+      "rms_dbfs": -17.775,
+      "dc_offset": 1.6274e-05,
+      "last_8ms_silent": true,
+      "sha256_pcm": "097582850db0e09f9d263f342ec9a17f4b0ef8198a51d3d4c2928c34d0fd1582"
+    },
+    "detector_ready": {
+      "duration_seconds": 0.3,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -4.5,
+      "rms_dbfs": -18.229,
+      "dc_offset": -7.78e-07,
+      "last_8ms_silent": true,
+      "sha256_pcm": "4c288083d315ffeb7ee2e319d7f08279c216c08dfd10055f1606d1323f3573c6"
+    },
+    "detector_ping": {
+      "duration_seconds": 0.12,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -5.501,
+      "rms_dbfs": -19.755,
+      "dc_offset": -2.151e-06,
+      "last_8ms_silent": true,
+      "sha256_pcm": "d7ee9f4acb724ced5fd28cbfc4d4aedf7349427ebdc1ed6ce4e9695d99bd72ce"
+    },
+    "crusher_ready": {
+      "duration_seconds": 0.3,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -4.5,
+      "rms_dbfs": -18.44,
+      "dc_offset": 4.2144e-05,
+      "last_8ms_silent": true,
+      "sha256_pcm": "bf6b753147f5f7af921511134ef891ff4711cc38cf3bdc25e7f7d50dd9303bdb"
+    },
+    "crusher_start": {
+      "duration_seconds": 0.44,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -4.5,
+      "rms_dbfs": -19.476,
+      "dc_offset": 0.000137482,
+      "last_8ms_silent": true,
+      "sha256_pcm": "86f9a23506414a0ba7a6af6de357077c8bbe84ddf310d6bf244786f39fa28f90"
+    },
+    "crusher_grind": {
+      "duration_seconds": 0.72,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -4.5,
+      "rms_dbfs": -16.158,
+      "dc_offset": 0.000120676,
+      "last_8ms_silent": true,
+      "sha256_pcm": "12a878784f5e7710f2f023b7965bc7446d60a8f06ad7571d25218e896de57128"
+    },
+    "crusher_finish": {
+      "duration_seconds": 0.38,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -4.5,
+      "rms_dbfs": -19.46,
+      "dc_offset": 9.153e-05,
+      "last_8ms_silent": true,
+      "sha256_pcm": "a9322207ed8626a2fbdd13475a8d57dd37821a3f6977cdcdd3108cfec309e111"
+    },
+    "xray_scan": {
+      "duration_seconds": 0.46,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -4.5,
+      "rms_dbfs": -20.085,
+      "dc_offset": -5.13e-07,
+      "last_8ms_silent": true,
+      "sha256_pcm": "a8feffe14f44a9b4aa19a6028bb027d06ef61b1d1fedf4f7515dec2874318187"
+    },
+    "pin_ready": {
+      "duration_seconds": 0.27,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -4.5,
+      "rms_dbfs": -24.343,
+      "dc_offset": -3.3153e-05,
+      "last_8ms_silent": true,
+      "sha256_pcm": "11d60ba32f7735c756dd3d812745c44c33d05bb4b73859314e6ae59b7d0acdb0"
+    },
+    "pin_spawn": {
+      "duration_seconds": 0.3,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -4.5,
+      "rms_dbfs": -25.1,
+      "dc_offset": 1.1412e-05,
+      "last_8ms_silent": true,
+      "sha256_pcm": "f8e91a7eb14037f0f3745fb71f799c13e05a44609e27e20fd98d7095290df93b"
+    },
+    "pin_hit_01": {
+      "duration_seconds": 0.18,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -4.5,
+      "rms_dbfs": -22.455,
+      "dc_offset": -2.7883e-05,
+      "last_8ms_silent": true,
+      "sha256_pcm": "8358d48ea086caf46f7e6a85bf5c558f0c6785f69ef842d67d29e810b1480383"
+    },
+    "pin_hit_02": {
+      "duration_seconds": 0.18,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -4.5,
+      "rms_dbfs": -21.495,
+      "dc_offset": -9.6777e-05,
+      "last_8ms_silent": true,
+      "sha256_pcm": "942e43c4ec31cd8206304a1b113bf3388e27d82e77787029048a2ba2b74c4b3c"
+    },
+    "pin_hit_03": {
+      "duration_seconds": 0.18,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -4.5,
+      "rms_dbfs": -22.094,
+      "dc_offset": -3.9108e-05,
+      "last_8ms_silent": true,
+      "sha256_pcm": "c12138bece1b367d10cfca56e895ffb97daaa37f7f832611076b3c9b8ef0ec02"
+    },
+    "pin_break": {
+      "duration_seconds": 0.46,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -4.5,
+      "rms_dbfs": -21.2,
+      "dc_offset": 6.1059e-05,
+      "last_8ms_silent": true,
+      "sha256_pcm": "f89d89c584c42d200e94e25665bdb2a557a8ced7aace5f43b7eb13a237c1a65b"
+    },
+    "detonator_ready": {
+      "duration_seconds": 0.32,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -4.5,
+      "rms_dbfs": -22.897,
+      "dc_offset": 2.5594e-05,
+      "last_8ms_silent": true,
+      "sha256_pcm": "8a52dda9adc2bcbe54fab49d219adaf4f94b6b535200e1952b49370c3c8b6394"
+    },
+    "detonator_blast": {
+      "duration_seconds": 0.66,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "peak_dbfs": -4.5,
+      "rms_dbfs": -20.743,
+      "dc_offset": -7.7251e-05,
+      "last_8ms_silent": true,
+      "sha256_pcm": "b9302ee7422f923a4da4f787efa2e65a0a1a9a189884d084fa987a4f4f2d3527"
+    }
+  }
+}

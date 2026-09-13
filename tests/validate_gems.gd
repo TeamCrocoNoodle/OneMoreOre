@@ -21,12 +21,12 @@ func _initialize() -> void:
 func _run() -> void:
 	root.add_child(fixture)
 	var jewels: Array[Gem] = []
-	for tier in range(6):
+	for tier in range(7):
 		jewels.append(_make_gem(tier, Vector3(tier * 2.0, 0.0, 0.0)))
 	await _frames(3)
 	for tier in range(jewels.size()):
 		_validate_model(jewels[tier], "tier %d" % tier)
-		_check(jewels[tier].light_tier == tier and jewels[tier].grade == tier, "All six grades retain their own grade and matching light tier")
+		_check(jewels[tier].light_tier == tier and jewels[tier].grade == tier, "All seven grades retain their own grade and matching light tier")
 	await _validate_grade_semantics()
 	await _validate_independent_instances(jewels)
 	await _validate_reconfigure()
@@ -105,7 +105,7 @@ func _validate_model(jewel: Gem, label: String) -> void:
 	_check(valid_triangles and outward_faces, label + ": every facet is finite, nondegenerate, outward facing and correctly wound for back-face culling")
 	_check(closed and _connected(adjacency), label + ": the crystal is one closed connected solid without detached satellite geometry or open seams")
 	_check(points.size() > 0 and measured_radius <= jewel.bound_radius + 0.0001 and absf(measured_radius - jewel.bound_radius) < 0.0001, label + ": the declared bound measures the complete actual model")
-	_check(jewel.bound_radius > 0.0 and jewel.bound_radius <= (0.5201 if jewel.grade == Gem.ANCIENT else 0.4001), label + ": full-size crystal fits the established gameplay and showcase size budget")
+	_check(jewel.bound_radius > 0.0 and jewel.bound_radius <= (0.5201 if jewel.grade >= Gem.ANCIENT else 0.4001), label + ": full-size crystal fits the established gameplay and showcase size budget")
 	_check(local_bounds.size.y > maxf(local_bounds.size.x, local_bounds.size.z) * 1.1, label + ": the new crystal retains an elongated upright silhouette")
 	var colliders: Array = jewel.get("_colliders")
 	var valid_colliders := not colliders.is_empty()
@@ -169,14 +169,14 @@ func _validate_material(jewel: Gem, label: String) -> void:
 
 
 func _validate_grade_semantics() -> void:
-	_check([Gem.COMMON, Gem.SPECIAL, Gem.RARE, Gem.LEGENDARY, Gem.MYTHIC, Gem.ANCIENT] == [0, 1, 2, 3, 4, 5], "The six rarity grades have stable distinct identifiers")
-	_check(Array(Gem.GRADE_NAMES) == ["COMMON", "SPECIAL", "RARE", "LEGENDARY", "MYTHIC", "ANCIENT"], "Each grade exposes its own rarity name")
-	_check(Array(Gem.LIGHT_NAMES) == ["white", "green", "blue", "yellow", "purple", "red"], "Rarity names map to the intended light colors in grade order")
-	var expected_body := [Color("bedee0"), Color("4faa85"), Color("538ec4"), Color("d6ae57"), Color("9c79c7"), Color("cd5666")]
-	var expected_light := [Color("f3faff"), Color("64ff86"), Color("4896ff"), Color("ffe15b"), Color("be65ff"), Color("ff4c61")]
+	_check([Gem.COMMON, Gem.SPECIAL, Gem.RARE, Gem.LEGENDARY, Gem.MYTHIC, Gem.ANCIENT, Gem.EXOTIC] == [0, 1, 2, 3, 4, 5, 6], "The seven rarity grades have stable distinct identifiers")
+	_check(Array(Gem.GRADE_NAMES) == ["COMMON", "SPECIAL", "RARE", "LEGENDARY", "MYTHIC", "ANCIENT", "EXOTIC"], "Each grade exposes its own rarity name")
+	_check(Array(Gem.LIGHT_NAMES) == ["white", "green", "blue", "yellow", "purple", "red", "exotic"], "Rarity names map to the intended light colors in grade order")
+	var expected_body := [Color("bedee0"), Color("4faa85"), Color("538ec4"), Color("d6ae57"), Color("9c79c7"), Color("cd5666"), Color("f0eaff")]
+	var expected_light := [Color("f3faff"), Color("64ff86"), Color("4896ff"), Color("ffe15b"), Color("be65ff"), Color("ff4c61"), Color("f1ddff")]
 	var jewels: Array[Gem] = []
 	var palettes: Array[Array] = []
-	for grade in range(6):
+	for grade in range(7):
 		var jewel := Gem.new()
 		jewel.configure(grade, 0)
 		jewel.position = Vector3(grade * 2.0, 5.0, 0.0)
@@ -189,13 +189,13 @@ func _validate_grade_semantics() -> void:
 	for grade in range(1, 5):
 		_check(jewels[grade].facets.mesh.get_faces() == first_shape and is_equal_approx(jewels[grade].bound_radius, jewels[0].bound_radius), "Equal shape variants share the same standard crystal geometry across common through mythic")
 		_check(palettes[grade] != palettes[grade - 1], "Adjacent grades have independently visible crystal palettes")
-	_check(jewels[Gem.ANCIENT].bound_radius > jewels[Gem.SPECIAL].bound_radius and jewels[Gem.SPECIAL].bound_radius <= 0.4001, "Only ancient keeps the large crystal budget; special uses the standard green crystal size")
+	_check(jewels[Gem.ANCIENT].bound_radius > jewels[Gem.SPECIAL].bound_radius and jewels[Gem.SPECIAL].bound_radius <= 0.4001, "Ancient keeps the large crystal budget; special uses the standard green crystal size")
 	_check(palettes[Gem.ANCIENT] != palettes[Gem.MYTHIC], "Ancient has its own red crystal palette")
 	_validate_model(jewels[Gem.ANCIENT], "ancient original large shape")
-	for grade in range(6):
+	for grade in range(7):
 		jewels[grade].configure(grade, 5)
 	await _frames(3)
-	for grade in range(6):
+	for grade in range(7):
 		var jewel := jewels[grade]
 		_check(jewel.grade == grade and jewel.light_tier == grade and jewel.variant == 5, "Changing a shape variant preserves its rarity and revealed light tier")
 		_check(_rendered_palette(jewel) == palettes[grade], "Changing a shape variant cannot change the grade's rendered color palette")
@@ -214,7 +214,7 @@ func _rendered_palette(jewel: Gem) -> Array:
 
 
 func _validate_independent_instances(originals: Array[Gem]) -> void:
-	for tier in range(6):
+	for tier in range(7):
 		var original := originals[tier]
 		var another := _make_gem(tier, Vector3(tier * 2.0, 3.0, 0.0))
 		await _frames(2)

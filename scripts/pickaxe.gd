@@ -1,11 +1,20 @@
 extends Node3D
-## A camera-mounted pickaxe whose poses stay anchored to the current cursor.
+## Cursor-anchored main tools: swings, three-shot percussion and rotating drill.
+const ToolVisual = preload("res://scripts/tool_visual.gd")
+const Tools = preload("res://scripts/main_tools.gd")
 
 signal impacted
 signal swing_started
 
 var is_swinging: bool = false
 var speed_multiplier := 1.0
+var tool_id := "pickaxe"
+var impact_index := 0
+var _tip := Vector3(-1.44, -0.36, 0)
+var _visual: Node3D
+var _machine := false
+var _strike_times := PackedFloat32Array([0.12])
+var _cycle := 0.34
 
 const STRIKE_TIME := 0.12
 const SWING_DURATION := 0.34
@@ -61,6 +70,46 @@ func _ready() -> void:
 		_build_tool()
 
 
+func set_tool(id: String) -> void:
+	if Tools.definition(id).is_empty() or (_built and tool_id == id):
+		return
+	cancel_swing()
+	tool_id = id
+	_machine = id in ["jackhammer", "drill"]
+	_rest_rotation = Vector3(0.08, -0.18, -0.70)
+	_contact_rotation = Vector3(0.12, -0.12, 0.52)
+	_tip = PICK_TIP
+	_cycle = 0.46 if id == "jackhammer" else SWING_DURATION
+	_strike_times = PackedFloat32Array([0.08,0.18,0.28]) if id == "jackhammer" else PackedFloat32Array([0.09 if id == "drill" else STRIKE_TIME])
+	match id:
+		"axe":
+			_tip = Vector3(-1.31,-0.10,0)
+			_rest_rotation.z = -0.85
+		"hammer":
+			_tip = Vector3(-1.19,0.03,0)
+			_rest_rotation.z = -0.82
+		"jackhammer", "drill":
+			_tip = Vector3(0,-2.30 if id == "jackhammer" else -2.27,0)
+			_rest_rotation = Vector3(-0.10,-0.20,-0.42)
+			_contact_rotation = Vector3(-0.05,-0.18,-0.32)
+	if is_instance_valid(_visual):
+		remove_child(_visual)
+		_visual.queue_free()
+	_build_tool()
+	if is_instance_valid(_camera):
+		_refresh_rest()
+		position = _rest_position
+		rotation = _rest_rotation
+
+
+func get_tip_local() -> Vector3:
+	return _tip
+
+
+func get_cycle_duration() -> float:
+	return _cycle
+
+
 func set_target(screen_position: Vector2) -> void:
 	if screen_position != _target:
 		_has_contact_override = false
@@ -87,6 +136,7 @@ func swing() -> void:
 	_refresh_rest()
 	_refresh_swing_poses()
 	_elapsed = 0.0
+	impact_index = 0
 	_impact_sent = false
 	is_swinging = true
 	swing_started.emit()
@@ -96,6 +146,8 @@ func cancel_swing() -> void:
 	is_swinging = false
 	_impact_sent = true
 	_elapsed = 0.0
+	if is_instance_valid(_visual) and is_instance_valid(_visual.piston):
+		_visual.piston.position.y = 0.0
 	if is_instance_valid(_trail):
 		_trail.hide()
 
@@ -111,10 +163,10 @@ func _refresh_swing_poses() -> void:
 	# dragging the tip away from the cursor between physics ray updates.
 	var contact := _camera.to_local(_camera.project_position(_target, contact_depth))
 	var contact_basis := Basis.from_euler(_contact_rotation)
-	_contact_position = contact - contact_basis * (PICK_TIP * _tool_scale)
+	_contact_position = contact - contact_basis * (_tip * _tool_scale)
 	_wind_rotation = _rest_rotation + Vector3(-0.04, -0.04, -0.42)
 	var wind_tip := _camera.to_local(_camera.project_position(_target, 5.7)) + Vector3(-0.18, 0.62, 0.1) * _tool_scale
-	_wind_position = wind_tip - Basis.from_euler(_wind_rotation) * (PICK_TIP * _tool_scale)
+	_wind_position = wind_tip - Basis.from_euler(_wind_rotation) * (_tip * _tool_scale)
 
 
 func _process(delta: float) -> void:
@@ -122,6 +174,13 @@ func _process(delta: float) -> void:
 		return
 	_idle_time += delta
 	_refresh_rest()
+	if is_instance_valid(_visual):
+		_visual.animate(delta * speed_multiplier, is_swinging)
+	if _machine:
+		_process_machine(delta)
+		if is_instance_valid(_trail):
+			_trail.hide()
+		return
 	if is_swinging:
 		_refresh_swing_poses()
 		_elapsed += delta * speed_multiplier
@@ -149,6 +208,7 @@ func _process(delta: float) -> void:
 			rotation.z -= sin(t * PI) * 0.10
 		if _elapsed >= STRIKE_TIME and not _impact_sent:
 			_impact_sent = true
+			impact_index = 1
 			impacted.emit()
 		if _elapsed >= SWING_DURATION:
 			is_swinging = false
@@ -156,6 +216,43 @@ func _process(delta: float) -> void:
 		position = _rest_position + Vector3(0.0, sin(_idle_time * 1.8) * 0.022, 0.0)
 		rotation = _rest_rotation + Vector3(0.0, 0.0, sin(_idle_time * 1.5) * 0.009)
 	_update_trail()
+
+
+func _process_machine(delta: float) -> void:
+	if is_instance_valid(_visual.piston):
+		_visual.piston.position.y = 0.0
+	if not is_swinging:
+		position = _rest_position + Vector3(0,sin(_idle_time*2.0)*0.012,0)
+		rotation = _rest_rotation
+		return
+	_refresh_swing_poses()
+	_elapsed += delta * speed_multiplier
+	var first := float(_strike_times[0])
+	var last := float(_strike_times[-1])
+	if _elapsed < first:
+		var t := smoothstep(0,first,_elapsed)
+		position = _rest_position.lerp(_contact_position,t)
+		rotation = _rest_rotation.lerp(_contact_rotation,t)
+	elif _elapsed <= last + 0.035:
+		var phase := fposmod(_elapsed-first,0.10)/0.10
+		position = _contact_position + Vector3(0,0.11,0.08)*sin(phase*PI)
+		rotation = _contact_rotation
+		if is_instance_valid(_visual.piston):
+			_visual.piston.position.y = 0.10 * sin(phase*PI)
+	else:
+		var t := smoothstep(last+0.035,_cycle,_elapsed)
+		position = _contact_position.lerp(_rest_position,t)
+		rotation = _contact_rotation.lerp(_rest_rotation,t)
+	while impact_index < _strike_times.size() and _elapsed >= _strike_times[impact_index]:
+		# Even a long frame preserves all three pulses; Main queues physics work.
+		position = _contact_position
+		rotation = _contact_rotation
+		if is_instance_valid(_visual.piston):
+			_visual.piston.position.y = 0.0
+		impact_index += 1
+		impacted.emit()
+	if _elapsed >= _cycle:
+		is_swinging = false
 
 
 func _refresh_rest() -> void:
@@ -167,10 +264,12 @@ func _refresh_rest() -> void:
 		half_width = _camera.size * 0.5
 		half_height = half_width / aspect
 	_tool_scale = clampf(half_width / 4.6, 0.60, 0.92)
+	if _machine:
+		_tool_scale *= 0.84
 	scale = Vector3.ONE * _tool_scale
 	var cursor := _camera.to_local(_camera.project_position(_target, 5.7))
 	# Keep the striking end just above the pointer so its target stays clear.
-	_rest_position = cursor - Basis.from_euler(_rest_rotation) * (PICK_TIP * _tool_scale) + Vector3(0.13, 0.22, 0.0) * _tool_scale
+	_rest_position = cursor - Basis.from_euler(_rest_rotation) * (_tip * _tool_scale) + Vector3(0.13, 0.22, 0.0) * _tool_scale
 
 
 func _strike_fraction(time: float) -> float:
@@ -186,7 +285,7 @@ func _stroke_position(t: float) -> Vector3:
 func _stroke_tip(time: float) -> Vector3:
 	var t := _strike_fraction(time)
 	var tip_basis := Basis.from_euler(_wind_rotation.lerp(_contact_rotation, t))
-	return _stroke_position(t) + tip_basis * (PICK_TIP * _tool_scale)
+	return _stroke_position(t) + tip_basis * (_tip * _tool_scale)
 
 
 func _update_trail() -> void:
@@ -219,183 +318,9 @@ func _update_trail() -> void:
 
 func _build_tool() -> void:
 	_built = true
-	var wood := _material(Color("a76032"), 0.86)
-	var wood_edge := _material(Color("e8a15c"), 0.82)
-	var wood_side := _material(Color("633624"), 0.95)
-	var steel := _material(Color("344957"), 0.48, 0.34)
-	var steel_edge := _material(Color("b5e0e1"), 0.28, 0.52)
-	var steel_side := _material(Color("172a3b"), 0.62, 0.25)
-	var brass := _material(Color("dfa64e"), 0.40, 0.46)
-	var brass_light := _material(Color("ffda80"), 0.34, 0.43)
-	var brass_dark := _material(Color("84562c"), 0.70, 0.26)
-	var leather := _material(Color("2b3037"), 0.94)
-	var leather_edge := _material(Color("56616b"), 0.87)
-	var head_outline := PackedVector2Array([
-		Vector2(-1.44, -0.36), Vector2(-1.26, -0.02), Vector2(-0.98, 0.21),
-		Vector2(-0.60, 0.32), Vector2(-0.25, 0.26), Vector2(0.02, 0.21),
-		Vector2(0.34, 0.30), Vector2(0.65, 0.30), Vector2(0.96, 0.15),
-		Vector2(1.20, -0.10), Vector2(1.36, -0.45), Vector2(1.08, -0.26),
-		Vector2(0.79, -0.08), Vector2(0.53, 0.02), Vector2(0.26, -0.01),
-		Vector2(0.02, -0.12), Vector2(-0.31, -0.02), Vector2(-0.72, 0.015),
-		Vector2(-1.08, -0.14)
-	])
-	var handle_outline := PackedVector2Array([
-		Vector2(-0.13, 0.16), Vector2(0.12, 0.16), Vector2(0.13, -0.43),
-		Vector2(0.07, -1.05), Vector2(0.095, -1.43), Vector2(0.16, -1.84),
-		Vector2(0.10, -1.96), Vector2(-0.10, -1.98), Vector2(-0.18, -1.85),
-		Vector2(-0.23, -1.32), Vector2(-0.17, -0.91), Vector2(-0.12, -0.40)
-	])
-	_prism("HickoryHandle", handle_outline, 0.15, 0.035, wood, wood_edge, wood_side)
-	_prism("ForgedSteelHead", head_outline, 0.19, 0.042, steel, steel_edge, steel_side)
-	# Narrow hand-cut highlights and grain are actual geometry, avoiding texture blur.
-	_flat_shape("WoodGrain", PackedVector2Array([
-		Vector2(-0.065, -0.29), Vector2(-0.035, -0.40), Vector2(-0.055, -0.82),
-		Vector2(-0.090, -1.18), Vector2(-0.10, -1.25), Vector2(-0.082, -0.81)
-	]), 0.154, wood_side)
-	_flat_shape("WoodGlint", PackedVector2Array([
-		Vector2(0.035, -0.31), Vector2(0.065, -0.35), Vector2(0.040, -0.82),
-		Vector2(0.005, -1.06), Vector2(0.015, -0.68)
-	]), 0.155, wood_edge)
-	var mount := PackedVector2Array([
-		Vector2(-0.19, 0.22), Vector2(-0.11, 0.30), Vector2(0.13, 0.30),
-		Vector2(0.21, 0.21), Vector2(0.18, -0.22), Vector2(0.10, -0.28),
-		Vector2(-0.12, -0.28), Vector2(-0.19, -0.19)
-	])
-	_prism("BronzeSocket", mount, 0.225, 0.035, brass, brass_light, brass_dark)
-	_prism("SocketInset", _rectangle(Vector2(-0.095, -0.14), Vector2(0.105, 0.19)), 0.253, 0.017, steel_side, brass_dark, brass_dark)
-	for y in [-0.08, 0.12]:
-		var rivet := MeshInstance3D.new()
-		var sphere := SphereMesh.new()
-		sphere.radius = 0.040
-		sphere.height = 0.046
-		sphere.radial_segments = 8
-		sphere.rings = 3
-		rivet.mesh = sphere
-		rivet.material_override = brass_light
-		rivet.position = Vector3(0.005, y, 0.277)
-		rivet.rotation.x = PI * 0.5
-		add_child(rivet)
-	# Individual slanted leather turns leave a slim gold seam between wraps.
-	for i in range(7):
-		var y := -1.13 - float(i) * 0.10
-		var x := -0.07 + maxf(0.0, -y - 1.25) * 0.15
-		var wrap_outline := PackedVector2Array([
-			Vector2(x - 0.154, y + 0.04), Vector2(x + 0.153, y + 0.075),
-			Vector2(x + 0.163, y - 0.005), Vector2(x - 0.150, y - 0.055)
-		])
-		_prism("LeatherWrap%d" % i, wrap_outline, 0.173, 0.012, leather, leather_edge, leather)
-	_prism("GripUpperFerrule", _rectangle(Vector2(-0.228, -1.11), Vector2(0.084, -1.015)), 0.176, 0.015, brass, brass_light, brass_dark)
-	_prism("Pommel", PackedVector2Array([
-		Vector2(-0.13, -1.78), Vector2(0.145, -1.79), Vector2(0.175, -1.91),
-		Vector2(0.085, -2.02), Vector2(-0.092, -2.02), Vector2(-0.18, -1.90)
-	]), 0.18, 0.028, brass, brass_light, brass_dark)
-	# Small upper facet makes the forged metal catch the light as it swings.
-	_flat_shape("LeftSteelFacet", PackedVector2Array([
-		Vector2(-1.17, -0.025), Vector2(-0.94, 0.15), Vector2(-0.59, 0.255),
-		Vector2(-0.28, 0.203), Vector2(-0.54, 0.16), Vector2(-0.93, 0.095)
-	]), 0.193, _material(Color("668998"), 0.44, 0.30))
-	_flat_shape("RightSteelFacet", PackedVector2Array([
-		Vector2(0.31, 0.234), Vector2(0.63, 0.24), Vector2(0.91, 0.10),
-		Vector2(1.12, -0.13), Vector2(0.88, 0.015), Vector2(0.59, 0.17)
-	]), 0.194, _material(Color("597b8d"), 0.44, 0.30))
-
-
-func _material(color: Color, roughness: float, metallic: float = 0.0) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.roughness = roughness
-	material.metallic = metallic
-	material.diffuse_mode = BaseMaterial3D.DIFFUSE_TOON
-	material.specular_mode = BaseMaterial3D.SPECULAR_TOON
-	return material
-
-
-func _rectangle(low: Vector2, high: Vector2) -> PackedVector2Array:
-	return PackedVector2Array([low, Vector2(high.x, low.y), high, Vector2(low.x, high.y)])
-
-
-func _prism(mesh_name: String, polygon: PackedVector2Array, depth: float, bevel: float,
-		face_material: Material, bevel_material: Material, side_material: Material) -> void:
-	# Each bevel has its own hard normal: highlights remain graphic and readable.
-	var center := Vector2.ZERO
-	for point in polygon:
-		center += point
-	center /= float(polygon.size())
-	var inner := PackedVector2Array()
-	for point in polygon:
-		inner.append(point.move_toward(center, bevel))
-	var triangles := Geometry2D.triangulate_polygon(inner)
-	var mesh := ArrayMesh.new()
-	var faces := SurfaceTool.new()
-	faces.begin(Mesh.PRIMITIVE_TRIANGLES)
-	faces.set_material(face_material)
-	for i in range(0, triangles.size(), 3):
-		var a := inner[triangles[i]]
-		var b := inner[triangles[i + 1]]
-		var c := inner[triangles[i + 2]]
-		_front_triangle(faces, Vector3(a.x, a.y, depth), Vector3(b.x, b.y, depth), Vector3(c.x, c.y, depth))
-		_back_triangle(faces, Vector3(a.x, a.y, -depth), Vector3(b.x, b.y, -depth), Vector3(c.x, c.y, -depth))
-	faces.commit(mesh)
-	var edges := SurfaceTool.new()
-	edges.begin(Mesh.PRIMITIVE_TRIANGLES)
-	edges.set_material(bevel_material)
-	var sides := SurfaceTool.new()
-	sides.begin(Mesh.PRIMITIVE_TRIANGLES)
-	sides.set_material(side_material)
-	for i in range(polygon.size()):
-		var j := (i + 1) % polygon.size()
-		var a := Vector3(inner[i].x, inner[i].y, depth)
-		var b := Vector3(inner[j].x, inner[j].y, depth)
-		var c := Vector3(polygon[j].x, polygon[j].y, depth - bevel)
-		var d := Vector3(polygon[i].x, polygon[i].y, depth - bevel)
-		_quad_outward(edges, a, b, c, d, Vector3(center.x, center.y, 0.0))
-		_quad_outward(edges, Vector3(a.x, a.y, -depth), Vector3(b.x, b.y, -depth), Vector3(c.x, c.y, -depth + bevel), Vector3(d.x, d.y, -depth + bevel), Vector3(center.x, center.y, 0.0))
-		_quad_outward(sides, d, c, Vector3(c.x, c.y, -depth + bevel), Vector3(d.x, d.y, -depth + bevel), Vector3(center.x, center.y, 0.0))
-	edges.commit(mesh)
-	sides.commit(mesh)
-	var instance := MeshInstance3D.new()
-	instance.name = mesh_name
-	instance.mesh = mesh
-	add_child(instance)
-
-
-func _flat_shape(mesh_name: String, polygon: PackedVector2Array, z: float, material: Material) -> void:
-	var triangles := Geometry2D.triangulate_polygon(polygon)
-	var surface := SurfaceTool.new()
-	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	surface.set_material(material)
-	for i in range(0, triangles.size(), 3):
-		var a := polygon[triangles[i]]
-		var b := polygon[triangles[i + 1]]
-		var c := polygon[triangles[i + 2]]
-		_front_triangle(surface, Vector3(a.x, a.y, z), Vector3(b.x, b.y, z), Vector3(c.x, c.y, z))
-	var instance := MeshInstance3D.new()
-	instance.name = mesh_name
-	instance.mesh = surface.commit()
-	add_child(instance)
-
-
-func _quad_outward(surface: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, center: Vector3) -> void:
-	if (b - a).cross(c - a).dot((a + b + c + d) * 0.25 - center) >= 0.0:
-		_triangle(surface, a, b, c)
-		_triangle(surface, a, c, d)
-	else:
-		_triangle(surface, a, c, b)
-		_triangle(surface, a, d, c)
-
-
-func _front_triangle(surface: SurfaceTool, a: Vector3, b: Vector3, c: Vector3) -> void:
-	if (b - a).cross(c - a).z > 0.0:
-		_triangle(surface, a, b, c)
-	else:
-		_triangle(surface, a, c, b)
-
-
-func _back_triangle(surface: SurfaceTool, a: Vector3, b: Vector3, c: Vector3) -> void:
-	if (b - a).cross(c - a).z < 0.0:
-		_triangle(surface, a, b, c)
-	else:
-		_triangle(surface, a, c, b)
+	_visual = ToolVisual.new()
+	_visual.build(tool_id)
+	add_child(_visual)
 
 
 func _triangle(surface: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, color: Color = Color.WHITE) -> void:

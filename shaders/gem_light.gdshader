@@ -5,6 +5,7 @@ uniform vec4 light_color : source_color = vec4(0.953, 0.98, 1.0, 1.0);
 uniform float pulse_amount : hint_range(0.0, 2.0) = 0.0;
 uniform int effect_kind = 0;
 uniform float beam_growth = 1.0;
+uniform bool prismatic = false;
 uniform float effect_progress = 0.0;
 uniform vec3 camera_right = vec3(1.0, 0.0, 0.0);
 uniform vec3 camera_up = vec3(0.0, 1.0, 0.0);
@@ -26,6 +27,7 @@ void fragment() {
 	float across = abs(UV.x * 2.0 - 1.0);
 	float alpha = 0.0;
 	vec3 tint = light_color.rgb;
+	if (prismatic) tint = mix(vec3(1.0),0.5+0.5*cos(6.28318*(UV.x*0.7+UV.y*0.22+vec3(0.0,0.33,0.67))),0.36);
 	if (effect_kind == 4) {
 		// Illuminate the entire slit evenly. Keep the hot light close to its
 		// line-shaped root instead of forming a bright triangular point flare.

@@ -13,7 +13,7 @@ var _materials: Dictionary = {}
 var _meshes: Dictionary = {}
 
 
-func build(width: float, row_height: float, columns: int) -> void:
+func build(width: float, row_height: float, columns: int, kind: String = "main") -> void:
 	name = "ModeledToolCabinet"
 	set_meta("modeled_cabinet", true)
 	process_mode = Node.PROCESS_MODE_DISABLED
@@ -25,7 +25,7 @@ func build(width: float, row_height: float, columns: int) -> void:
 	tag_corners.clear()
 	item_corners.clear()
 	_meshes.clear()
-	var catalog := ToolModels.get_catalog()
+	var catalog := ToolModels.get_catalog(kind)
 	var rows := ceili(float(catalog.size()) / columns)
 	var height := row_height * rows + HEIGHT_PAD
 	var span := width * UNIT
@@ -75,7 +75,7 @@ func build(width: float, row_height: float, columns: int) -> void:
 			_box("ShelfRolledEdge", Vector3(bay_width + 0.018, 0.026, 0.04), Vector3(x, surface_y - 0.015, front + 0.047), edge, 0.008, "trim")
 			_box("ShelfReturnFold", Vector3(bay_width, 0.03, 0.13), Vector3(x, surface_y - 0.235, front - 0.02), dark, 0.008, "trim")
 			var thumbnail_size := minf((bay_width - 0.22) / UNIT, row_height * 0.77)
-			var model := ToolModels.create_preview(index)
+			var model := ToolModels.create_preview(index,kind)
 			var contact: Vector3 = model.get_meta("shelf_contact")
 			var factor := thumbnail_size * UNIT / 4.4
 			model.scale = Vector3.ONE * factor

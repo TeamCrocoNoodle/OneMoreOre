@@ -20,8 +20,8 @@ func _run() -> void:
 	hud.cue.connect(func(kind: String, tier: int): cues.append({"kind": kind, "tier": tier}))
 	hud.begin_round(1, 100)
 	hud.set_timer(30, 30, false)
-	_check(hud.displayed_counts == PackedInt32Array([0, 0, 0, 0, 0, 0]), "New round starts with empty displayed tray")
-	for tier in 6:
+	_check(hud.displayed_counts == PackedInt32Array([0, 0, 0, 0, 0, 0, 0]), "New round starts with empty displayed tray")
+	for tier in HUD.Rarity.COUNT:
 		hud.pulse_gem(tier, tier + 1)
 		_check(hud.displayed_counts[tier] == tier + 1, "Landing uses absolute confirmed quantity")
 	var copy: PackedInt32Array = hud.displayed_counts
@@ -43,7 +43,7 @@ func _run() -> void:
 			_check(hud.playfield_bottom_screen() < viewport_rect.size.y * 0.90, "Portrait reports tray boundary for pickaxe clearance")
 		else:
 			_check(is_equal_approx(hud.playfield_bottom_screen(), viewport_rect.size.y), "Landscape keeps full playfield height")
-		for tier in 6:
+		for tier in HUD.Rarity.COUNT:
 			var point: Vector2 = hud.gem_target_screen(tier)
 			_check(viewport_rect.has_point(point), "Gem landing target remains visible after resize")
 			_check(hud.is_pointer_blocked(point), "Landing tray shields gameplay clicks")
@@ -80,7 +80,7 @@ func _run() -> void:
 	_check(next_requests == 1, "Repeated replay cannot request two rounds")
 	hud.begin_round(2, 197)
 	_check(not hud.settlement_visible and not hud.settlement_complete, "Next round clears modal state")
-	_check(hud.displayed_stones == 0 and hud.displayed_counts == PackedInt32Array([0, 0, 0, 0, 0, 0]), "Next round clears both resource displays")
+	_check(hud.displayed_stones == 0 and hud.displayed_counts == PackedInt32Array([0, 0, 0, 0, 0, 0, 0]), "Next round clears both resource displays")
 	hud.show_settlement({"rows": [], "total": 0, "wallet_before": 197, "wallet_after": 197})
 	hud.finish_settlement()
 	_check(completions == 2 and hud.displayed_gold == 0 and hud.settlement_complete, "Empty result can finish and proceed")
@@ -88,15 +88,15 @@ func _run() -> void:
 	for dimensions in [Vector2i(900, 600), Vector2i(800, 450), Vector2i(600, 1000), Vector2i(360, 800)]:
 		root.size = dimensions
 		await process_frame
-		for row_count in [3, 7]:
+		for row_count in [3, 8, 10]:
 			var rows: Array[Dictionary] = []
 			for i in row_count:
-				rows.append({"kind": "stone" if i == 0 else "gem", "tier": i - 1, "label": "돌 조각" if i == 0 else HUD.RARITY_NAMES[i - 1], "count": 10, "unit_gold": 100, "gold": 1000})
+				rows.append({"kind": "stone" if i == 0 else "boss" if i == 9 else "bonus" if i == 8 else "gem", "tier": i - 1 if i < 8 else -1, "label": "돌 조각" if i == 0 else "보스 처치 보상" if i == 9 else "채굴 보너스" if i == 8 else HUD.RARITY_NAMES[i - 1], "count": 10, "unit_gold": 100, "gold": 1000})
 			hud.show_settlement({"rows": rows, "total": row_count * 1000, "wallet_before": 0, "wallet_after": row_count * 1000})
 			hud.finish_settlement()
 			var bounds := root.get_visible_rect()
 			var panel_bounds := Rect2(hud._modal_rect.position * hud._scale, hud._modal_rect.size * hud._scale)
-			_check(bounds.encloses(panel_bounds), "Result including maximum seven rows fits physical viewport")
+			_check(bounds.encloses(panel_bounds), "Result including seven ranks, stone, skill bonus and boss bounty fits physical viewport")
 			_check(bounds.encloses(hud._replay.get_global_rect()), "Replay remains inside short landscape and portrait")
 			_check(hud._replay.size.y * root.get_final_transform().get_scale().y >= 48, "Compact result preserves physical touch height")
 		_check(not hud._wallet_rect.intersects(hud._timer_rect), "Wallet and timer remain distinct on narrow windows")

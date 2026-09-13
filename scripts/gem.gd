@@ -12,12 +12,14 @@ const RARE := 2
 const LEGENDARY := 3
 const MYTHIC := 4
 const ANCIENT := 5
-const GRADE_NAMES := ["COMMON", "SPECIAL", "RARE", "LEGENDARY", "MYTHIC", "ANCIENT"]
-const GRADE_LABELS := ["일반", "특별", "희귀", "전설", "신화", "고대"]
+const EXOTIC := 6
+const Rarity = preload("res://scripts/gem_rarity.gd")
+const GRADE_NAMES := Rarity.NAMES
+const GRADE_LABELS := Rarity.LABELS
 const SHAPE_VARIANT_COUNT := 6
 const EMERGENCE_DURATION := 0.40
-const LIGHT_COLORS := [Color("f3faff"), Color("64ff86"), Color("4896ff"), Color("ffe15b"), Color("be65ff"), Color("ff4c61")]
-const LIGHT_NAMES := ["white", "green", "blue", "yellow", "purple", "red"]
+const LIGHT_COLORS := Rarity.COLORS
+const LIGHT_NAMES := ["white", "green", "blue", "yellow", "purple", "red", "exotic"]
 
 var grade: int = COMMON
 var variant: int = 0
@@ -42,7 +44,7 @@ var _emergence_target_rotation := Quaternion.IDENTITY
 
 func configure(new_grade: int, new_variant: int = 0) -> void:
 	_stop_emergence()
-	grade = clampi(new_grade, COMMON, ANCIENT)
+	grade = clampi(new_grade, COMMON, EXOTIC)
 	variant = posmod(new_variant, SHAPE_VARIANT_COUNT)
 	light_tier = grade
 	collected = false
@@ -50,7 +52,7 @@ func configure(new_grade: int, new_variant: int = 0) -> void:
 	host_chunk = null
 	show()
 	# Ready before insertion into the tree, for the caller's placement checks.
-	bound_radius = 0.52 if grade == ANCIENT else 0.40
+	bound_radius = 0.52 if grade >= ANCIENT else 0.40
 	if is_node_ready():
 		_build()
 
@@ -197,10 +199,14 @@ func _build() -> void:
 	_colliders.clear()
 	collision_layer = 0 if collected or is_embedded or is_emerging else 2
 	collision_mask = 0
-	var geometry: Dictionary = Geometry.build(variant, grade == ANCIENT)
+	var geometry: Dictionary = Geometry.build(variant, grade >= ANCIENT)
 	_material = ShaderMaterial.new()
 	_material.shader = GEM_SHADER
 	var colors := _palette()
+	if bool(get_meta("brilliant", false)):
+		colors[0] = colors[0].lightened(0.12)
+		colors[2] = colors[2].lerp(Color("fff3c4"), 0.38)
+	_material.set_shader_parameter("exotic", grade == EXOTIC)
 	_material.set_shader_parameter("base_color", colors[0])
 	_material.set_shader_parameter("deep_color", colors[1])
 	_material.set_shader_parameter("edge_color", colors[2])
@@ -225,6 +231,7 @@ func _palette() -> Array[Color]:
 		RARE: return [Color("538ec4"), Color("172b50"), Color("c1e9fa")]
 		LEGENDARY: return [Color("d6ae57"), Color("493321"), Color("fff1b9")]
 		MYTHIC: return [Color("9c79c7"), Color("322349"), Color("e4d4ff")]
+		EXOTIC: return [Color("f0eaff"), Color("131222"), Color("dbfff1")]
 		ANCIENT: return [Color("cd5666"), Color("471d38"), Color("ffd2cc")]
 	return [Color("bedee0"), Color("2f5663"), Color("edfffd")]
 

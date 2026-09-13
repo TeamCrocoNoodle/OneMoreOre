@@ -1,21 +1,11 @@
 extends Node
-## Newly synthesized stone, ore, and discovery WAVs with procedural swing and respawn.
+## Six authored main-tool banks and the shared discovery / respawn cues.
 ## The bank is prepared once; playback performs no file loading or synthesis.
 
 const SAMPLE_RATE := 24000
 const PLAYER_COUNT := 14
 const TWO_PI := TAU
-const HIT_SAMPLES: Array[AudioStreamWAV] = [
-	preload("res://assets/audio/mining_hit_01.wav"),
-	preload("res://assets/audio/mining_hit_02.wav"),
-	preload("res://assets/audio/mining_hit_03.wav")
-]
-const BREAK_SAMPLE: AudioStreamWAV = preload("res://assets/audio/mining_break.wav")
-const ORE_HIT_SAMPLES: Array[AudioStreamWAV] = [
-	preload("res://assets/audio/ore_hit_01.wav"),
-	preload("res://assets/audio/ore_hit_02.wav"),
-	preload("res://assets/audio/ore_hit_03.wav")
-]
+const ToolBank = preload("res://scripts/tool_audio_bank.gd")
 const DISCOVERY_SAMPLE: AudioStreamWAV = preload("res://assets/audio/ore_discovery.wav")
 
 var _hits: Array[AudioStreamWAV] = []
@@ -33,15 +23,13 @@ var _ore_hit_index := -1
 var _swing_index := 0
 var _last_swing_msec := -1000
 var _last_break_msec := -1000
+var _last_contact_msec := -1000
+var tool_id := ""
 
 
 func _ready() -> void:
 	_random.randomize()
-	_hits.assign(HIT_SAMPLES)
-	_breaks.assign([BREAK_SAMPLE])
-	_ore_hits.assign(ORE_HIT_SAMPLES)
-	for i in range(3):
-		_swings.append(_synthesize("swing", 0.115, 3803 + i * 71))
+	set_tool("pickaxe")
 	_reveal = DISCOVERY_SAMPLE
 	_discovery = DISCOVERY_SAMPLE
 	_respawn = _synthesize("respawn", 0.56, 7307)
@@ -54,9 +42,26 @@ func _ready() -> void:
 		_started.append(0)
 
 
+func set_tool(id: String) -> void:
+	if id == tool_id or not ToolBank.BANKS.has(id):
+		return
+	tool_id = id
+	var bank: Dictionary = ToolBank.BANKS[id]
+	_hits.assign(bank.hits)
+	_breaks.assign([bank["break"]])
+	_ore_hits.assign(bank.ores)
+	_swings.assign([bank.swing])
+	_hit_index = -1
+	_ore_hit_index = -1
+	_last_contact_msec = -1000
+
+
 func play_hit(strength: float = 1.0, layer: int = 0) -> void:
 	if _hits.is_empty():
 		return
+	if Time.get_ticks_msec() - _last_contact_msec < 18:
+		return
+	_last_contact_msec = Time.get_ticks_msec()
 	if _hit_index < 0:
 		_hit_index = _random.randi_range(0, _hits.size() - 1)
 	else:
@@ -94,12 +99,15 @@ func play_resonance(tier: int, damage_ratio: float) -> void:
 	# One clean, authored ore strike; all synthesis happened offline.
 	if _ore_hits.is_empty():
 		return
+	if Time.get_ticks_msec() - _last_contact_msec < 18:
+		return
+	_last_contact_msec = Time.get_ticks_msec()
 	if _ore_hit_index < 0:
 		_ore_hit_index = _random.randi_range(0, _ore_hits.size() - 1)
 	else:
 		_ore_hit_index = (_ore_hit_index + _random.randi_range(1, maxi(_ore_hits.size() - 1, 1))) % _ore_hits.size()
 	var volume := -10.0 + clampf(damage_ratio, 0.0, 1.0) * 2.0
-	var pitch := _random.randf_range(0.985, 1.015) * pow(2.0, float(clampi(tier, 0, 5)) * 0.6 / 12.0)
+	var pitch := _random.randf_range(0.985, 1.015) * pow(2.0, float(clampi(tier, 0, 6)) * 0.6 / 12.0)
 	_play(_ore_hits[_ore_hit_index], volume, pitch)
 
 

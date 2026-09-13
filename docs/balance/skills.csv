@@ -1,0 +1,160 @@
+id,name,category,depth,gold,effects,description
+origin,첫 곡괭이,attack,0,0,"{""damage"":1.0}","기본 공격력 +1.0
+채굴을 시작하며 이미 습득한 기술입니다."
+speed,공격 속도,attack,1,60,"{""attack_speed"":0.16}",공격 속도 +16.0%
+power_tip,곡괭이 공격력,attack,2,160,"{""damage"":0.8}",곡괭이 공격력 +0.8
+reach,공격 범위,attack,2,160,"{""range_bonus"":0.25}",공격 범위 +25.0%
+power,곡괭이 공격력,attack,3,400,"{""damage"":0.8}",곡괭이 공격력 +0.8
+speed_2,공격 속도,attack,4,800,"{""attack_speed"":0.16}",공격 속도 +16.0%
+power_3,곡괭이 공격력,attack,5,1800,"{""damage"":0.8}",곡괭이 공격력 +0.8
+ore_damage,광물을 품은 돌,attack,6,4000,"{""ore_damage"":0.35}",광물을 품은 돌 +35.0%
+range_2,공격 범위,attack,7,9000,"{""range_bonus"":0.25}",공격 범위 +25.0%
+first_hit,첫 균열,attack,8,22000,"{""first_damage"":0.4}",아직 공격받지 않은 돌조각에 주는 피해량 +40.0%
+speed_5,공격 속도,attack,9,180000,"{""attack_speed"":0.16}",공격 속도 +16.0%
+finisher,마지막 일격,attack,10,450000,"{""finisher"":1.0}",체력이 30.0% 이하인 돌조각에 피해량 +30.0%
+range_3,공격 범위,attack,5,1800,"{""range_bonus"":0.25}",공격 범위 +25.0%
+crowd,한 번에 더 많이,attack,6,4000,"{""crowd"":1.0}","한 공격으로 맞히는 돌조각이 하나 늘 때마다 피해량 +10.0%
+최대 +50.0%"
+speed_3,공격 속도,attack,7,9000,"{""attack_speed"":0.16}",공격 속도 +16.0%
+speed_4,공격 속도,attack,7,9000,"{""attack_speed"":0.16}",공격 속도 +16.0%
+power_side_1,곡괭이 공격력,attack,8,22000,"{""damage"":0.8}",곡괭이 공격력 +0.8
+power_side_2,곡괭이 공격력,attack,9,180000,"{""damage"":0.8}",곡괭이 공격력 +0.8
+streak,집중 채굴,attack,9,180000,"{""streak"":1.0}","같은 돌조각을 연속해서 때릴 때마다 피해량 +8.0%
+최대 5회 중첩. 다른 조각을 직접 때리면 초기화됩니다."
+range_4,공격 범위,attack,11,1000000,"{""range_bonus"":0.25}",공격 범위 +25.0%
+combo,콤보,attack,4,1600,"{""combo"":1.0}","돌조각 10개 파괴마다 콤보 +1. 스택당 공격력 +1%.
+6.0초 안에 돌을 부수면 시간이 갱신됩니다. 콤보가 높을수록 제한 시간이 짧아지며, 시간이 끝나면 초기화됩니다."
+combo_power_1,콤보 스택당 공격력 보너스,attack,5,1800,"{""combo_damage_bonus"":0.01}",콤보 스택당 공격력 보너스 +1.0%
+combo_power_2,콤보 스택당 공격력 보너스,attack,6,4000,"{""combo_damage_bonus"":0.01}",콤보 스택당 공격력 보너스 +1.0%
+combo_time_1,콤보 유지 시간,attack,5,1800,"{""combo_time_bonus"":2.0}",콤보 유지 시간 +2.0
+combo_time_2,콤보 유지 시간,attack,6,4000,"{""combo_time_bonus"":2.0}",콤보 유지 시간 +2.0
+combo_speed,콤보 가속,attack,7,9000,"{""combo_speed"":1.0}",콤보 5스택 초과 시 공격 속도 +25.0%
+shock,충격파,attack,3,1200,"{""shock"":1.0}","공격 시 8.0% 확률로 충격파 발생.
+공격 범위의 200.0% 반경에 기존 피해량의 55.0% 피해를 줍니다."
+shock_power_1,충격파 피해량,attack,4,800,"{""shock_damage_bonus"":0.25}",충격파 피해량 +25.0%
+shock_power_2,충격파 피해량,attack,5,1800,"{""shock_damage_bonus"":0.25}",충격파 피해량 +25.0%
+shock_power_3,충격파 피해량,attack,6,4000,"{""shock_damage_bonus"":0.25}",충격파 피해량 +25.0%
+shock_range_1,충격파 범위,attack,4,800,"{""shock_range_bonus"":0.4}",충격파 범위 +40.0%
+shock_range_2,충격파 범위,attack,5,1800,"{""shock_range_bonus"":0.4}",충격파 범위 +40.0%
+shock_range_3,충격파 범위,attack,6,4000,"{""shock_range_bonus"":0.4}",충격파 범위 +40.0%
+shock_chance_1,충격파 확률,attack,4,800,"{""shock_chance_bonus"":0.04}",충격파 확률 +4.0%
+shock_chance_2,충격파 확률,attack,5,1800,"{""shock_chance_bonus"":0.04}",충격파 확률 +4.0%
+shock_chance_3,충격파 확률,attack,6,4000,"{""shock_chance_bonus"":0.04}",충격파 확률 +4.0%
+extra,추가타격,attack,5,3600,"{""extra"":1.0}","5번째 기본 공격마다 20.0% 확률로 다음 공격 1회가 200% 속도로 나갑니다.
+추가타격은 다시 추가타격을 충전하지 않습니다."
+extra_count_1,추가타격 횟수,attack,6,4000,"{""extra_count_bonus"":1.0}",추가타격 횟수 +1
+extra_count_2,추가타격 횟수,attack,7,9000,"{""extra_count_bonus"":1.0}",추가타격 횟수 +1
+extra_count_3,추가타격 횟수,attack,8,22000,"{""extra_count_bonus"":1.0}",추가타격 횟수 +1
+extra_chance_1,추가타격 확률,attack,6,4000,"{""extra_chance_bonus"":0.1}",추가타격 확률 +10.0%
+extra_chance_2,추가타격 확률,attack,7,9000,"{""extra_chance_bonus"":0.1}",추가타격 확률 +10.0%
+extra_chance_3,추가타격 확률,attack,8,22000,"{""extra_chance_bonus"":0.1}",추가타격 확률 +10.0%
+critical,치명타,attack,7,12600,"{""critical"":1.0}","치명타 확률 10%
+치명타 피해량 200%"
+crit_chance_1,치명타 확률,attack,8,22000,"{""crit_chance_bonus"":0.05}",치명타 확률 +5.0%
+crit_chance_2,치명타 확률,attack,9,180000,"{""crit_chance_bonus"":0.05}",치명타 확률 +5.0%
+crit_chance_3,치명타 확률,attack,10,450000,"{""crit_chance_bonus"":0.05}",치명타 확률 +5.0%
+crit_power_1,치명타 피해량,attack,8,22000,"{""crit_damage_bonus"":0.25}",치명타 피해량 +25.0%
+crit_power_2,치명타 피해량,attack,9,180000,"{""crit_damage_bonus"":0.25}",치명타 피해량 +25.0%
+crit_power_3,치명타 피해량,attack,10,450000,"{""crit_damage_bonus"":0.25}",치명타 피해량 +25.0%
+crit_gold,치명적인 수익,attack,10,450000,"{""crit_gold"":8.0}",치명타로 돌조각을 부술 때 8 Gold를 얻습니다.
+extra_critical,연속 치명타,attack,9,180000,"{""extra_critical"":1.0}","5번째 기본 공격이 치명타이고 추가타격이 발동되면, 충전된 추가타격이 모두 치명타가 됩니다.
+치명타와 추가타격을 모두 습득해야 발동합니다."
+execute,처형,attack,9,180000,"{""execute"":0.005}",처음 공격받는 돌조각이 0.5% 확률로 즉시 파괴됩니다.
+execute_chance_1,처형 확률,attack,10,450000,"{""execute"":0.005}",처형 확률 +0.5%
+execute_chance_2,처형 확률,attack,11,1000000,"{""execute"":0.01}",처형 확률 +1%
+execute_gold,처형의 대가,attack,10,450000,"{""execute_gold"":20.0}",처형으로 돌조각을 부술 때 20 Gold를 얻습니다.
+vitality,최대 체력,health,1,60,"{""duration"":4.0}",최대 체력 +4.0
+health_2,최대 체력,health,2,160,"{""duration"":4.0}",최대 체력 +4.0
+health_3,최대 체력,health,3,400,"{""duration"":4.0}",최대 체력 +4.0
+health_4,최대 체력,health,4,800,"{""duration"":4.0}",최대 체력 +4.0
+drain_1,느린 체력 소모,health,3,400,"{""drain_reduction"":0.06}",초당 체력 소모 -0.06
+drain_2,느린 체력 소모,health,4,800,"{""drain_reduction"":0.06}",초당 체력 소모 -0.06
+drain_3,느린 체력 소모,health,5,1800,"{""drain_reduction"":0.06}",초당 체력 소모 -0.06
+spent_range,깊어지는 호흡,health,4,800,"{""spent_range"":1.0}","이번 채굴에서 소모한 체력이 12.0 이상이면 공격 범위 +25.0%
+회복해도 누적 소모량은 유지됩니다."
+spent_range_more,조건부 공격 범위,health,5,1800,"{""spent_range_bonus"":0.2}",조건부 공격 범위 +20.0%
+spent_threshold,빠른 적응,health,6,4000,"{""spent_threshold_reduction"":4.0}",조건에 필요한 체력 소모량 -4.0
+low_health,마지막 집중,health,6,4000,"{""low_health"":1.0}",남은 체력이 25.0% 이하이면 공격 속도 +25.0%
+low_health_speed,위기의 가속,health,7,9000,"{""low_health_speed_bonus"":0.2}",위기의 가속 +20.0%
+low_health_threshold,더 이른 집중,health,8,22000,"{""low_health_threshold_bonus"":0.15}",더 이른 집중 +15.0%
+revive,다시 한 번,health,5,2340,"{""revive"":1.0}","체력이 소진되면 채굴당 1회, 최대 체력의 15.0%를 회복하고 계속 채굴합니다."
+revive_heal,부활 회복량,health,6,4000,"{""revive_fraction_bonus"":0.1}",부활 회복량 +10.0%
+revive_count,두 번째 기회,health,7,9000,"{""revive_count_bonus"":1.0}",채굴당 부활 횟수 +1
+break_heal,부수며 회복,health,3,400,"{""break_heal"":1.0}","돌조각을 부술 때 5.0% 확률로 체력 0.35 회복
+채굴당 회복 한도: 최대 체력의 80%. 부활과 보스 입장 회복은 별도입니다."
+break_heal_chance,파괴 회복 확률,health,4,800,"{""break_heal_chance_bonus"":0.03}",파괴 회복 확률 +3.0%
+break_heal_amount,파괴 회복량,health,5,1800,"{""break_heal_bonus"":0.35}",파괴 회복량 +0.35
+recovery,광물의 활력,health,5,1800,"{""recovery_per_gem"":0.5}","광물을 획득할 때마다 체력 0.5 회복
+채굴당 회복 한도: 최대 체력의 80%. 부활과 보스 입장 회복은 별도입니다."
+recovery_more,광물 회복량,health,6,4000,"{""recovery_per_gem"":0.5}",광물 회복량 +0.5
+income_1,총 Gold 수입,gold,2,160,"{""income_bonus"":0.12}",총 Gold 수입 +12.0%
+income_2,총 Gold 수입,gold,1,60,"{""income_bonus"":0.12}",총 Gold 수입 +12.0%
+income_3,총 Gold 수입,gold,2,160,"{""income_bonus"":0.12}",총 Gold 수입 +12.0%
+income_4,총 Gold 수입,gold,3,400,"{""income_bonus"":0.12}",총 Gold 수입 +12.0%
+income_5,총 Gold 수입,gold,4,800,"{""income_bonus"":0.12}",총 Gold 수입 +12.0%
+value_1,광물 가치,gold,2,160,"{""gem_value_bonus"":0.2}",광물 가치 +20.0%
+value_2,광물 가치,gold,3,400,"{""gem_value_bonus"":0.2}",광물 가치 +20.0%
+value_3,광물 가치,gold,4,800,"{""gem_value_bonus"":0.2}",광물 가치 +20.0%
+value_4,광물 가치,gold,5,1800,"{""gem_value_bonus"":0.2}",광물 가치 +20.0%
+gold_drop,돌 속의 잔돈,gold,2,160,"{""gold_drop"":1.0}",돌조각이 파괴될 때 8.0% 확률로 3 Gold 획득
+drop_amount_1,드롭 Gold,gold,3,400,"{""drop_gold_bonus"":3.0}",드롭 Gold +3.0
+drop_amount_2,드롭 Gold,gold,4,800,"{""drop_gold_bonus"":3.0}",드롭 Gold +3.0
+drop_amount_3,드롭 Gold,gold,5,1800,"{""drop_gold_bonus"":3.0}",드롭 Gold +3.0
+drop_chance_1,Gold 드롭 확률,gold,3,400,"{""drop_chance_bonus"":0.04}",Gold 드롭 확률 +4.0%
+drop_chance_2,Gold 드롭 확률,gold,4,800,"{""drop_chance_bonus"":0.04}",Gold 드롭 확률 +4.0%
+drop_chance_3,Gold 드롭 확률,gold,5,1800,"{""drop_chance_bonus"":0.04}",Gold 드롭 확률 +4.0%
+brilliant,찬란함,gold,4,800,"{""brilliant"":1.0}","광물이 4.0% 확률로 찬란함을 얻습니다.
+찬란한 광물의 Gold 가치 +50.0%"
+brilliant_value_1,찬란한 광물의 추가 가치,gold,5,1800,"{""brilliant_value_bonus"":0.25}",찬란한 광물의 추가 가치 +25.0%
+brilliant_value_2,찬란한 광물의 추가 가치,gold,6,4000,"{""brilliant_value_bonus"":0.25}",찬란한 광물의 추가 가치 +25.0%
+brilliant_value_3,찬란한 광물의 추가 가치,gold,7,9000,"{""brilliant_value_bonus"":0.25}",찬란한 광물의 추가 가치 +25.0%
+brilliant_chance_1,찬란함 확률,gold,5,1800,"{""brilliant_chance_bonus"":0.02}",찬란함 확률 +2.0%
+brilliant_chance_2,찬란함 확률,gold,6,4000,"{""brilliant_chance_bonus"":0.02}",찬란함 확률 +2.0%
+brilliant_chance_3,찬란함 확률,gold,7,9000,"{""brilliant_chance_bonus"":0.02}",찬란함 확률 +2.0%
+golden_day,황금의 날,gold,5,2700,"{""golden_day"":1.0}","정산 시 1.5% 확률로 전체 수입이 2배가 됩니다.
+정산마다 한 번만 추첨합니다."
+golden_chance,황금의 날 확률,gold,6,4000,"{""golden_chance_bonus"":0.015}",황금의 날 확률 +1.5%
+golden_pity,기다린 만큼,gold,7,9000,"{""golden_pity"":0.005}","황금의 날이 발동하지 않은 정산마다 확률 +0.5%
+발동하면 누적 확률이 초기화됩니다."
+rich_ore,광물 등장 확률,ore,1,60,"{""gem_spawn_bonus"":0.012}",광물 등장 확률 +1.2%
+gem_gold_1,광물 획득 Gold,ore,2,160,"{""gem_pickup_gold"":5.0}",광물 획득 Gold +5.0
+ore_spawn_2,광물 등장 확률,ore,3,400,"{""gem_spawn_bonus"":0.012}",광물 등장 확률 +1.2%
+rare_1,희귀한 광물 등장 확률,ore,4,800,"{""rare_spawn_bonus"":0.04}",희귀한 광물 등장 확률 +4.0%
+ore_spawn_3,광물 등장 확률,ore,5,1800,"{""gem_spawn_bonus"":0.012}",광물 등장 확률 +1.2%
+gem_gold_2,광물 획득 Gold,ore,6,4000,"{""gem_pickup_gold"":5.0}",광물 획득 Gold +5.0
+ore_spawn_4,광물 등장 확률,ore,7,9000,"{""gem_spawn_bonus"":0.012}",광물 등장 확률 +1.2%
+gem_buff,광물의 축복,ore,8,22000,"{""gem_buff"":1.0}","광물 획득 시 5.0초 동안 무작위 강화 1개를 얻습니다.
+공격력 +25.0% / 공격 속도 +25.0% / 공격 범위 +30.0%
+다시 획득하면 효과와 지속 시간이 갱신됩니다."
+ore_spawn_5,광물 등장 확률,ore,9,180000,"{""gem_spawn_bonus"":0.012}",광물 등장 확률 +1.2%
+rare_2,희귀한 광물 등장 확률,ore,5,1800,"{""rare_spawn_bonus"":0.04}",희귀한 광물 등장 확률 +4.0%
+rare_3,희귀한 광물 등장 확률,ore,6,4000,"{""rare_spawn_bonus"":0.04}",희귀한 광물 등장 확률 +4.0%
+resonance,공명 돌조각,ore,4,1360,"{""resonance"":1.0}","피해를 받을 때마다 인접한 돌조각에 받은 피해량의 30.0%만큼 피해를 줍니다.
+일반 돌조각에 2.5% 확률로 등장합니다."
+resonance_chance_1,공명 돌 등장 확률,ore,5,1800,"{""resonance_chance_bonus"":0.015}",공명 돌 등장 확률 +1.5%
+resonance_chance_2,공명 돌 등장 확률,ore,6,4000,"{""resonance_chance_bonus"":0.015}",공명 돌 등장 확률 +1.5%
+resonance_chance_3,공명 돌 등장 확률,ore,7,9000,"{""resonance_chance_bonus"":0.015}",공명 돌 등장 확률 +1.5%
+resonance_amount_1,공명 돌 피해량,ore,5,1800,"{""resonance_damage_bonus"":0.15}",공명 돌 피해량 +15.0%
+resonance_amount_2,공명 돌 피해량,ore,6,4000,"{""resonance_damage_bonus"":0.15}",공명 돌 피해량 +15.0%
+resonance_amount_3,공명 돌 피해량,ore,7,9000,"{""resonance_damage_bonus"":0.15}",공명 돌 피해량 +15.0%
+healing,회복 돌조각,ore,6,5000,"{""healing"":1.0}","파괴될 때 체력을 1.0 회복합니다.
+일반 돌조각에 2.5% 확률로 등장합니다.
+채굴당 회복 한도: 최대 체력의 80%. 부활과 보스 입장 회복은 별도입니다."
+healing_chance_1,회복 돌 등장 확률,ore,7,9000,"{""healing_chance_bonus"":0.015}",회복 돌 등장 확률 +1.5%
+healing_chance_2,회복 돌 등장 확률,ore,8,22000,"{""healing_chance_bonus"":0.015}",회복 돌 등장 확률 +1.5%
+healing_amount_1,회복 돌 회복량,ore,7,9000,"{""healing_amount_bonus"":0.25}",회복 돌 회복량 +25.0%
+healing_amount_2,회복 돌 회복량,ore,8,22000,"{""healing_amount_bonus"":0.25}",회복 돌 회복량 +25.0%
+bomb,폭탄 돌조각,ore,8,33000,"{""bomb"":1.0}","파괴될 때 인접한 돌조각에 35.0 피해를 줍니다.
+일반 돌조각에 2.5% 확률로 등장합니다."
+bomb_chance_1,폭탄 돌 등장 확률,ore,9,180000,"{""bomb_chance_bonus"":0.015}",폭탄 돌 등장 확률 +1.5%
+bomb_chance_2,폭탄 돌 등장 확률,ore,10,450000,"{""bomb_chance_bonus"":0.015}",폭탄 돌 등장 확률 +1.5%
+bomb_chance_3,폭탄 돌 등장 확률,ore,11,1000000,"{""bomb_chance_bonus"":0.015}",폭탄 돌 등장 확률 +1.5%
+bomb_amount_1,폭탄 돌 피해량,ore,9,180000,"{""bomb_damage_bonus"":0.35}",폭탄 돌 피해량 +35.0%
+bomb_amount_2,폭탄 돌 피해량,ore,10,450000,"{""bomb_damage_bonus"":0.35}",폭탄 돌 피해량 +35.0%
+bomb_amount_3,폭탄 돌 피해량,ore,11,1000000,"{""bomb_damage_bonus"":0.35}",폭탄 돌 피해량 +35.0%
+gold_stone,황금 돌조각,ore,10,450000,"{""gold_stone"":1.0}","파괴될 때 90 Gold를 얻습니다.
+일반 돌조각에 2.5% 확률로 등장합니다."
+gold_stone_chance_1,황금 돌 등장 확률,ore,11,1000000,"{""gold_stone_chance_bonus"":0.015}",황금 돌 등장 확률 +1.5%
+gold_stone_chance_2,황금 돌 등장 확률,ore,12,2100000,"{""gold_stone_chance_bonus"":0.015}",황금 돌 등장 확률 +1.5%
+gold_stone_amount_1,황금 돌 Gold량,ore,11,1000000,"{""gold_stone_bonus"":0.5}",황금 돌 Gold량 +50.0%
+gold_stone_amount_2,황금 돌 Gold량,ore,12,2100000,"{""gold_stone_bonus"":0.5}",황금 돌 Gold량 +50.0%

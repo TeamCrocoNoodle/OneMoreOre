@@ -1,7 +1,7 @@
 extends SceneTree
 ## Bounded model-presence, shared-cache, and lifecycle checks in actual Main.
 const Gem = preload("res://scripts/gem.gd")
-const Pickaxe = preload("res://scripts/pickaxe.gd")
+const ToolVisual = preload("res://scripts/tool_visual.gd")
 
 class TestGame:
 	extends "res://scripts/main.gd"
@@ -44,7 +44,7 @@ func _run() -> void:
 	gallery.ensure_ready()
 	await process_frame
 	_check(gallery.build_count == 1 and gallery.is_ready, "Repeated gallery requests retain a single completed model build")
-	_check(gallery.viewports.size() == 7, "Exactly one coin and six rarity models supply every UI icon")
+	_check(gallery.viewports.size() == 8, "Exactly one coin and seven rarity models supply every UI icon")
 	var worlds: Array[int] = []
 	var tiers: Array[int] = []
 	var coin_count := 0
@@ -70,10 +70,10 @@ func _run() -> void:
 			_check(gem != null and gem.grade == tier and gem.light_tier == tier and gem.collision_layer == 0 and gem.process_mode == Node.PROCESS_MODE_DISABLED, "Rarity icons reuse the corresponding actual gem model without gameplay collision or animation")
 		_check(viewport.render_target_update_mode == SubViewport.UPDATE_DISABLED, "Completed icon caches stop rendering their viewport")
 	tiers.sort()
-	_check(coin_count == 1 and tiers == [0, 1, 2, 3, 4, 5], "The shared gallery contains one gold coin and every grade exactly once")
+	_check(coin_count == 1 and tiers == [0, 1, 2, 3, 4, 5, 6], "The shared gallery contains one gold coin and every grade exactly once")
 	var coin: Texture2D = gallery.get_coin_texture()
 	_check(coin != null and coin == gallery.get_coin_texture(), "Repeated coin draws reuse the same cached texture resource")
-	for tier in 6:
+	for tier in 7:
 		var texture: Texture2D = gallery.get_gem_texture(tier)
 		_check(texture != null and texture != coin and texture == gallery.get_gem_texture(tier), "Each gem grade reuses its retained model texture")
 	game._open_upgrades()
@@ -97,10 +97,10 @@ func _run() -> void:
 	_check(part_types.size() >= 3 and solid_parts >= 6, "Separate solid shelves, frame, and back parts form the modeled cabinet")
 	var previews: Array[Node] = []
 	_find_previews(display.cabinet_model, previews)
-	_check(previews.size() == 6, "All six existing pickaxes occupy the same modeled cabinet")
+	_check(previews.size() == 6, "All six main tools occupy the same modeled cabinet")
 	for preview in previews:
-		var original := _find_script(preview, Pickaxe)
-		_check(original != null and original.process_mode == Node.PROCESS_MODE_DISABLED, "Each shelf tool retains the original pickaxe geometry without running gameplay animation")
+		var original := _find_script(preview, ToolVisual)
+		_check(original != null and not original.can_process(), "Each shelf tool retains the equipped geometry without running gameplay animation")
 	var viewports: Array[SubViewport] = []
 	_find_viewports(display, viewports)
 	_check(viewports.size() == 1 and viewports[0] == display.cabinet_viewport, "The shelf uses a single cached scene render instead of per-frame or per-item extra viewports")
@@ -115,7 +115,7 @@ func _run() -> void:
 	ui.close_tree()
 	await process_frame
 	_check(display.cabinet_viewport.render_target_update_mode == SubViewport.UPDATE_DISABLED and not display.is_visible_in_tree(), "Closing the upgrade window stops cabinet rendering")
-	_check(game.round_state.wallet_gold == 1234 and game.upgrades.stats().damage == 1.0 and game.round_state.gem_counts == PackedInt32Array([0, 0, 0, 0, 0, 0]), "Model previews do not purchase equipment, modify upgrades, or create real cargo")
+	_check(game.round_state.wallet_gold == 1234 and game.upgrades.stats().damage == 1.0 and game.round_state.gem_counts == PackedInt32Array([0, 0, 0, 0, 0, 0, 0]), "Model previews do not purchase equipment, modify upgrades, or create real cargo")
 	_stop_audio(game)
 	game.queue_free()
 	await process_frame

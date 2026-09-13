@@ -1,5 +1,5 @@
 extends SceneTree
-## Real Main shared tabs and shelf previews; the tool display never buys items.
+## Real Main shared tabs and shelf browsing without confirming purchases.
 
 class CaptureGame:
 	extends "res://scripts/main.gd"
@@ -32,7 +32,7 @@ func _run() -> void:
 	game.hud.set_process(false)
 	game.focused = true
 	game.spawn_time = 1.0
-	# Review funds are explicit. Every tool price remains presentation only.
+	# Review funds are explicit. This capture only inspects tools.
 	game.round_state.wallet_gold = 160
 	game.hud.set_wallet(160)
 	game._process(0.0)
@@ -41,7 +41,7 @@ func _run() -> void:
 	await create_timer(0.2).timeout
 	game._open_upgrades()
 	await _save("tools_shared_skills")
-	await _click(game.skill_ui.get_node_screen("power"))
+	await _click(game.skill_ui.get_node_screen("speed"))
 	await _save("tools_skill_pending")
 	await _tab("tools")
 	if not game.skill_ui.selected_id.is_empty() or game.skill_ui.get_confirmation_rect().size != Vector2.ZERO:
@@ -57,6 +57,7 @@ func _run() -> void:
 		_fail("A preview-only price tag spent gold")
 		return
 	await _save("tools_desktop_selected")
+	display.cancel_selection()
 	await _resize(Vector2i(1080, 600))
 	display.scroll_by(-100000.0)
 	await _save("tools_reference_1080")
@@ -82,7 +83,7 @@ func _run() -> void:
 	game._process(0.0)
 	game.hud._process(0.0)
 	await _save("tools_closed")
-	if game.round_state.wallet_gold != 160 or game.upgrades.is_unlocked("power"):
+	if game.round_state.wallet_gold != 160 or game.upgrades.is_unlocked("speed"):
 		_fail("Viewing tools or cancelling tabs altered the actual economy")
 		return
 	var report := {"test_credit_injected": 160, "final_gold": game.round_state.wallet_gold, "tools_purchased": 0, "actual_catalog": display.get_catalog(), "captures": files, "snapshots": snapshots}

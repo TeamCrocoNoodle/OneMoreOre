@@ -1,6 +1,6 @@
 extends SceneTree
-## Real shared tabs, retained skill purchases, and display-only tool shelves.
-const Pickaxe = preload("res://scripts/pickaxe.gd")
+## Real shared tabs, retained skill purchases, and main-tool shelves.
+const ToolVisual = preload("res://scripts/tool_visual.gd")
 
 class TestGame:
 	extends "res://scripts/main.gd"
@@ -42,8 +42,8 @@ func _run() -> void:
 	var skill_tab: Rect2 = ui.get_tab_rect("skills")
 	var tools_tab: Rect2 = ui.get_tab_rect("tools")
 	_check(skill_tab.size.x > 0 and tools_tab.size.x > 0 and not skill_tab.intersects(tools_tab), "Both shared top tabs have distinct real hit rectangles")
-	await _click(ui.get_node_screen("power"))
-	_check(ui.selected_id == "power" and ui.get_confirmation_rect().size.x > 0, "A real skill selection has a pending confirmation before tab switching")
+	await _click(ui.get_node_screen("speed"))
+	_check(ui.selected_id == "speed" and ui.get_confirmation_rect().size.x > 0, "A real skill selection has a pending confirmation before tab switching")
 	await _click(tools_tab.get_center())
 	var display: Control = ui.tools_panel
 	_check(ui.selected_tab == "tools" and display.visible and ui.selected_id.is_empty() and ui.hovered_id.is_empty() and ui.get_confirmation_rect().size == Vector2.ZERO, "Tools cancels the pending skill confirmation and shows the shelf instead")
@@ -51,12 +51,13 @@ func _run() -> void:
 	for button: Button in ui._buttons.values():
 		graph_hidden = graph_hidden and (not button.is_visible_in_tree() or button.disabled)
 	_check(graph_hidden, "The hidden skill graph leaves no enabled visible native Buttons on Tools")
-	await _click(ui.get_node_screen("power"))
-	_check(ui.selected_id.is_empty() and not game.upgrades.is_unlocked("power") and game.round_state.wallet_gold == 1000, "Clicking an old graph location cannot select or purchase a hidden skill")
+	await _click(ui.get_node_screen("speed"))
+	_check(ui.selected_id.is_empty() and not game.upgrades.is_unlocked("speed") and game.round_state.wallet_gold == 1000, "Clicking an old graph location cannot select or purchase a hidden skill")
 	var catalog: Array[Dictionary] = display.get_catalog()
-	_check(catalog.size() == 6, "The iron display presents the six existing tool variants")
+	_check(catalog.size() == 6, "The iron display presents the six main tools")
 	var ids: Array[String] = []
 	for i in catalog.size():
+		display.cancel_selection()
 		var item: Dictionary = catalog[i]
 		_check(not ids.has(str(item.id)) and item.has("title") and item.has("price"), "Each displayed tool has a unique identity, title, and price-tag value")
 		ids.append(str(item.id))
@@ -64,30 +65,34 @@ func _run() -> void:
 		var tag: Rect2 = display.get_price_tag_rect(i)
 		_check(card.size.x > 0 and tag.size.x > 0 and card.intersects(tag), "Each shelf item has an actual associated price-tag rectangle")
 		await _click(tag.get_center())
-		_check(game.round_state.wallet_gold == 1000 and game.upgrades.stats().damage == 1.0, "Displayed tool clicks do not spend gold or apply unimplemented gameplay effects")
-	_check(ids == ["base", "copper", "silver", "cobalt", "dark_iron", "gold"], "The catalog preserves the original pickaxe family without inventing new tool geometry")
+		_check(game.round_state.wallet_gold == 1000 and game.upgrades.stats().damage == 1.0, "Inspecting a tool does not spend gold before explicit confirmation")
+	display.cancel_selection()
+	_check(ids == ["pickaxe", "axe", "hammer", "jackhammer", "drill", "gold_pickaxe"], "The catalog follows the six specified main tools in order")
 	var previews: Array[Node] = []
-	_find_previews(display, previews)
+	_find_previews(display.cabinet_model, previews)
 	_check(previews.size() == 6, "All six shelf models are real retained 3D previews")
 	for preview in previews:
-		var original: Node = preview.get_node_or_null("DisplayPose/OriginalPickaxe")
-		_check(original != null and original.get_script() == Pickaxe and original.process_mode == Node.PROCESS_MODE_DISABLED, "Each preview uses the existing pickaxe script and disables gameplay animation processing")
+		var original: Node = preview.get_node_or_null("DisplayPose/ToolModel")
+		_check(original != null and original.get_script() == ToolVisual and not original.can_process(), "Each preview shares its equipped geometry and disables gameplay animation processing")
 		_check(_mesh_count(preview) > 2, "A preview retains the actual built handle, head, and detail meshes")
 	await _click(skill_tab.get_center())
 	_check(ui.selected_tab == "skills" and not display.visible and ui.selected_id.is_empty(), "Returning to Skill Tree restores the graph without reviving its cancelled confirmation")
-	await _click(ui.get_node_screen("power"))
+	await _click(ui.get_node_screen("speed"))
 	await _click(ui.get_confirmation_rect().get_center())
-	_check(game.upgrades.is_unlocked("power") and game.round_state.wallet_gold == 975, "The original confirmation purchase remains functional after a Tools round trip")
+	_check(game.upgrades.is_unlocked("speed") and game.round_state.wallet_gold == 940, "The confirmation purchase remains functional after a Tools round trip")
 	await _validate_keyboard_tabs(ui)
 	await _validate_layouts(ui)
 	ui.close_tree()
 	await process_frame
-	_check(not display.is_visible_in_tree() and game.round_state.wallet_gold == 975, "Closing the shared upgrade window hides its shelf while preserving the actual wallet")
+	_check(not display.is_visible_in_tree() and game.round_state.wallet_gold == 940, "Closing the shared upgrade window hides its shelf while preserving the actual wallet")
 	var viewports: Array[Node] = []
 	_find_viewports(display, viewports)
 	for viewport: SubViewport in viewports:
 		_check(viewport.render_target_update_mode == SubViewport.UPDATE_DISABLED, "Closed tool previews stop drawing their offscreen viewport")
 	_stop_audio(game)
+	var audio_deadline := Time.get_ticks_msec()+100
+	while Time.get_ticks_msec() < audio_deadline:
+		await process_frame
 	game.queue_free()
 	await process_frame
 	var deadline := Time.get_ticks_usec() + 40000
@@ -134,9 +139,10 @@ func _validate_keyboard_tabs(ui: Node) -> void:
 	_check(item_focused, "Native keyboard focus can reach an actual displayed tool Button")
 	if item_focused:
 		await _joy(JOY_BUTTON_A)
-		_check(ui.tools_panel.selected_index >= 0 and game.round_state.wallet_gold == 975, "Controller A selects a displayed tool without purchasing or changing skills")
+		_check(ui.tools_panel.selected_index >= 0 and game.round_state.wallet_gold == 940, "Controller A selects a displayed tool without purchasing or changing skills")
 
 func _validate_layouts(ui: Node) -> void:
+	ui.tools_panel.cancel_selection()
 	for physical: Vector2i in [Vector2i(360, 800), Vector2i(800, 450)]:
 		root.size = physical
 		await process_frame
@@ -152,7 +158,7 @@ func _validate_layouts(ui: Node) -> void:
 		_check(display.get_scroll_offset() <= limit + 0.001 and display.get_scroll_offset() >= 0.0, "Shelf scrolling clamps to its actual content limit")
 		_check(view.intersects(display.get_price_tag_rect(5)), "The last tool's price tag can be reached in each constrained layout")
 		display.scroll_by(-100000.0)
-		_check(is_zero_approx(display.get_scroll_offset()) and game.round_state.wallet_gold == 975, "Scrolling back reaches the first shelf without affecting gold")
+		_check(is_zero_approx(display.get_scroll_offset()) and game.round_state.wallet_gold == 940, "Scrolling back reaches the first shelf without affecting gold")
 	root.size = Vector2i(1152, 800)
 	await process_frame
 

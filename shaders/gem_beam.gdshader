@@ -5,6 +5,7 @@ uniform vec4 light_color : source_color = vec4(0.953, 0.98, 1.0, 1.0);
 uniform float pulse_amount : hint_range(0.0, 2.0) = 0.0;
 uniform int effect_kind = 0;
 uniform float beam_growth = 1.0;
+uniform bool prismatic = false;
 
 void vertex() {
 	vec3 root = CUSTOM0.xyz;
@@ -20,6 +21,7 @@ void fragment() {
 	float source = 1.0 - smoothstep(0.0, 0.24, UV.y);
 	vec3 saturated = light_color.rgb * light_color.rgb;
 	vec3 tint = mix(saturated, light_color.rgb, 0.40);
+	if (prismatic) tint = mix(vec3(1.0),0.5+0.5*cos(6.28318*(UV.x*0.7+UV.y*0.22+vec3(0.0,0.33,0.67))),0.42);
 	ALBEDO = mix(tint, vec3(1.0), source * 0.22);
 	ALPHA = clamp(edge * reach * pulse_amount * COLOR.a, 0.0, 0.80);
 }

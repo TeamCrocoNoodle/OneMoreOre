@@ -24,6 +24,7 @@ var destroyed: bool = false
 var cover_gem: WeakRef
 var cover_tier: int = 0
 var is_gem_cover: bool = false
+var cover_health := GEM_COVER_HEALTH
 var light_node: Node3D
 var latest_impact_local := Vector3.ZERO
 var impact_count: int = 0
@@ -80,7 +81,8 @@ func configure(data: Dictionary, p_layer_index: int) -> void:
 	var toughness := 3.0 if layer_index >= 2 else 2.0
 	if _rng.randi_range(0, 4) == 0:
 		toughness += 1.0
-	max_health = clampf(float(data.get("health", toughness)), 2.0, 4.0)
+	max_health = maxf(0.1,float(data.get("health", toughness)))
+	cover_health = maxf(0.1,float(data.get("cover_health",GEM_COVER_HEALTH)))
 	health = max_health
 	collision_layer = 1
 	collision_mask = 0
@@ -89,6 +91,9 @@ func configure(data: Dictionary, p_layer_index: int) -> void:
 	_material = ShaderMaterial.new()
 	_material.shader = STONE_SHADER
 	_material.set_shader_parameter("base_color", stone_color)
+	_material.set_shader_parameter("ore_theme",int(data.get("theme",0)))
+	_material.set_shader_parameter("ore_accent",data.get("accent",stone_color))
+	_material.set_shader_parameter("stone_origin",base_position)
 	mesh_instance.material_override = _material
 	add_child(mesh_instance)
 	_shape = CollisionShape3D.new()
@@ -109,6 +114,40 @@ func configure(data: Dictionary, p_layer_index: int) -> void:
 	mesh_instance.add_child(_crack_mesh)
 	set_process(false)
 
+
+func configure_special(kind: String) -> void:
+	set_meta("special_kind", kind)
+	var colors := {"resonance": Color("649fab"), "healing": Color("75a57d"), "bomb": Color("a56f56"), "gold_stone": Color("b2985b")}
+	stone_color = stone_color.lerp(colors.get(kind, stone_color), 0.72)
+	_material.set_shader_parameter("base_color", stone_color)
+	var symbol: Array = []
+	match kind:
+		"healing": symbol = [[Vector2(-0.65, 0), Vector2(0.65, 0)], [Vector2(0, -0.65), Vector2(0, 0.65)]]
+		"resonance": symbol = [[Vector2(-0.9, -0.5), Vector2(-0.4, 0), Vector2(-0.9, 0.5)], [Vector2(-0.25, -0.65), Vector2(0.35, 0), Vector2(-0.25, 0.65)], [Vector2(0.4, -0.5), Vector2(0.9, 0), Vector2(0.4, 0.5)]]
+		"bomb": symbol = [[Vector2(0, -0.6), Vector2(0.6, 0), Vector2(0, 0.6), Vector2(-0.6, 0), Vector2(0, -0.6)], [Vector2(0, 0.6), Vector2(0.2, 0.8), Vector2(0.5, 0.9)]]
+		"gold_stone": symbol = [[Vector2(0.45, 0.55), Vector2(-0.3, 0.65), Vector2(-0.65, 0.15), Vector2(-0.45, -0.55), Vector2(0.45, -0.55), Vector2(0.6, 0.05), Vector2(0, 0.05)]]
+	var marker := MeshInstance3D.new()
+	marker.name = "SpecialStoneMark"
+	marker.position = face_center + direction * 0.014
+	marker.quaternion = Quaternion(Vector3.BACK, direction.normalized())
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var size := _face_extent * 0.44
+	for path: Array in symbol:
+		for i in path.size() - 1:
+			var a: Vector2 = path[i] * size
+			var b: Vector2 = path[i + 1] * size
+			var normal := (b - a).orthogonal().normalized() * size * 0.07
+			for v: Vector2 in [a - normal, a + normal, b + normal, a - normal, b + normal, b - normal]:
+				surface.add_vertex(Vector3(v.x, v.y, 0))
+	marker.mesh = surface.commit()
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color("cfe9d7") if kind == "healing" else Color("efe2b8")
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	marker.material_override = material
+	marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(marker)
 
 func get_containment_planes() -> Array[Plane]:
 	# Outward-facing planes from the actual rendered triangles. A point is
@@ -265,14 +304,14 @@ func configure_gem_cover(jewel: StaticBody3D, tier: int) -> void:
 	# Main may discover the same final obstruction more than once. Repeating
 	# its designation must never replenish a cover the player is already mining.
 	if is_gem_cover and cover_gem != null and cover_gem.get_ref() == jewel:
-		cover_tier = clampi(tier, 0, 5)
+		cover_tier = clampi(tier, 0, 6)
 		return
 	cover_gem = weakref(jewel)
-	cover_tier = clampi(tier, 0, 5)
+	cover_tier = clampi(tier, 0, 6)
 	is_gem_cover = true
 	_cover_hit_count = 0
 	var previous_damage := maxf(max_health - health, 0.0)
-	max_health = maxf(max_health, GEM_COVER_HEALTH)
+	max_health = maxf(max_health, cover_health)
 	health = maxf(max_health - previous_damage, 1.0)
 	if not is_instance_valid(light_node):
 		light_node = GemLight.new()
