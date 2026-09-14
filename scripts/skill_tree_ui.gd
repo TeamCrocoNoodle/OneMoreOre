@@ -8,6 +8,7 @@ signal cue(kind: String, tier: int)
 
 const ToolDisplay = preload("res://scripts/tool_display.gd")
 const ModelGallery = preload("res://scripts/ui_model_gallery.gd")
+const ResponsiveUI = preload("res://scripts/responsive_ui.gd")
 const GOLD := Color("dca75c")
 const TEXT := Color("f4f4ef")
 const MUTED := Color("a5a8a5")
@@ -46,6 +47,7 @@ var _bold: SystemFont
 var _confirm: Button
 var _close: Button
 var _detail_blocker: Control
+var _detail_body: RichTextLabel
 var _buttons: Dictionary = {}
 var _nodes: Array[Dictionary] = []
 var _node_rects: Dictionary = {}
@@ -65,6 +67,7 @@ var _confirm_rect := Rect2()
 var _dragging := false
 var _drag_last := Vector2.ZERO
 var _touch_id := -1
+var _detail_touch := -1
 var _using_controller := false
 var _purchase_pending := false
 var _hover_pin := ""
@@ -117,6 +120,14 @@ func _ready() -> void:
 			_cancel_selection()
 	)
 	_canvas.add_child(_detail_blocker)
+	_detail_body = RichTextLabel.new()
+	_detail_body.name = "SkillDescription"
+	_detail_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_detail_body.add_theme_font_override("normal_font", _font)
+	_detail_body.add_theme_color_override("default_color", MUTED)
+	_detail_body.scroll_active = true
+	_detail_body.mouse_filter = Control.MOUSE_FILTER_STOP
+	_detail_blocker.add_child(_detail_body)
 	_confirm = _button("✓")
 	_confirm.name = "ConfirmSkillPurchase"
 	_confirm.pressed.connect(_confirm_purchase)
@@ -373,22 +384,18 @@ func get_visible_node_ids() -> Array[String]:
 func _layout() -> void:
 	if not is_instance_valid(_canvas):
 		return
-	var viewport_size := get_viewport().get_visible_rect().size
-	var transform := get_viewport().get_final_transform()
-	var screen_factor := maxf(minf(transform.x.length(), transform.y.length()), 0.001)
-	var physical := viewport_size * screen_factor
-	var physical_scale := clampf(minf(physical.x / 1200.0, physical.y / 850.0), 0.85, 1.25)
-	_scale = physical_scale / screen_factor
-	_view = viewport_size / _scale
-	var narrow := _view.x < 760
+	var metrics := ResponsiveUI.metrics(get_viewport())
+	_scale = metrics.scale
+	_view = metrics.view
+	var narrow := _view.x < 860
 	_header_height = 126 if narrow else 82
 	_header.position = Vector2.ZERO
 	_header.size = Vector2(_view.x, _header_height) * _scale
 	_graph_center = Vector2(_view.x * 0.5, (_view.y - 70) * 0.5 + (22 if narrow else 0))
+	_close.text = "×" if narrow else "닫기 ×"
 	_close.add_theme_font_size_override("font_size", int((27 if narrow else 17) * _scale))
 	_close.position = Vector2(_view.x - (80 if narrow else 120), 8 if narrow else 12) * _scale
 	_close.size = Vector2(58 if narrow else 98, 58) * _scale
-	_close.text = "×" if narrow else "닫기 ×"
 	var tab_y := 66.0 if narrow else 12.0
 	var tab_width := 142.0 if narrow else 152.0
 	var tab_gap := 18.0 if narrow else 24.0
@@ -504,6 +511,8 @@ func _hover_node(id: String) -> void:
 func _leave_node(id: String) -> void:
 	if id == _hover_pin:
 		return
+	if id == _detail_id and _detail_blocker.visible and _detail_blocker.get_global_rect().grow(16 * _scale).has_point(_pointer_position):
+		return
 	if hovered_id == id and _buttons[id].get_global_rect().has_point(_pointer_position):
 		return
 	if hovered_id == id:
@@ -525,10 +534,14 @@ func _ensure_detail_space(id: String) -> bool:
 	if node.is_empty():
 		return false
 	var width := minf(324, _view.x - 32)
-	var height := 72 + _wrap_text(str(node.description), 15, width - 32).size() * 23
+	var height := _detail_height(id, width)
 	var point := get_node_screen(id) / _scale
 	var moved := false
 	var top := _header_height + maxf(29, NODE_SIZE * _zoom * 0.5) + 44
+	var safe_x := clampf(point.x, 100, _view.x - 100)
+	if not is_equal_approx(safe_x, point.x):
+		_pan.x += safe_x - point.x
+		moved = true
 	if point.y < top:
 		_pan.y += top - point.y
 		point.y = top
@@ -539,8 +552,17 @@ func _ensure_detail_space(id: String) -> bool:
 	var bottom := point.y + maxf(29, NODE_SIZE * _zoom * 0.5) + 16 + extra + height + 18
 	if bottom <= _view.y:
 		return moved
-	_pan.y -= bottom - _view.y
+	_pan.y -= minf(bottom - _view.y, point.y - top)
 	return true
+
+
+func _detail_height(id: String, width: float) -> float:
+	var natural := 72 + _wrap_text(str(_model.get_node(id).description), 15, width - 32).size() * 23
+	var half := maxf(29, NODE_SIZE * _zoom * 0.5)
+	# Reserve room for the cost, node, and even a below-node confirmation.
+	var extra := 66.0 if selected_id == id else 0.0
+	var available := _view.y - _header_height - half * 2 - 78 - extra
+	return minf(natural, maxf(120, available))
 
 
 func _confirmation_placement(id: String) -> Dictionary:
@@ -570,6 +592,7 @@ func _refresh_detail() -> void:
 	_detail_id = selected_id if not selected_id.is_empty() else (hovered_id if not hovered_id.is_empty() else (_focused_id if _using_controller else ""))
 	if selected_tab != "skills" or _detail_id.is_empty() or _model == null or not _model.is_visible(_detail_id):
 		_detail_id = ""
+		_detail_touch = -1
 		_confirm.hide()
 		_detail_blocker.hide()
 		_canvas.queue_redraw()
@@ -577,7 +600,7 @@ func _refresh_detail() -> void:
 	var node: Dictionary = _model.get_node(_detail_id)
 	var width := minf(324, _view.x - 32)
 	_detail_lines = _wrap_text(str(node.description), 15, width - 32)
-	var height := 72 + _detail_lines.size() * 23
+	var height := _detail_height(_detail_id, width)
 	var center := get_node_screen(_detail_id) / _scale
 	var half := maxf(29, NODE_SIZE * _zoom * 0.5)
 	var x := clampf(center.x - width * 0.5, 16, _view.x - width - 16)
@@ -588,6 +611,12 @@ func _refresh_detail() -> void:
 	_detail_rect = Rect2(x, y, width, height)
 	_detail_blocker.position = _detail_rect.position * _scale
 	_detail_blocker.size = _detail_rect.size * _scale
+	_detail_body.position = Vector2(16, 40) * _scale
+	_detail_body.size = Vector2(width - 32, height - 76) * _scale
+	_detail_body.add_theme_font_size_override("normal_font_size", maxi(1, roundi(15 * _scale)))
+	if _detail_body.text != str(node.description):
+		_detail_body.text = str(node.description)
+		_detail_body.scroll_to_line(0)
 	_detail_blocker.show()
 	if not selected_id.is_empty():
 		_confirm_rect = confirmation.rect
@@ -644,6 +673,32 @@ func _input(event: InputEvent) -> void:
 	if selected_tab == "tools":
 		# The display owns scrolling and native item/button keyboard navigation.
 		return
+	# Scroll the bounded description without zooming or dragging the graph.
+	if _detail_blocker.visible:
+		var over_detail: bool = (event is InputEventMouse or event is InputEventGesture) and _detail_body.get_global_rect().has_point(event.position)
+		if over_detail and (event is InputEventMouseButton or event is InputEventPanGesture):
+			return
+		if event is InputEventMouseMotion and _detail_blocker.get_global_rect().grow(16 * _scale).has_point(event.position):
+			_pointer_position = event.position
+			return
+		if event is InputEventScreenTouch:
+			if event.pressed and _detail_body.get_global_rect().has_point(event.position):
+				_detail_touch = event.index
+				get_viewport().set_input_as_handled()
+				return
+			elif not event.pressed and event.index == _detail_touch:
+				_detail_touch = -1
+				get_viewport().set_input_as_handled()
+				return
+		if event is InputEventScreenDrag and event.index == _detail_touch:
+			_detail_body.get_v_scroll_bar().value -= event.relative.y
+			get_viewport().set_input_as_handled()
+			return
+		var scroll_bar := _detail_body.get_v_scroll_bar()
+		if not selected_id.is_empty() and scroll_bar.max_value > scroll_bar.page and (event.is_action_pressed("ui_up") or event.is_action_pressed("ui_down")):
+			scroll_bar.value += (-42 if event.is_action_pressed("ui_up") else 42) * _scale
+			get_viewport().set_input_as_handled()
+			return
 	if _node_pointer_press(event):
 		get_viewport().set_input_as_handled()
 		return
@@ -834,7 +889,7 @@ func _draw_header(c: Control) -> void:
 	c.draw_set_transform(Vector2.ZERO, 0, Vector2.ONE * _scale)
 	c.draw_rect(Rect2(0, 0, _view.x, _header_height), Color("090d0e"))
 	c.draw_line(Vector2(0, _header_height), Vector2(_view.x, _header_height), Color(1, 1, 1, 0.055), 1)
-	var narrow := _view.x < 760
+	var narrow := _view.x < 860
 	_text(c, "업그레이드", Vector2(24, 45 if narrow else 49), 20 if narrow else 23, TEXT)
 	var wallet_text := _number(_gold)
 	var wallet_size := 20
@@ -937,8 +992,6 @@ func _draw_detail(c: Control) -> void:
 	style.set_corner_radius_all(4)
 	c.draw_style_box(style, _detail_rect)
 	_text(c, str(node.title), _detail_rect.position + Vector2(16, 29), 19, TEXT)
-	for i in _detail_lines.size():
-		_text(c, _detail_lines[i], _detail_rect.position + Vector2(16, 56 + i * 23), 15, MUTED, false)
 	var status := "습득 완료" if owned else ("확인 표시를 눌러 구매" if affordable else "Gold가 부족합니다")
 	_text(c, status, Vector2(_detail_rect.position.x + 16, _detail_rect.end.y - 15), 13, GOLD if affordable or owned else Color("bf8073"), false)
 

@@ -99,7 +99,7 @@ func pause_feedback() -> void:
 func can_activate(id: String) -> bool:
 	if id == "crusher" and crusher_remaining > 0.0: return false
 	if id == "crusher" and is_instance_valid(game.boss) and game.boss.active: return false
-	return game.aux_tools.is_owned(id) and id in ["crusher","detonator"] and game.focused and game._round_allows_mining() and game.spawn_time >= 0.68 and game.completion_time < 0 and not game.chunks.is_empty() and _skip_remaining < 0 and (id != "detonator" or not detonator_used)
+	return game.aux_tools.is_owned(id) and id in ["crusher","detonator"] and game.focused and game._round_allows_mining() and game.spawn_time >= game.ORE_SPAWN_DURATION and game.completion_time < 0 and not game.chunks.is_empty() and _skip_remaining < 0 and (id != "detonator" or not detonator_used)
 
 func activate(id: String) -> bool:
 	if not can_activate(id): return false
@@ -109,21 +109,22 @@ func activate(id: String) -> bool:
 	_flash_time = 0.95
 	_layout_devices()
 	if id == "crusher": _snapshot_intake()
-	var result: Dictionary = game.remove_with_auxiliary(game.chunks.duplicate(),Aux.CRUSHER_RECOVERY if id == "crusher" else 1.0,id == "crusher")
+	var damage := Aux.Balance.bulk_damage(id,float(game.upgrade_stats.damage),game.chunks.size())
+	var result: Dictionary = game.remove_with_auxiliary(game.chunks.duplicate(),Aux.CRUSHER_RECOVERY if id == "crusher" else 1.0,id == "crusher",damage)
 	if result.is_empty(): return false
 	if id == "crusher": crusher_remaining = Aux.CRUSHER_COOLDOWN
 	if id == "detonator": detonator_used = true
-	_skip_remaining = -1.0 if is_instance_valid(game.boss) and game.boss.active else .85 if id == "crusher" else 1.1
+	_skip_remaining = game.ORE_RESPAWN_DELAY if game.chunks.is_empty() else -1.0
 	_skip_rock = game.rock_number
 	if id == "crusher":
 		audio.play("crusher_start")
 		audio.play("crusher_grind")
-		game._skill_notice(game.camera.unproject_position(game.shell.global_position),"분쇄 · 남은 보석 50%",Color("e9b97a"))
+		game._skill_notice(game.camera.unproject_position(game.shell.global_position),"분쇄 · 회수 보석 가치 50%",Color("e9b97a"))
 	else:
 		audio.play("detonator_blast")
 		game.effects.skill_burst(game.shell.global_position,game.camera.global_basis.z,Color("f7bc75"),3.6)
 		game.camera_shake = 0.16
-		game._skill_notice(game.camera.unproject_position(game.shell.global_position),"전체 폭파!",Color("ffe1a3"))
+		game._skill_notice(game.camera.unproject_position(game.shell.global_position),"광맥 폭파!",Color("ffe1a3"))
 	if game.using_controller and game.controller_id >= 0:
 		Input.start_joy_vibration(game.controller_id,0.48,0.76,0.22)
 	hud.refresh()
@@ -136,7 +137,7 @@ func advance(delta: float) -> void:
 			_skip_remaining = -1
 		hud.refresh()
 		return
-	if game.spawn_time < 0.68:
+	if game.spawn_time < game.ORE_SPAWN_DURATION:
 		detector_valid = false
 		hud.refresh()
 		return

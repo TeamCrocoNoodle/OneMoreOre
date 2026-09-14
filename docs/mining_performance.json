@@ -1,0 +1,194 @@
+{
+	"adapter": "NVIDIA GeForce RTX 4060 Laptop GPU",
+	"cold_load_ms": 3467.476,
+	"crusher_call_ms": 5.177,
+	"crusher_commit_ms": 107.705,
+	"crusher_receipt": {
+		"gems": 68,
+		"stones": 4427
+	},
+	"detonate_call_ms": 4.477,
+	"detonate_commit_ms": 164.738,
+	"detonate_receipt": {
+		"gems": 68,
+		"stones": 4736
+	},
+	"draw_calls": {
+		"chain_tail": {
+			"count": 99,
+			"max": 3546.0,
+			"p50": 3481.0,
+			"p95": 3539.0
+		},
+		"cold_load": {
+			"count": 240,
+			"max": 2193.0,
+			"p50": 1959.0,
+			"p95": 2130.0
+		},
+		"crusher_remaining": {
+			"count": 189,
+			"max": 348.0,
+			"p50": 278.0,
+			"p95": 345.0
+		},
+		"detonate_4736": {
+			"count": 196,
+			"max": 326.0,
+			"p50": 251.0,
+			"p95": 326.0
+		},
+		"half_prepare": {
+			"count": 73,
+			"max": 209.0,
+			"p50": 209.0,
+			"p95": 209.0
+		},
+		"half_prepared_load": {
+			"count": 66,
+			"max": 2225.0,
+			"p50": 204.0,
+			"p95": 204.0
+		},
+		"idle": {
+			"count": 60,
+			"max": 2193.0,
+			"p50": 2193.0,
+			"p95": 2193.0
+		},
+		"partial_blast": {
+			"count": 32,
+			"max": 3570.0,
+			"p50": 3554.0,
+			"p95": 3570.0
+		},
+		"prepare_next": {
+			"count": 760,
+			"max": 181.0,
+			"p50": 181.0,
+			"p95": 181.0
+		},
+		"prepared_load": {
+			"count": 2,
+			"max": 2228.0,
+			"p50": 2228.0,
+			"p95": 2228.0
+		},
+		"wide_strikes": {
+			"count": 30,
+			"max": 3414.0,
+			"p50": 3340.0,
+			"p95": 3400.0
+		}
+	},
+	"errors": [],
+	"final_memory": 509461190.0,
+	"final_objects": 692.0,
+	"frames": {
+		"chain_tail": {
+			"count": 99,
+			"max": 36.246,
+			"over_33ms": 8,
+			"over_50ms": 0,
+			"p50": 27.197,
+			"p95": 34.45
+		},
+		"cold_load": {
+			"count": 240,
+			"max": 76.806,
+			"over_33ms": 2,
+			"over_50ms": 2,
+			"p50": 13.322,
+			"p95": 17.144
+		},
+		"crusher_remaining": {
+			"count": 189,
+			"max": 17.679,
+			"over_33ms": 0,
+			"over_50ms": 0,
+			"p50": 8.372,
+			"p95": 9.997
+		},
+		"detonate_4736": {
+			"count": 196,
+			"max": 33.3,
+			"over_33ms": 0,
+			"over_50ms": 0,
+			"p50": 8.294,
+			"p95": 8.501
+		},
+		"half_prepare": {
+			"count": 73,
+			"max": 8.599,
+			"over_33ms": 0,
+			"over_50ms": 0,
+			"p50": 8.38,
+			"p95": 8.436
+		},
+		"half_prepared_load": {
+			"count": 66,
+			"max": 27.358,
+			"over_33ms": 0,
+			"over_50ms": 0,
+			"p50": 10.749,
+			"p95": 14.622
+		},
+		"idle": {
+			"count": 60,
+			"max": 16.504,
+			"over_33ms": 0,
+			"over_50ms": 0,
+			"p50": 8.129,
+			"p95": 13.529
+		},
+		"partial_blast": {
+			"count": 32,
+			"max": 31.661,
+			"over_33ms": 0,
+			"over_50ms": 0,
+			"p50": 26.382,
+			"p95": 29.257
+		},
+		"prepare_next": {
+			"count": 760,
+			"max": 13.508,
+			"over_33ms": 0,
+			"over_50ms": 0,
+			"p50": 8.338,
+			"p95": 8.736
+		},
+		"prepared_load": {
+			"count": 2,
+			"max": 36.339,
+			"over_33ms": 1,
+			"over_50ms": 0,
+			"p50": 36.339,
+			"p95": 36.339
+		},
+		"wide_strikes": {
+			"count": 30,
+			"max": 38.333,
+			"over_33ms": 4,
+			"over_50ms": 0,
+			"p50": 29.895,
+			"p95": 34.036
+		}
+	},
+	"half_prepared_load_ms": 762.375,
+	"half_prepared_pieces": 2373,
+	"initial_memory": 484116880.0,
+	"initial_objects": 16724.0,
+	"partial_call_ms": 0.712,
+	"prepare_wall_ms": 6343.948,
+	"prepared_load_ms": 45.639,
+	"renderer": "gl_compatibility",
+	"tag": "gpu_after",
+	"wide_strike_cpu_ms": {
+		"count": 30,
+		"max": 14.881,
+		"over_33ms": 0,
+		"over_50ms": 0,
+		"p50": 11.622,
+		"p95": 14.387
+	}
+}

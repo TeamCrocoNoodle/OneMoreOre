@@ -1,0 +1,79 @@
+{
+  "seed": 102,
+  "policy": "auction",
+  "efficiency": 1.0,
+  "minutes": 118.1,
+  "all_unlocked_minute": 102.9,
+  "milestones": [
+    {
+      "available_seconds": 53.7,
+      "boss": 1,
+      "fight_seconds": 28.7,
+      "manual_ore_seconds": 26.1,
+      "manual_ores_per_health": 3.61,
+      "minute": 47.4,
+      "nodes": 34,
+      "power": 4.42
+    },
+    {
+      "available_seconds": 63.4,
+      "boss": 2,
+      "fight_seconds": 10.7,
+      "manual_ore_seconds": 20.5,
+      "manual_ores_per_health": 5.58,
+      "minute": 63.5,
+      "nodes": 58,
+      "power": 5.78
+    },
+    {
+      "available_seconds": 79.6,
+      "boss": 3,
+      "fight_seconds": 10.4,
+      "manual_ore_seconds": 4.3,
+      "manual_ores_per_health": 30.31,
+      "minute": 77.8,
+      "nodes": 86,
+      "power": 9.52
+    },
+    {
+      "available_seconds": 60.0,
+      "boss": 4,
+      "fight_seconds": 8.1,
+      "manual_ore_seconds": 4.0,
+      "manual_ores_per_health": 36.82,
+      "minute": 83.2,
+      "nodes": 110,
+      "power": 11.76
+    },
+    {
+      "available_seconds": 95.1,
+      "boss": 5,
+      "fight_seconds": 4.5,
+      "manual_ore_seconds": 7.8,
+      "manual_ores_per_health": 18.73,
+      "minute": 91.0,
+      "nodes": 124,
+      "power": 30.0
+    },
+    {
+      "available_seconds": 79.3,
+      "boss": 6,
+      "fight_seconds": 12.3,
+      "manual_ore_seconds": 8.0,
+      "manual_ores_per_health": 18.26,
+      "minute": 99.5,
+      "nodes": 135,
+      "power": 30.0
+    },
+    {
+      "available_seconds": 95.1,
+      "boss": 7,
+      "fight_seconds": 4.5,
+      "manual_ore_seconds": 5.9,
+      "manual_ores_per_health": 24.85,
+      "minute": 117.8,
+      "nodes": 137,
+      "power": 60.0
+    }
+  ]
+}

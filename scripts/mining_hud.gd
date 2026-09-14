@@ -17,6 +17,7 @@ const GOLD := Color("dca75c")
 const BAR_COLOR := Color("df9b41")
 const ModelGallery = preload("res://scripts/ui_model_gallery.gd")
 const AuctionUI = preload("res://scripts/auction_ui.gd")
+const ResponsiveUI = preload("res://scripts/responsive_ui.gd")
 
 class HudCanvas extends Control:
 	var presenter: Node
@@ -183,17 +184,10 @@ func _button(title: String, _primary: bool) -> Button:
 
 
 func _layout() -> void:
-	var logical := get_viewport().get_visible_rect().size
-	# canvas_items + expand keeps the project's 1440 logical width in a
-	# portrait window. Compensate its final screen transform rather than
-	# shrinking a desktop HUD into that much larger logical viewport.
-	var screen_transform := get_viewport().get_final_transform()
-	var pixels_per_unit := maxf(minf(screen_transform.x.length(), screen_transform.y.length()), 0.001)
-	var physical := logical * pixels_per_unit
-	var screen_scale := clampf(minf(physical.x / 1200.0, physical.y / 850.0), 0.85, 1.25)
-	_scale = screen_scale / pixels_per_unit
-	_view = logical / _scale
-	_portrait = physical.x < physical.y
+	var metrics := ResponsiveUI.metrics(get_viewport())
+	_scale = metrics.scale
+	_view = metrics.view
+	_portrait = metrics.portrait
 	_wallet_rect = Rect2(_view.x - 144, 32, 112, 60)
 	_timer_rect = Rect2(32, 32, minf(370, _view.x - 208), 74)
 	var width := 288.0 if not _portrait else minf(_view.x - 40, 540)
@@ -266,35 +260,39 @@ func _layout_modal() -> void:
 		_replay.focus_previous = _upgrades.get_path() if _upgrades_available else _replay.get_path()
 		_replay.focus_next = _upgrades.get_path() if _upgrades_available else _replay.get_path()
 		_upgrades.focus_next = _replay.get_path()
-		_layout_auction_action()
+		_layout_settlement_actions()
 	if is_instance_valid(auction_ui):
 		auction_ui.set_layout(_view, _scale)
 
 
-func _layout_auction_action() -> void:
+func _layout_settlement_actions() -> void:
 	if not is_instance_valid(_auction):
 		return
 	var show_auction: bool = _modal and _settlement_done and _auction_available and not auction_ui.is_open
 	_auction.visible = show_auction
-	if not show_auction:
+	if not _modal:
 		return
-	var width := minf(240, (_modal_rect.size.x - 18) * 0.5)
-	var center := _modal_rect.get_center().x
+	var actions: Array[Button] = []
+	if _upgrades_available: actions.append(_upgrades)
+	actions.append(_replay if _settlement_done else _skip)
+	if show_auction: actions.append(_auction)
+	var width := minf(280 if actions.size() == 1 else 240, (_modal_rect.size.x - 12 * (actions.size() - 1)) / actions.size())
+	var start := _modal_rect.get_center().x - (width * actions.size() + 12 * (actions.size() - 1)) * 0.5
 	var y := _modal_rect.end.y - 60
-	_replay.position = Vector2(center - width - 9, y) * _scale
-	_replay.size = Vector2(width, 60) * _scale
-	_auction.position = Vector2(center + 9, y) * _scale
-	_auction.size = Vector2(width, 60) * _scale
-	_replay.add_theme_font_size_override("font_size", int(18 * _scale))
-	_auction.add_theme_font_size_override("font_size", int(20 * _scale))
-	_replay.focus_neighbor_right = _auction.get_path()
-	_replay.focus_next = _auction.get_path()
-	_auction.focus_neighbor_left = _replay.get_path()
-	_auction.focus_neighbor_right = _upgrades.get_path() if _upgrades_available else _replay.get_path()
-	_auction.focus_neighbor_top = _replay.get_path()
-	_auction.focus_neighbor_bottom = _replay.get_path()
-	_auction.focus_previous = _replay.get_path()
-	_auction.focus_next = _upgrades.get_path() if _upgrades_available else _replay.get_path()
+	_replay.text = "다시 채굴" if width < 140 else "다시 채굴하기"
+	for i in actions.size():
+		var button := actions[i]
+		button.add_theme_font_size_override("font_size", int(_fit_text(button.text, 21 if actions.size() == 1 else 18, width - 16) * _scale))
+		button.position = Vector2(start + i * (width + 12), y) * _scale
+		button.size = Vector2(width, 60) * _scale
+		var previous := actions[posmod(i - 1, actions.size())].get_path()
+		var next := actions[(i + 1) % actions.size()].get_path()
+		button.focus_neighbor_left = previous
+		button.focus_previous = previous
+		button.focus_neighbor_right = next
+		button.focus_next = next
+		button.focus_neighbor_top = button.get_path()
+		button.focus_neighbor_bottom = button.get_path()
 
 
 func begin_round(round_index: int, wallet: int) -> void:
@@ -328,7 +326,7 @@ func begin_round(round_index: int, wallet: int) -> void:
 		_auction.hide()
 		_replay.release_focus()
 		_skip.release_focus()
-		_upgrades.position = Vector2(24, (_satchel_rect.position.y - 68) if _portrait else (_view.y - 84)) * _scale
+		_layout_modal()
 		_canvas.queue_redraw()
 
 
@@ -712,7 +710,7 @@ func _draw_settlement(c: Control) -> void:
 	if _report.has("auction"):
 		var change := int(_report.auction.change_percent)
 		subtitle = "경매 %s%d%% · 기본 정산 %s G" % ["+" if change > 0 else "", change, _number(int(_report.total))]
-	_text(c, subtitle, r.position + Vector2(r.size.x * 0.5, 56 if _compact_settlement else 68), 14, MUTED, false, HORIZONTAL_ALIGNMENT_CENTER)
+	_text(c, subtitle, r.position + Vector2(r.size.x * 0.5, 56 if _compact_settlement else 68), _fit_text(subtitle,14,r.size.x-24), MUTED, false, HORIZONTAL_ALIGNMENT_CENTER)
 	c.draw_rect(_info_rect, Color(0, 0, 0, 0.22))
 	var best := -1
 	for row in _rows:

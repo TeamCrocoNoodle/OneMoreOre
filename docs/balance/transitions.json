@@ -1,0 +1,188 @@
+[
+    {
+        "boss":  1,
+        "before":  {
+                       "boss_failures":  0,
+                       "bulk":  true,
+                       "manual_ore_seconds":  22.7383838383836,
+                       "milestones":  [
+
+                                      ],
+                       "nodes":  39,
+                       "ores":  2.51836232948046,
+                       "remaining_stones":  34,
+                       "rounds":  1,
+                       "stage":  0,
+                       "tool":  "axe"
+                   },
+        "after":  {
+                      "boss_failures":  0,
+                      "bulk":  true,
+                      "manual_ore_seconds":  0.0,
+                      "milestones":  [
+
+                                     ],
+                      "nodes":  39,
+                      "ores":  0.909093987858878,
+                      "remaining_stones":  14,
+                      "rounds":  1,
+                      "stage":  1,
+                      "tool":  "axe"
+                  }
+    },
+    {
+        "boss":  2,
+        "before":  {
+                       "boss_failures":  0,
+                       "bulk":  true,
+                       "manual_ore_seconds":  18.2207070707071,
+                       "milestones":  [
+
+                                      ],
+                       "nodes":  59,
+                       "ores":  4.56153796631199,
+                       "remaining_stones":  69,
+                       "rounds":  1,
+                       "stage":  1,
+                       "tool":  "axe"
+                   },
+        "after":  {
+                      "boss_failures":  0,
+                      "bulk":  true,
+                      "manual_ore_seconds":  0.0,
+                      "milestones":  [
+
+                                     ],
+                      "nodes":  59,
+                      "ores":  0.320623321035855,
+                      "remaining_stones":  218,
+                      "rounds":  1,
+                      "stage":  2,
+                      "tool":  "axe"
+                  }
+    },
+    {
+        "boss":  3,
+        "before":  {
+                       "boss_failures":  0,
+                       "bulk":  true,
+                       "manual_ore_seconds":  10.2439393939392,
+                       "milestones":  [
+
+                                      ],
+                       "nodes":  83,
+                       "ores":  7.83852544176461,
+                       "remaining_stones":  79,
+                       "rounds":  1,
+                       "stage":  2,
+                       "tool":  "hammer"
+                   },
+        "after":  {
+                      "boss_failures":  0,
+                      "bulk":  true,
+                      "manual_ore_seconds":  0.0,
+                      "milestones":  [
+
+                                     ],
+                      "nodes":  83,
+                      "ores":  0.421345985561913,
+                      "remaining_stones":  426,
+                      "rounds":  1,
+                      "stage":  3,
+                      "tool":  "hammer"
+                  }
+    },
+    {
+        "boss":  4,
+        "before":  {
+                       "boss_failures":  0,
+                       "bulk":  true,
+                       "manual_ore_seconds":  16.7571755767835,
+                       "milestones":  [
+
+                                      ],
+                       "nodes":  113,
+                       "ores":  7.83193927028171,
+                       "remaining_stones":  128,
+                       "rounds":  1,
+                       "stage":  3,
+                       "tool":  "jackhammer"
+                   },
+        "after":  {
+                      "boss_failures":  0,
+                      "bulk":  true,
+                      "manual_ore_seconds":  53.14586615273,
+                      "milestones":  [
+
+                                     ],
+                      "nodes":  113,
+                      "ores":  2.39541212765502,
+                      "remaining_stones":  808,
+                      "rounds":  1,
+                      "stage":  4,
+                      "tool":  "jackhammer"
+                  }
+    },
+    {
+        "boss":  5,
+        "before":  {
+                       "boss_failures":  0,
+                       "bulk":  true,
+                       "manual_ore_seconds":  0.0,
+                       "milestones":  [
+
+                                      ],
+                       "nodes":  126,
+                       "ores":  4.30845800003788,
+                       "remaining_stones":  889,
+                       "rounds":  1,
+                       "stage":  4,
+                       "tool":  "jackhammer"
+                   },
+        "after":  {
+                      "boss_failures":  0,
+                      "bulk":  true,
+                      "manual_ore_seconds":  0.0,
+                      "milestones":  [
+
+                                     ],
+                      "nodes":  126,
+                      "ores":  0.623849532187167,
+                      "remaining_stones":  1403,
+                      "rounds":  1,
+                      "stage":  5,
+                      "tool":  "jackhammer"
+                  }
+    },
+    {
+        "boss":  6,
+        "before":  {
+                       "boss_failures":  0,
+                       "bulk":  true,
+                       "manual_ore_seconds":  0.0,
+                       "milestones":  [
+
+                                      ],
+                       "nodes":  136,
+                       "ores":  4.29419013585205,
+                       "remaining_stones":  1770,
+                       "rounds":  1,
+                       "stage":  5,
+                       "tool":  "drill"
+                   },
+        "after":  {
+                      "boss_failures":  0,
+                      "bulk":  true,
+                      "manual_ore_seconds":  0.0,
+                      "milestones":  [
+
+                                     ],
+                      "nodes":  136,
+                      "ores":  0.496576008598566,
+                      "remaining_stones":  3203,
+                      "rounds":  1,
+                      "stage":  6,
+                      "tool":  "drill"
+                  }
+    }
+]

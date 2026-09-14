@@ -1,5 +1,5 @@
 extends Node3D
-## Cursor-anchored main tools: swings, three-shot percussion and rotating drill.
+## Main tools follow the cursor; hand tools swing around their leather grip.
 const ToolVisual = preload("res://scripts/tool_visual.gd")
 const Tools = preload("res://scripts/main_tools.gd")
 
@@ -19,6 +19,8 @@ var _cycle := 0.34
 const STRIKE_TIME := 0.12
 const SWING_DURATION := 0.34
 const PICK_TIP := Vector3(-1.44, -0.36, 0.0)
+const HANDLE_GRIP := Vector3(-0.04, -1.60, 0.0)
+const RECOIL := Vector3(0.055, 0.09, 0.13)
 
 var _camera: Camera3D
 var _target := Vector2.ZERO
@@ -31,8 +33,8 @@ var _contact_position := Vector3.ZERO
 var _contact_rotation := Vector3(0.12, -0.12, 0.52)
 var _contact_override := Vector3.ZERO
 var _has_contact_override := false
-var _wind_position := Vector3.ZERO
 var _wind_rotation := Vector3.ZERO
+var _grip_position := Vector3.ZERO
 var _tool_scale := 0.88
 var _built := false
 var _trail: MeshInstance3D
@@ -106,6 +108,16 @@ func get_tip_local() -> Vector3:
 	return _tip
 
 
+func get_grip_local() -> Vector3:
+	# Model-space grip centers. Keep the authored meshes (and shop previews)
+	# in their original coordinates; the animation supplies the pivot offset.
+	if tool_id == "jackhammer":
+		return Vector3(0, 0.13, 0)
+	if tool_id == "drill":
+		return Vector3(0.64, -0.73, 0)
+	return HANDLE_GRIP
+
+
 func get_cycle_duration() -> float:
 	return _cycle
 
@@ -134,7 +146,6 @@ func swing() -> void:
 	if is_swinging or not is_instance_valid(_camera):
 		return
 	_refresh_rest()
-	_refresh_swing_poses()
 	_elapsed = 0.0
 	impact_index = 0
 	_impact_sent = false
@@ -153,8 +164,8 @@ func cancel_swing() -> void:
 
 
 func _refresh_swing_poses() -> void:
-	# Rebuild around the live cursor, including wind-up and recoil. There is
-	# no screen-corner destination to travel from or return to between hits.
+	# Solve the hand position once from the desired contact pose. The hand
+	# follows the live cursor, but stays in place while the head swings.
 	var contact_depth := 5.7
 	if _has_contact_override:
 		contact_depth = clampf(-_camera.to_local(_contact_override).z - 0.10, 1.0, 5.7)
@@ -165,8 +176,18 @@ func _refresh_swing_poses() -> void:
 	var contact_basis := Basis.from_euler(_contact_rotation)
 	_contact_position = contact - contact_basis * (_tip * _tool_scale)
 	_wind_rotation = _rest_rotation + Vector3(-0.04, -0.04, -0.42)
-	var wind_tip := _camera.to_local(_camera.project_position(_target, 5.7)) + Vector3(-0.18, 0.62, 0.1) * _tool_scale
-	_wind_position = wind_tip - Basis.from_euler(_wind_rotation) * (_tip * _tool_scale)
+	_grip_position = _contact_position + contact_basis * (get_grip_local() * _tool_scale)
+	if not _machine:
+		_rest_position = _position_about_grip(_rest_rotation)
+
+
+func _position_about_grip(pose: Vector3, displacement: Vector3 = Vector3.ZERO) -> Vector3:
+	return _grip_position + displacement - Basis.from_euler(pose) * (get_grip_local() * _tool_scale)
+
+
+func _pose_about_grip(pose: Vector3, displacement: Vector3 = Vector3.ZERO) -> void:
+	rotation = pose
+	position = _position_about_grip(pose, displacement)
 
 
 func _process(delta: float) -> void:
@@ -182,39 +203,38 @@ func _process(delta: float) -> void:
 			_trail.hide()
 		return
 	if is_swinging:
-		_refresh_swing_poses()
 		_elapsed += delta * speed_multiplier
 		if _elapsed < 0.065:
 			var t := smoothstep(0.0, 0.065, _elapsed)
-			position = _rest_position.lerp(_wind_position, t)
-			rotation = _rest_rotation.lerp(_wind_rotation, t)
+			_pose_about_grip(_rest_rotation.lerp(_wind_rotation, t))
 		elif _elapsed < STRIKE_TIME:
 			var t := _strike_fraction(_elapsed)
-			position = _stroke_position(t)
-			rotation = _wind_rotation.lerp(_contact_rotation, t)
+			_pose_about_grip(_wind_rotation.lerp(_contact_rotation, t))
 		elif _elapsed < 0.153:
 			# A short exact hold gives the strike weight before the spring recoil.
 			position = _contact_position
 			rotation = _contact_rotation
 		elif _elapsed < 0.185:
 			var t := smoothstep(0.153, 0.185, _elapsed)
-			position = _contact_position + Vector3(0.055, 0.09, 0.13) * t
-			rotation = _contact_rotation + Vector3(0.0, -0.025, -0.095) * t
+			_pose_about_grip(_contact_rotation + Vector3(0.0, -0.025, -0.095) * t, RECOIL * _tool_scale * t)
 		else:
 			var t := clampf((_elapsed - 0.185) / (SWING_DURATION - 0.185), 0.0, 1.0)
 			var settle := smoothstep(0.0, 1.0, t)
-			position = (_contact_position + Vector3(0.055, 0.09, 0.13)).lerp(_rest_position, settle)
-			rotation = (_contact_rotation + Vector3(0.0, -0.025, -0.095)).lerp(_rest_rotation, settle)
-			rotation.z -= sin(t * PI) * 0.10
+			var pose := (_contact_rotation + Vector3(0.0, -0.025, -0.095)).lerp(_rest_rotation, settle)
+			pose.z -= sin(t * PI) * 0.10
+			_pose_about_grip(pose, RECOIL * _tool_scale * (1.0 - settle))
 		if _elapsed >= STRIKE_TIME and not _impact_sent:
 			_impact_sent = true
 			impact_index = 1
+			# Fast upgrades or a slow frame may skip the hold interval. Emit the
+			# contact at the exact strike pose, just as the powered tools do.
+			position = _contact_position
+			rotation = _contact_rotation
 			impacted.emit()
 		if _elapsed >= SWING_DURATION:
 			is_swinging = false
 	else:
-		position = _rest_position + Vector3(0.0, sin(_idle_time * 1.8) * 0.022, 0.0)
-		rotation = _rest_rotation + Vector3(0.0, 0.0, sin(_idle_time * 1.5) * 0.009)
+		_pose_about_grip(_rest_rotation + Vector3(0.0, 0.0, sin(_idle_time * 1.5) * 0.009), Vector3(0.0, sin(_idle_time * 1.8) * 0.022, 0.0))
 	_update_trail()
 
 
@@ -225,7 +245,6 @@ func _process_machine(delta: float) -> void:
 		position = _rest_position + Vector3(0,sin(_idle_time*2.0)*0.012,0)
 		rotation = _rest_rotation
 		return
-	_refresh_swing_poses()
 	_elapsed += delta * speed_multiplier
 	var first := float(_strike_times[0])
 	var last := float(_strike_times[-1])
@@ -267,9 +286,11 @@ func _refresh_rest() -> void:
 	if _machine:
 		_tool_scale *= 0.84
 	scale = Vector3.ONE * _tool_scale
-	var cursor := _camera.to_local(_camera.project_position(_target, 5.7))
-	# Keep the striking end just above the pointer so its target stays clear.
-	_rest_position = cursor - Basis.from_euler(_rest_rotation) * (_tip * _tool_scale) + Vector3(0.13, 0.22, 0.0) * _tool_scale
+	if _machine:
+		# Powered tools approach along their bit instead of winding up a swing.
+		var cursor := _camera.to_local(_camera.project_position(_target, 5.7))
+		_rest_position = cursor - Basis.from_euler(_rest_rotation) * (_tip * _tool_scale) + Vector3(0.13, 0.22, 0.0) * _tool_scale
+	_refresh_swing_poses()
 
 
 func _strike_fraction(time: float) -> float:
@@ -277,9 +298,8 @@ func _strike_fraction(time: float) -> float:
 
 
 func _stroke_position(t: float) -> Vector3:
-	var first_control := _wind_position + Vector3(-0.10, 0.20, 0.0)
-	var second_control := _contact_position + Vector3(0.55, 0.65, 0.15)
-	return _wind_position.bezier_interpolate(first_control, second_control, _contact_position, t)
+	# Sample the same grip-centered rotation for both the model and its trail.
+	return _position_about_grip(_wind_rotation.lerp(_contact_rotation, t))
 
 
 func _stroke_tip(time: float) -> Vector3:

@@ -85,7 +85,7 @@ func begin_attack(target: int) -> Dictionary:
 func damage(context: Dictionary, target: int, first: bool, ore: bool, health_ratio: float, count: int) -> Dictionary:
 	var bonus := 0.0
 	if amount("combo") > 0:
-		bonus += combo * (0.01 + amount("combo_damage_bonus"))
+		bonus += minf(B.value("combo_damage_cap"),combo * (0.01 + amount("combo_damage_bonus")))
 	if ore:
 		bonus += amount("ore_damage")
 	if first:
@@ -119,6 +119,9 @@ func on_break(critical: bool, executed: bool) -> Dictionary:
 	if executed:
 		gold += int(amount("execute_gold"))
 	return {"gold": gold, "heal": heal}
+
+func bomb_damage() -> float:
+	return maxf(B.value("bomb_damage"),amount("damage")*B.value("bomb_attack_ratio"))*(1.0+amount("bomb_damage_bonus"))
 
 func on_gem() -> Dictionary:
 	if amount("gem_buff") > 0:

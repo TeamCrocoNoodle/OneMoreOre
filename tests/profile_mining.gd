@@ -45,9 +45,9 @@ class ProfileAudio:
 		var started := Time.get_ticks_usec()
 		super._ready()
 		_record("audio_ready_ms", started)
-	func play_hit(strength: float = 1.0, layer: int = 0) -> void:
+	func play_hit(strength: float = 1.0, layer: int = 0, secondary: bool = false) -> void:
 		var started := Time.get_ticks_usec()
-		super.play_hit(strength, layer)
+		super.play_hit(strength, layer, secondary)
 		_record("audio_hit_ms", started)
 	func play_discovery(special: bool, variant: int = 0) -> void:
 		var started := Time.get_ticks_usec()

@@ -51,13 +51,22 @@ var _crack_networks: Array[Dictionary] = []
 var _crack_connectors: Array[Dictionary] = []
 var _face_extent: float = 0.5
 var _containment_planes: Array[Plane] = []
+var _socket_refined := false
+var _socket_axis_min := 0.0
+var _socket_axis_max := 0.0
 var _rng := RandomNumberGenerator.new()
 var _hovered: bool = false
 var _hover_amount: float = 0.0
+var _attack_preview := 0.0
 var _flash: float = 0.0
 var _impact: float = 0.0
 var _impact_time: float = 0.0
 var _cover_hit_count: int = 0
+var _pending_visual_hits: Array[Dictionary] = []
+var visual_update_queued := false
+var occlusion_angle := 0.5
+var occlusion_inner_radius := 0.0
+var occlusion_outer_radius := 1.0
 var _stone_seed: int = 1
 
 
@@ -66,6 +75,11 @@ func configure(data: Dictionary, p_layer_index: int) -> void:
 	base_position = data["center"]
 	position = base_position
 	direction = data["normal"]
+	occlusion_inner_radius = float(data.get("inner_radius",0.0))
+	occlusion_outer_radius = float(data.get("radius",base_position.length()))+float(data.get("thickness",0.3))*.05
+	if data.has("footprint_directions"):
+		occlusion_angle = 0.0
+		for corner: Vector3 in data.footprint_directions: occlusion_angle = maxf(occlusion_angle,acos(clampf(direction.dot(corner),-1,1)))
 	stone_color = data["color"]
 	face_points = data["face_points"]
 	face_center = data.get("face_center", _average_points(face_points))
@@ -76,8 +90,8 @@ func configure(data: Dictionary, p_layer_index: int) -> void:
 	_face_extent /= maxf(float(face_points.size()), 1.0)
 	_rng.seed = data.get("seed", 1)
 	_stone_seed = int(data.get("seed", 1))
-	# Larger rocks contain hundreds of pieces: depth adds modest resistance
-	# while every individual plate still breaks in a short, satisfying burst.
+	# Production supplies stage-scaled durability; previews and geometry tests
+	# retain a small fallback health when no campaign profile is supplied.
 	var toughness := 3.0 if layer_index >= 2 else 2.0
 	if _rng.randi_range(0, 4) == 0:
 		toughness += 1.0
@@ -99,9 +113,25 @@ func configure(data: Dictionary, p_layer_index: int) -> void:
 	_shape = CollisionShape3D.new()
 	_shape.shape = data["collision"]
 	add_child(_shape)
-	_configure_gem_socket(data["mesh"])
-	_crack_wrap = CrackWrap.new()
-	_crack_wrap.configure(_fracture_source_vertices, gem_socket_center)
+	if data.has("socket_cache"):
+		var socket: Dictionary = data.socket_cache
+		_containment_planes.assign(socket.planes)
+		_fracture_source_vertices = socket.vertices
+		_fracture_source_mesh = data.mesh
+		_fracture_source_mesh.changed.connect(_invalidate_fracture_source)
+		gem_socket_center = socket.center
+		gem_socket_radius = socket.radius
+		_socket_axis_min = socket.axis_min
+		_socket_axis_max = socket.axis_max
+		_socket_refined = socket.refined
+	else:
+		_configure_gem_socket(data["mesh"])
+	# Buried, untouched stones need no surface-walking graph yet. Building
+	# thousands of those graphs at spawn would delay every late-game ore.
+	set_process(false)
+
+func _ensure_crack_mesh() -> void:
+	if is_instance_valid(_crack_mesh): return
 	_crack_material = StandardMaterial3D.new()
 	_crack_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_crack_material.albedo_color = Color.WHITE
@@ -112,7 +142,6 @@ func configure(data: Dictionary, p_layer_index: int) -> void:
 	_crack_mesh.material_override = _crack_material
 	_crack_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mesh_instance.add_child(_crack_mesh)
-	set_process(false)
 
 
 func configure_special(kind: String) -> void:
@@ -148,6 +177,11 @@ func configure_special(kind: String) -> void:
 	marker.material_override = material
 	marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(marker)
+
+func _ensure_crack_wrap() -> void:
+	if _crack_wrap != null: return
+	_crack_wrap = CrackWrap.new()
+	_crack_wrap.configure(_fracture_source_vertices,gem_socket_center)
 
 func get_containment_planes() -> Array[Plane]:
 	# Outward-facing planes from the actual rendered triangles. A point is
@@ -203,10 +237,23 @@ func _configure_gem_socket(mesh: ArrayMesh) -> void:
 	if _containment_planes.is_empty():
 		gem_socket_radius = 0.0
 		return
+	_socket_axis_min = axis_min
+	_socket_axis_max = axis_max
+	_socket_refined = false
+	# Most of a dense ore is plain stone. A conservative interior point is
+	# enough for cracks; expensive best-fit gem placement is only needed for
+	# the few stones that are actually chosen to hold a gem.
+	gem_socket_center = direction*((axis_min+axis_max)*.5)
+	gem_socket_radius = maxf(_socket_clearance(gem_socket_center)-.006,0.0)
+	if gem_socket_radius <= .025: _refine_gem_socket()
+
+func _refine_gem_socket() -> void:
+	if _socket_refined or _containment_planes.is_empty(): return
+	_socket_refined = true
 	# Clearance is concave along a line. A short bounded search along the
 	# plate's radial axis starts near the widest region of its true thickness.
-	var left := axis_min
-	var right := axis_max
+	var left := _socket_axis_min
+	var right := _socket_axis_max
 	for iteration in 22:
 		var first := lerpf(left, right, 1.0 / 3.0)
 		var second := lerpf(left, right, 2.0 / 3.0)
@@ -221,9 +268,9 @@ func _configure_gem_socket(mesh: ArrayMesh) -> void:
 		tangent = direction.cross(Vector3.RIGHT).normalized()
 	var bitangent := direction.cross(tangent).normalized()
 	var search_axes: Array[Vector3] = [direction, tangent, bitangent]
-	var step := minf((axis_max - axis_min) * 0.14, _face_extent * 0.18)
+	var step := minf((_socket_axis_max - _socket_axis_min) * 0.14, _face_extent * 0.18)
 	# Modest local refinement helps irregular narrow plates without a general
-	# optimizer or physics queries for every one of the 322 static chunks.
+	# optimizer or physics queries across the rest of the ore.
 	for iteration in 8:
 		for sweep in 2:
 			for axis in search_axes:
@@ -241,6 +288,7 @@ func _configure_gem_socket(mesh: ArrayMesh) -> void:
 	# Intersecting all oriented triangle half-spaces is conservative even at
 	# the plate's concave inner cap; the result also stays inside its hull collider.
 	gem_socket_radius = maxf(clearance - 0.006, 0.0)
+	if _crack_wrap != null: _crack_wrap.configure(_fracture_source_vertices,gem_socket_center)
 
 
 func _invalidate_fracture_source() -> void:
@@ -257,6 +305,7 @@ func _socket_clearance(point: Vector3) -> float:
 
 
 func contain_gem(jewel: StaticBody3D) -> bool:
+	_refine_gem_socket()
 	if destroyed or contained_gem != null or gem_socket_radius <= 0.025:
 		return false
 	if not is_instance_valid(jewel) or jewel.is_queued_for_deletion() or not jewel.has_method("embed_in_chunk"):
@@ -318,6 +367,7 @@ func configure_gem_cover(jewel: StaticBody3D, tier: int) -> void:
 		light_node.name = "HiddenGemLight"
 		mesh_instance.add_child(light_node)
 	light_node.call("clear")
+	_ensure_crack_wrap()
 	light_node.call("configure", face_points, face_center, direction, _stone_seed, gem_socket_center, true, _crack_wrap)
 	set_process(true)
 
@@ -359,15 +409,46 @@ func set_hovered(value: bool) -> void:
 	if _hovered == value or destroyed:
 		return
 	_hovered = value
+	if value: flush_damage_visuals()
 	set_process(true)
 
 
-func hit(damage: float, point: Vector3) -> bool:
+func set_attack_preview(weight: float) -> void:
+	var value := clampf(weight, 0.0, 1.0) if not destroyed else 0.0
+	if is_equal_approx(_attack_preview, value):
+		return
+	_attack_preview = value
+	_material.set_shader_parameter("attack_preview", value)
+
+
+func hit(damage: float, point: Vector3, fracture_detail: bool = true) -> bool:
 	if destroyed:
 		return true
 	if is_gem_cover and not _cover_target_is_active():
 		release_gem_cover()
 	health = maxf(health - damage, 0.0)
+	if not fracture_detail:
+		# A secondary instant kill has no intact frame to display. Avoid building
+		# a surface-walking crack graph and uploading an invisible final light.
+		impact_count += 1
+		latest_impact_local = mesh_instance.to_local(point)
+		if is_gem_cover: _cover_hit_count += 1
+		if health <= 0.0:
+			_pending_visual_hits.clear()
+			if is_instance_valid(light_node): light_node.current_tier = get_revealed_tier()
+			destroyed = true
+			hide()
+			collision_layer = 0
+			set_process(false)
+			return true
+		_pending_visual_hits.append({"point":latest_impact_local,"damage":damage,"number":impact_count})
+		if _pending_visual_hits.size() > 2: _pending_visual_hits.pop_front()
+		_flash = 1.0
+		_impact = minf(.085+damage*.012,.14)
+		_impact_time = 0.0
+		set_process(true)
+		return false
+	_apply_pending_visual_hits()
 	_record_impact(point, damage)
 	_redraw_cracks(1.0 - health / max_health)
 	_flash = 1.0
@@ -386,6 +467,23 @@ func hit(damage: float, point: Vector3) -> bool:
 		_shape.set_deferred("disabled", true)
 		return true
 	return false
+
+func _apply_pending_visual_hits() -> void:
+	var count := impact_count
+	for pending in _pending_visual_hits:
+		impact_count = int(pending.number)-1
+		_record_impact(mesh_instance.to_global(pending.point),float(pending.damage))
+	impact_count = count
+	_pending_visual_hits.clear()
+
+func flush_damage_visuals() -> void:
+	visual_update_queued = false
+	if destroyed or _pending_visual_hits.is_empty(): return
+	_apply_pending_visual_hits()
+	_redraw_cracks(1.0-health/max_health)
+	if is_gem_cover and is_instance_valid(light_node):
+		light_node.set_cracks(get_surface_crack_segments(),latest_impact_local)
+		light_node.pulse(get_revealed_tier(),1.0-health/max_health)
 
 
 func _process(delta: float) -> void:
@@ -507,6 +605,7 @@ func _record_impact(world_point: Vector3, damage: float) -> void:
 	impact_count += 1
 	# The rendered stone recoils independently of its body. Project through
 	# the mesh transform so both rotation and its current recoil are respected.
+	_ensure_crack_wrap()
 	var contact: Dictionary = _crack_wrap.get_surface_hit(mesh_instance.to_local(world_point))
 	latest_impact_local = contact.get("point", _clamp_to_face(mesh_instance.to_local(world_point)))
 	_impact_reference = _clamp_to_face(latest_impact_local)
@@ -733,6 +832,7 @@ func _redraw_cracks(damage_ratio: float) -> void:
 
 
 func _draw_crack_surface() -> void:
+	_ensure_crack_mesh()
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
 	_crack_contours.clear()

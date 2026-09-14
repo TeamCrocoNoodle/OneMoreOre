@@ -4,9 +4,16 @@ extends RefCounted
 ## One solid mineral cut: broad irregular facets, a small flat crown, and a
 ## substantial oblique base. Bevels are real convex geometry, never wire lines.
 const EPS := 0.00001
+static var _geometry_cache: Dictionary = {}
 
 
 static func build(variant: int, special: bool) -> Dictionary:
+	var key := posmod(variant,6)+(6 if special else 0)
+	# Geometry is immutable; each Gem owns its material, transform and collider.
+	if not _geometry_cache.has(key): _geometry_cache[key] = _build_geometry(posmod(variant,6),special)
+	return _geometry_cache[key].duplicate()
+
+static func _build_geometry(variant: int, special: bool) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 82463 + posmod(variant, 6) * 1597 + (733 if special else 0)
 	var points := _profile_points(rng)

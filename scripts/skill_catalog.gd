@@ -65,6 +65,7 @@ func _attack() -> void:
 	_add("streak", "집중 채굴", "같은 돌조각을 연속해서 때릴 때마다 피해량 +" + B.percent("streak_damage") + "\n최대 %d회 중첩. 다른 조각을 직접 때리면 초기화됩니다." % int(B.value("streak_cap")), "streak/power", c, Vector2i(-8, 23), {"streak": 1.0}, "first_hit")
 	_step("range_4", "공격 범위", "range", "range_bonus", "reach", c, Vector2i(-8, 29), "finisher", 4)
 	_add("combo", "콤보", "돌조각 10개 파괴마다 콤보 +1. 스택당 공격력 +1%%.\n%s초 안에 돌을 부수면 시간이 갱신됩니다. 콤보가 높을수록 제한 시간이 짧아지며, 시간이 끝나면 초기화됩니다." % B.value("combo_duration"), "combo", c, Vector2i(-11, 8), {"combo": 1.0}, "power")
+	nodes[-1].description += "\n콤보 공격력 보너스는 최대 +"+B.percent("combo_damage_cap")+"입니다."
 	_chain("combo_power", "콤보 스택당 공격력 보너스", "combo_step", "combo_damage_bonus", "combo/power", c, 2, Vector2i(-12, 9), Vector2i.DOWN, "combo")
 	_chain("combo_time", "콤보 유지 시간", "combo_time_step", "combo_time_bonus", "combo/time", c, 2, Vector2i(-10, 9), Vector2i.DOWN, "combo", false)
 	_add("combo_speed", "콤보 가속", "콤보 %d스택 초과 시 공격 속도 +" % int(B.value("combo_speed_threshold")) + B.percent("combo_speed"), "combo/speed", c, Vector2i(-12, 12), {"combo_speed": 1.0}, "combo_power_2")
@@ -83,6 +84,7 @@ func _attack() -> void:
 	_add("extra_critical", "연속 치명타", "5번째 기본 공격이 치명타이고 추가타격이 발동되면, 충전된 추가타격이 모두 치명타가 됩니다.\n치명타와 추가타격을 모두 습득해야 발동합니다.", "extra/critical", c, Vector2i(-1, 14), {"extra_critical": 1.0}, "extra_chance_3")
 	_link("extra_critical", "crit_chance_3")
 	_add("execute", "처형", "처음 공격받는 돌조각이 0.5% 확률로 즉시 파괴됩니다.", "execute", c, Vector2i(-4, 23), {"execute": 0.005}, "first_hit")
+	nodes[-1].description += "\n보스 돌조각에는 적용되지 않습니다."
 	_add("execute_chance_1", "처형 확률", "처형 확률 +0.5%", "execute/chance", c, Vector2i(-3, 22), {"execute": 0.005}, "execute", 1)
 	_add("execute_chance_2", "처형 확률", "처형 확률 +1%", "execute/chance", c, Vector2i(-2, 22), {"execute": 0.01}, "execute_chance_1", 2)
 	_add("execute_gold", "처형의 대가", "처형으로 돌조각을 부술 때 %d Gold를 얻습니다." % int(B.value("execute_gold")), "execute/gold", c, Vector2i(-3, 24), {"execute_gold": B.value("execute_gold")}, "execute")
@@ -141,7 +143,7 @@ func _ore() -> void:
 	_step("rare_3", "희귀한 광물 등장 확률", "rare_spawn", "rare_spawn_bonus", "rare/chance", c, Vector2i(5, -4), "rare_2", 3)
 	_special("resonance", "공명", "피해를 받을 때마다 인접한 돌조각에 받은 피해량의 " + B.percent("resonance_damage") + "만큼 피해를 줍니다.", Vector2i(4, -5), "ore_spawn_2", 3, "resonance_damage_step", "resonance_damage_bonus", "피해량")
 	_special("healing", "회복", "파괴될 때 체력을 %s 회복합니다." % B.value("healing_amount"), Vector2i(6, -5), "ore_spawn_3", 2, "healing_amount_step", "healing_amount_bonus", "회복량")
-	_special("bomb", "폭탄", "파괴될 때 인접한 돌조각에 %s 피해를 줍니다." % B.value("bomb_damage"), Vector2i(8, -5), "ore_spawn_4", 3, "bomb_damage_step", "bomb_damage_bonus", "피해량")
+	_special("bomb", "폭탄", "파괴될 때 인접한 돌조각에 피해를 줍니다.\n기본 %s 또는 주 도구 공격력의 %s 중 큰 값을 사용합니다." % [B.value("bomb_damage"),B.percent("bomb_attack_ratio")], Vector2i(8, -5), "ore_spawn_4", 3, "bomb_damage_step", "bomb_damage_bonus", "피해량")
 	_special("gold_stone", "황금", "파괴될 때 %d Gold를 얻습니다." % int(B.value("gold_stone_amount")), Vector2i(10, -5), "ore_spawn_5", 2, "gold_stone_step", "gold_stone_bonus", "Gold량")
 
 func _special(id: String, title: String, description: String, grid: Vector2i, parent: String, count: int, key: String, effect: String, label: String) -> void:

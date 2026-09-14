@@ -56,7 +56,8 @@ func _check_distribution() -> void:
 func _paid_round(state: RefCounted, wallet: int = 777) -> void:
 	state.wallet_gold = wallet
 	state.start()
-	for i in 11:
+	# Keep the deliberately odd 101-G stake when the gem price table changes.
+	for i in 101-2*Round.GEM_GOLD[0]-Round.GEM_GOLD[1]:
 		state.record_stone()
 	for i in 2:
 		state.record_gem(0)
@@ -108,7 +109,7 @@ func _check_ledger() -> void:
 func _settle_game() -> void:
 	game.round_state.wallet_gold = 777
 	game.round_state.start()
-	for i in 11:
+	for i in 101-2*Round.GEM_GOLD[0]-Round.GEM_GOLD[1]:
 		game.round_state.record_stone()
 	for i in 2:
 		game.round_state.record_gem(0)

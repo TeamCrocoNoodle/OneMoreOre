@@ -139,6 +139,7 @@ func shed_fragments(fragments: Array[Dictionary], material: Material, placement:
 		# stone color and the geometry's pale cut faces, without a permanent flash.
 		cut_material.set_shader_parameter("hit_flash", 0.0)
 		cut_material.set_shader_parameter("hovered", 0.0)
+		cut_material.set_shader_parameter("attack_preview", 0.0)
 	_fragment_batch_id += 1
 	for i in range(mini(valid_fragments.size(), FRAGMENT_CAPACITY)):
 		var fragment := valid_fragments[i]
@@ -196,15 +197,8 @@ func shed_fragments(fragments: Array[Dictionary], material: Material, placement:
 
 func clear_fragments() -> void:
 	for fragment in loose_chunks:
-		var node: MeshInstance3D = fragment.node
-		if is_instance_valid(node):
-			node.hide()
-			node.queue_free()
+		_recycle_fragment(fragment)
 	loose_chunks.clear()
-	for node in _fragment_pool:
-		if is_instance_valid(node):
-			node.queue_free()
-	_fragment_pool.clear()
 	_fragment_batch_id = 0
 	if particles.is_empty() and rings.is_empty():
 		set_process(false)
@@ -261,6 +255,8 @@ func skill_burst(point: Vector3, normal: Vector3, color: Color, radius: float) -
 
 func _ring(point: Vector3, normal: Vector3, broken: bool) -> void:
 	set_process(true)
+	if rings.size() >= RING_POOL_CAPACITY:
+		_recycle_ring(rings.pop_front().node)
 	var node: MeshInstance3D = _ring_pool.pop_back() if not _ring_pool.is_empty() else _make_ring_node()
 	node.position = point
 	node.quaternion = Quaternion(Vector3.UP, normal.normalized())
@@ -338,7 +334,8 @@ func _process(delta: float) -> void:
 				p.velocity *= Vector3(0.62, -0.32, 0.62)
 				p.spin *= 0.64
 		var spin: Vector3 = p.spin
-		p.rotation = (Quaternion(spin.normalized(), spin.length() * delta) * Quaternion(p.rotation)).normalized()
+		if spin.length_squared() > 0.00000001:
+			p.rotation = (Quaternion(spin.normalized(), spin.length() * delta) * Quaternion(p.rotation)).normalized()
 		var size := 1.0 - smoothstep(float(p.life) * 0.61, float(p.life), float(p.age))
 		var basis := (Basis(Quaternion(p.rotation)) * Basis(p.base_basis)).scaled(Vector3.ONE * maxf(size, 0.001))
 		p.node.global_transform = Transform3D(basis, Vector3(p.position) + separation)

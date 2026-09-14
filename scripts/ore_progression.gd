@@ -1,16 +1,16 @@
 extends RefCounted
 const Balance = preload("res://scripts/game_balance.gd")
 const Skills = preload("res://scripts/skill_balance.gd")
-## Permanent within the run: only committed mining income drives ore growth.
-## Boss victories cap rarity; mining income controls the size within that cap.
+## Campaign victories advance ore and rarity together, regardless of mining income.
+## Without a campaign (cleared_bosses = -1), committed income selects the ore.
 const STAGES: Array[Dictionary] = [
-	{"id":"weathered","title":"풍화 원석","gold":Balance.ORE_GOLD[0],"radius":2.6,"layers":[38,24,12],"gems":[0,0,0,1],"weights":[75,25,0,0,0,0],"gem_cap":Balance.GEM_CAP[0],"color":Color("7b8081"),"accent":Color("b1b7b8"),"theme":0,"bevel":1.0,"relief":1.0,"face":0.925,"corners":1.0},
-	{"id":"moss","title":"이끼 광맥","gold":Balance.ORE_GOLD[1],"radius":3.0,"layers":[50,34,18],"gems":[0,0,0,0,1,1,2],"weights":[52,36,12,0,0,0],"gem_cap":Balance.GEM_CAP[1],"color":Color("697957"),"accent":Color("9cab6a"),"theme":1,"bevel":1.0,"relief":1.1,"face":0.915,"corners":1.2},
-	{"id":"frost","title":"서리 광맥","gold":Balance.ORE_GOLD[2],"radius":3.5,"layers":[64,46,30,16],"gems":[0,0,0,1,1,1,2,2,3],"weights":[30,40,26,4,0,0],"gem_cap":Balance.GEM_CAP[2],"color":Color("557e96"),"accent":Color("abd9dc"),"theme":2,"bevel":0.65,"relief":0.7,"face":0.950,"corners":0.65},
-	{"id":"pyrite","title":"황철 광맥","gold":Balance.ORE_GOLD[3],"radius":4.0,"layers":[82,62,42,24],"gems":[0,0,1,1,1,2,2,2,3,3,3,4],"weights":[17,29,36,15,3,0],"gem_cap":Balance.GEM_CAP[3],"color":Color("946b3f"),"accent":Color("d4ad61"),"theme":3,"bevel":1.2,"relief":1.0,"face":0.930,"corners":0.7},
-	{"id":"obsidian","title":"흑요 광맥","gold":Balance.ORE_GOLD[4],"radius":4.6,"layers":[104,82,60,40,22],"gems":[0,1,1,1,2,2,2,2,3,3,3,3,4,4,4,5],"weights":[8,16,38,28,9,1],"gem_cap":Balance.GEM_CAP[4],"color":Color("534664"),"accent":Color("a18baf"),"theme":4,"bevel":0.48,"relief":0.8,"face":0.957,"corners":0.55},
-	{"id":"primordial","title":"태고의 화산암","gold":Balance.ORE_GOLD[5],"radius":5.2,"layers":[126,102,80,58,38,20],"gems":[0,1,1,2,2,2,2,2,3,3,3,3,3,4,4,4,4,4,5,5,5,5],"weights":[4,8,24,36,22,6],"gem_cap":Balance.GEM_CAP[5],"color":Color("574143"),"accent":Color("b97859"),"theme":5,"bevel":0.85,"relief":1.25,"face":0.913,"corners":1.15},
-	{"id":"exotic","title":"이형의 광맥","gold":Balance.ORE_GOLD[6],"radius":5.8,"layers":[140,116,92,70,48,30,16],"gems":[0,1,2,2,2,3,3,3,3,3,4,4,4,4,4,4,4,5,5,5,5,5,5,6,6,6,6,6,6],"weights":[2,4,12,25,30,20,7],"gem_cap":Balance.GEM_CAP[6],"color":Color("6d647d"),"accent":Color("e9e0f5"),"theme":6,"bevel":0.60,"relief":0.80,"face":0.946,"corners":0.65},
+	{"id":"weathered","title":"풍화 원석","gold":Balance.ORE_GOLD[0],"radius":Balance.ORE_RADII[0],"layers":Balance.ORE_LAYERS[0],"gems":[0,0,0,1],"weights":[75,25,0,0,0,0],"gem_cap":Balance.GEM_CAP[0],"color":Color("7b8081"),"accent":Color("b1b7b8"),"theme":0,"bevel":1.0,"relief":1.0,"face":0.925,"corners":1.0},
+	{"id":"moss","title":"이끼 광맥","gold":Balance.ORE_GOLD[1],"radius":Balance.ORE_RADII[1],"layers":Balance.ORE_LAYERS[1],"gems":[0,0,0,0,1,1,2],"weights":[52,36,12,0,0,0],"gem_cap":Balance.GEM_CAP[1],"color":Color("697957"),"accent":Color("9cab6a"),"theme":1,"bevel":1.0,"relief":1.1,"face":0.915,"corners":1.2},
+	{"id":"frost","title":"서리 광맥","gold":Balance.ORE_GOLD[2],"radius":Balance.ORE_RADII[2],"layers":Balance.ORE_LAYERS[2],"gems":[0,0,0,1,1,1,2,2,3],"weights":[30,40,26,4,0,0],"gem_cap":Balance.GEM_CAP[2],"color":Color("557e96"),"accent":Color("abd9dc"),"theme":2,"bevel":0.65,"relief":0.7,"face":0.950,"corners":0.65},
+	{"id":"pyrite","title":"황철 광맥","gold":Balance.ORE_GOLD[3],"radius":Balance.ORE_RADII[3],"layers":Balance.ORE_LAYERS[3],"gems":[0,0,1,1,1,2,2,2,3,3,3,4],"weights":[17,29,36,15,3,0],"gem_cap":Balance.GEM_CAP[3],"color":Color("946b3f"),"accent":Color("d4ad61"),"theme":3,"bevel":1.2,"relief":1.0,"face":0.930,"corners":0.7},
+	{"id":"obsidian","title":"흑요 광맥","gold":Balance.ORE_GOLD[4],"radius":Balance.ORE_RADII[4],"layers":Balance.ORE_LAYERS[4],"gems":[0,1,1,1,2,2,2,2,3,3,3,3,4,4,4,5],"weights":[8,16,38,28,9,1],"gem_cap":Balance.GEM_CAP[4],"color":Color("534664"),"accent":Color("a18baf"),"theme":4,"bevel":0.48,"relief":0.8,"face":0.957,"corners":0.55},
+	{"id":"primordial","title":"태고의 화산암","gold":Balance.ORE_GOLD[5],"radius":Balance.ORE_RADII[5],"layers":Balance.ORE_LAYERS[5],"gems":[0,1,1,2,2,2,2,2,3,3,3,3,3,4,4,4,4,4,5,5,5,5],"weights":[4,8,24,36,22,6],"gem_cap":Balance.GEM_CAP[5],"color":Color("574143"),"accent":Color("b97859"),"theme":5,"bevel":0.85,"relief":1.25,"face":0.913,"corners":1.15},
+	{"id":"exotic","title":"이형의 광맥","gold":Balance.ORE_GOLD[6],"radius":Balance.ORE_RADII[6],"layers":Balance.ORE_LAYERS[6],"gems":[0,1,2,2,2,3,3,3,3,3,4,4,4,4,4,4,4,5,5,5,5,5,5,6,6,6,6,6,6],"weights":[2,4,12,25,30,20,7],"gem_cap":Balance.GEM_CAP[6],"color":Color("6d647d"),"accent":Color("e9e0f5"),"theme":6,"bevel":0.60,"relief":0.80,"face":0.946,"corners":0.65},
 ]
 
 static func stage_for(gold: int) -> int:
@@ -19,11 +19,11 @@ static func stage_for(gold: int) -> int:
 		if gold >= int(STAGES[i].gold): stage = i
 	return stage
 
-static func profile(gold: int, unlocked: int = 6) -> Dictionary:
-	var index := mini(stage_for(gold),clampi(unlocked,0,STAGES.size()-1))
+static func profile(gold: int, cleared_bosses: int = -1) -> Dictionary:
+	var index := stage_for(gold) if cleared_bosses < 0 else clampi(cleared_bosses,0,STAGES.size()-1)
 	var result := STAGES[index].duplicate(true)
 	result["index"] = index
-	result["rarity_cap"] = clampi(unlocked,0,6)
+	result["rarity_cap"] = 6 if cleared_bosses < 0 else clampi(cleared_bosses,0,6)
 	for i in result.gems.size(): result.gems[i] = mini(result.gems[i],result.rarity_cap)
 	result["stone_health"] = Balance.STONE_HEALTH[index]
 	result["cover_health"] = Balance.COVER_HEALTH[index]
@@ -33,8 +33,8 @@ static func profile(gold: int, unlocked: int = 6) -> Dictionary:
 	result["thickness"] = float(result.stride)+0.08
 	return result
 
-static func status(gold: int, unlocked: int = 6) -> Dictionary:
-	var info := profile(gold,unlocked)
+static func status(gold: int, cleared_bosses: int = -1) -> Dictionary:
+	var info := profile(gold,cleared_bosses)
 	var last: bool = info.index == STAGES.size()-1
 	var next_gold: int = STAGES[mini(info.index+1,STAGES.size()-1)].gold
 	info["earned"] = maxi(0,gold)

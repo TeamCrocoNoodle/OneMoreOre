@@ -95,6 +95,8 @@ func _validate_combat() -> void:
 	_check(r.combo == 6 and r.combo_remaining < early and r.speed(30, 30) > 1.0, "Growing combo shortens its refresh deadline and unlocks speed above five stacks")
 	var damage: Dictionary = r.damage({}, 1, false, false, 1.0, 1)
 	_check(is_equal_approx(damage.damage, 1.06), "Six stacks add six percent base attack")
+	for i in 10000: r.on_break(false,false)
+	_check(r.combo > 1000 and is_equal_approx(r.damage({},1,false,false,1,1).damage,3.0), "Thousands of chained breaks retain the visible combo while damage stops at +200 percent")
 	r.advance(10.0)
 	_check(r.combo == 0 and r.combo_kills == 0, "Combo and partial stack progress expire")
 	r = _runtime({"critical": 1.0, "crit_chance_bonus": 1.0, "extra": 1.0, "extra_chance_bonus": 1.0, "extra_count_bonus": 3.0, "extra_critical": 1.0})
@@ -224,6 +226,22 @@ func _validate_game() -> void:
 			neighbors_damaged += 1
 	_check(neighbors_damaged > 0 and neighbors_damaged <= 3, "The real world applies at most three reaction targets per frame")
 	game._reactions.clear()
+	var executed: StaticBody3D = game.chunks[3]
+	executed.configure_special("resonance")
+	executed.health = 1000000.0
+	executed.max_health = executed.health
+	executed.impact_count = 0
+	game.upgrade_stats.execute = 1.0
+	game.mining_skills.configure(game.upgrade_stats)
+	var execution_context := {}
+	point = executed.to_global(executed.face_center)
+	game._damage_chunk({"collider":executed,"position":point,"normal":executed.direction},Vector2(400,350),execution_context)
+	_check(executed.destroyed and is_equal_approx(float(execution_context.primary_damage),1.0), "Execution destroys its own million-health target without inflating primary shock damage")
+	for reaction: Dictionary in game._reactions:
+		_check(float(reaction.damage) <= 1.0, "Execution cannot copy a target's full health into neighboring resonance damage")
+	game._reactions.clear()
+	game.upgrade_stats.execute = 0.0
+	game.mining_skills.configure(game.upgrade_stats)
 	var healer: StaticBody3D = game.chunks[1]
 	healer.configure_special("healing")
 	healer.health = 0.25
@@ -245,8 +263,8 @@ func _validate_game() -> void:
 	_check(not game._reactions.is_empty(), "Destroying a bomb queues real neighboring damage")
 	game._spawn_rock(98174)
 	_check(game._reactions.is_empty() and game.round_state.remaining == before + 1.0, "Changing rocks clears reactions without resetting round stamina")
-	# This fixture verifies unlocked rare-roll upgrades; boss tests cover rank caps.
-	game.campaign.cleared = 6
+	# Isolate rare-roll upgrades on starter ore; boss tests cover campaign growth and rank caps.
+	game.campaign_enabled = false
 	game.upgrade_stats.rare_spawn_bonus = 1.0
 	game.upgrade_stats.brilliant = 1.0
 	game.upgrade_stats.brilliant_chance_bonus = 1.0

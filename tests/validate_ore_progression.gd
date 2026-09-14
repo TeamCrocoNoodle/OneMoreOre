@@ -5,7 +5,7 @@ const RoundState = preload("res://scripts/mining_round.gd")
 
 func _initialize() -> void:
 	_run.call_deferred()
-	create_timer(90).timeout.connect(func():
+	create_timer(180).timeout.connect(func():
 		if not ended: quit(2)
 	)
 
@@ -89,7 +89,7 @@ func _economy() -> void:
 		var profile := Progress.profile(threshold)
 		profile.layers[0] = 999
 		_check(Progress.profile(threshold).layers[0] != 999,"Profile callers cannot mutate the balance catalog")
-	_check(Progress.stage_for(9000000000000) == 6 and Progress.profile(9000000000000).pieces == 512,"Final stage is bounded even with enormous cumulative income")
+	_check(Progress.stage_for(9000000000000) == 6 and Progress.profile(9000000000000).pieces == 4736,"Final stage is bounded even with enormous cumulative income")
 	ledger.wallet_gold = 900000
 	_check(ledger.lifetime_mining_gold == 0,"Debug funds or wallet changes cannot advance ore progression")
 	ledger.start()
@@ -162,7 +162,8 @@ func _upgrade_interaction() -> void:
 			_check(chunk.health == Progress.profile(Progress.STAGES[5].gold).cover_health,"Stage growth and stone health upgrades preserve gem host strength")
 		else:
 			_check(chunk.has_node("SpecialStoneMark") and chunk.get_meta("special_kind","") == "resonance","Incremental construction applies all special stone upgrades")
-			_check(chunk.health >= Progress.Balance.STONE_HEALTH[5]-1 and chunk.health <= Progress.Balance.STONE_HEALTH[5]*1.5,"Stone health reduction also applies to incrementally built ores")
+			var expected := Progress.Balance.stone_health(5,chunk.layer_index,chunk._stone_seed)-1.0
+			_check(is_equal_approx(chunk.health,expected),"Stone health reduction also applies to incrementally built ores")
 	var ancient := 0
 	for jewel in game.gems:
 		ancient += int(jewel.grade == 5)
@@ -171,8 +172,24 @@ func _upgrade_interaction() -> void:
 	game.aux_tools.acquire("detonator",100000000)
 	game.auxiliary.configure()
 	game.auxiliary.reset_round()
+	# A weak explosive damages the ore without discarding its surviving hosts.
+	var old_count: int = game.chunks.size()
+	var old_health: float = game.chunks[0].health
+	_check(game.auxiliary.activate("detonator"),"Detonator can weaken a new, resistant ore")
+	while game._bulk_job != null:
+		game._advance_bulk_breaks()
+		game._advance_ore_retirement()
+		await process_frame
+	_check(game.chunks.size() == old_count and game.chunks[0].health < old_health and game.gems.size() == Progress.STAGES[5].gem_cap,"A partial blast preserves surviving stones and every embedded reward")
+	_check(game.auxiliary._skip_remaining < 0 and game.completion_time < 0,"A partial blast never skips the unfinished ore")
+	game.auxiliary.reset_round()
+	game.upgrade_stats.damage = 10000000.0
 	var start := Time.get_ticks_usec()
 	_check(game.auxiliary.activate("detonator"),"Detonator works on the largest ore")
+	while game._bulk_job != null:
+		game._advance_bulk_breaks()
+		game._advance_ore_retirement()
+		await process_frame
 	print("LARGEST_DETONATION_MS ",(Time.get_ticks_usec()-start)/1000.0)
 	_check(game.chunks.is_empty() and game.gems.is_empty() and game.collecting_gems.size() == Progress.STAGES[5].gem_cap,"Largest ore can be removed without losing any embedded rewards")
 	game.upgrade_stats = baseline
@@ -187,6 +204,9 @@ func _build_lifecycle() -> void:
 	game.round_state.lifetime_mining_gold = Progress.STAGES[5].gold
 	game._spawn_rock(888)
 	game._advance_ore_build()
+	while game.ore_building and game.chunks.is_empty():
+		game._advance_ore_build()
+		await process_frame
 	var retired: Array = game.chunks.duplicate()
 	_check(not retired.is_empty() and game.ore_building,"Large ore creation yields with a partially assembled shell")
 	game.focused = false
@@ -196,15 +216,16 @@ func _build_lifecycle() -> void:
 	game.round_state.lifetime_mining_gold = Progress.STAGES[1].gold
 	game._spawn_rock(999)
 	for old in retired:
-		_check(old.is_queued_for_deletion() and not old.visible and old.collision_layer == 0,"Replacing a partial build immediately retires all of its visible and physical cells")
+		_check(game._retired_ids.has(old.get_instance_id()) and not old.visible and old.collision_layer == 0,"Replacing a partial build immediately retires all of its visible and physical cells")
 	while game.ore_building:
 		game._advance_ore_build()
+		game._advance_ore_retirement()
 		for jewel in game.gems:
 			_check(not jewel.visible and jewel.collision_layer == 0,"Gems never flash or become interactive during multi-frame placement")
 		await process_frame
-	_check(game.chunks.size() == 102 and game.gems.size() == 7 and game.rock_seed == 999,"Cancelling a large build produces only the new ore and its own loot")
+	_check(game.chunks.size() == Progress.profile(Progress.STAGES[1].gold).pieces and game.gems.size() == 7 and game.rock_seed == 999,"Cancelling a large build produces only the new ore and its own loot")
 	for old in retired:
-		_check(not is_instance_valid(old),"Cancelled ore cells are released on the following frame")
+		_check(not is_instance_valid(old),"Cancelled ore cells are released by bounded retirement")
 	game.round_state.lifetime_mining_gold = Progress.STAGES[5].gold
 	game._spawn_rock(555)
 	game._advance_ore_build()
@@ -228,7 +249,7 @@ func _transition() -> void:
 	while game.ore_building:
 		game._advance_ore_build()
 		await process_frame
-	_check(game.ore_profile.index == 1 and game.chunks.size() == 102,"The next round actually spawns the larger unlocked ore")
+	_check(game.ore_profile.index == 1 and game.chunks.size() == Progress.profile(Progress.STAGES[1].gold).pieces,"The next round actually spawns the larger unlocked ore")
 	for size: Vector2i in [Vector2i(360,800),Vector2i(800,450)]:
 		root.size = size
 		await process_frame

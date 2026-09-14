@@ -40,6 +40,7 @@ var _total_health := 1.0
 
 func _ready() -> void:
 	game = get_parent()
+	audio.impact_mixer = game.audio
 	add_child(audio)
 	set_process(false)
 
@@ -50,7 +51,7 @@ func start(index: int, seed_value: int) -> void:
 	active = true
 	building = true
 	random.seed = seed_value ^ 0x41A671
-	game._clear_ore_scene()
+	game._clear_ore_scene(game.round_enabled and game.completion_time >= 0.0 and game.round_state.phase == game.RoundModel.Phase.MINING)
 	game.showcase_mode = false
 	game.ore_profile = game.OreProgression.profile(game.round_state.lifetime_mining_gold,stage)
 	game.ore_profile.color = info.color
@@ -121,7 +122,7 @@ func _complete_build() -> void:
 	building = false
 	game.ore_building = false
 	_builder = null
-	game.spawn_time = .70
+	game.spawn_time = game.ORE_SPAWN_DURATION
 	game.rock_number += 1
 	game.ground_shadow.position = Vector3(0,-float(info.radius)*float(info.get("shape",Vector3.ONE).y)-.46,-.2)
 	game.ground_shadow.scale = Vector3.ONE*(float(info.radius)/game.SHOWCASE_RADIUS)
@@ -145,6 +146,7 @@ func _complete_build() -> void:
 				wire_effects[i] = wire_effects[j]
 				wire_effects[j] = swap
 			visual.add_wires()
+			for wire in visual.wires: wire.collision_layer = 0
 		4:
 			for chunk in game.chunks: visual.add_spike(chunk)
 			spike_next = random.randf_range(3.2,4.8)
@@ -202,6 +204,10 @@ func _refresh_weaknesses() -> void:
 		var chunk := _body(slot)
 		if chunk != null: visual.mark(chunk,"weak" if weak_slots.has(slot) else "",info.accent)
 
+func can_damage_chunk(chunk: StaticBody3D) -> bool:
+	if not active: return true
+	return not building and not bool(chunk.get_meta("boss_protected", false)) and not (stage == 5 and not volley_rest and not chunk.has_meta("boss_projectile"))
+
 func filter_hit(chunk: StaticBody3D, context: Dictionary) -> bool:
 	if not active: return true
 	if building: return false
@@ -209,17 +215,23 @@ func filter_hit(chunk: StaticBody3D, context: Dictionary) -> bool:
 		context["boss_checked"] = true
 		_hurt_player(maxf(2.0,game.round_state.duration*.08))
 		if not active: return false
-	var blocked: bool = bool(chunk.get_meta("boss_protected",false)) or (stage == 5 and not volley_rest and not chunk.has_meta("boss_projectile"))
-	if blocked:
+	if not can_damage_chunk(chunk):
 		if clock-_last_block > .18:
 			_last_block = clock
-			audio.play(stage,"hit",.68)
+			audio.play(stage,"hit",.68,bool(context.get("secondary",false)))
 			game.effects.skill_burst(chunk.to_global(chunk.face_center),game.camera.global_basis.z,info.accent,.22)
 		return false
 	return true
 
 func on_chunk_broken(chunk: StaticBody3D) -> void:
-	if not active or not chunk.has_meta("boss_slot"): return
+	if not active: return
+	if chunk.has_meta("boss_projectile"):
+		parry_count += 1
+		for i in range(projectiles.size()-1,-1,-1):
+			if projectiles[i].node == chunk: projectiles.remove_at(i)
+		audio.play(stage,"ability",1.5)
+		return
+	if not chunk.has_meta("boss_slot"): return
 	var slot := int(chunk.get_meta("boss_slot"))
 	var record: Dictionary = cells[slot]
 	if stage == 0 and int(record.generation) < 2:
@@ -233,17 +245,19 @@ func on_chunk_broken(chunk: StaticBody3D) -> void:
 		weak_destroyed += 1
 		for neighbor in _neighbors(slot,4):
 			var target := _body(neighbor)
-			if target != null: _pending_damage.append(weakref(target))
+			if target != null and not weak_slots.has(neighbor): _pending_damage.append(weakref(target))
 		audio.play(stage,"ability")
-	elif stage == 5 and chunk.has_meta("boss_projectile"):
-		parry_count += 1
-		for i in range(projectiles.size()-1,-1,-1):
-			if projectiles[i].node == chunk: projectiles.remove_at(i)
-		audio.play(stage,"ability",1.5)
+	elif stage == 3 and bomb_armor_remaining() == 0:
+		for wire in visual.wires:
+			if not wire_cut[visual.wires.find(wire)]: wire.collision_layer = 1
 	_refresh_hud()
+
+func bomb_armor_remaining() -> int:
+	return maxi(0,ceili(cells.size()*Campaign.Balance.BOMB_ARMOR_FRACTION)-(cells.size()-_stock().size()))
 
 func cut_wire(index: int) -> bool:
 	if not active or building or stage != 3 or index < 0 or index >= 3 or wire_cut[index]: return false
+	if bomb_armor_remaining() > 0: return false
 	wire_cut[index] = true
 	visual.wires[index].sever()
 	audio.play(stage,"ability",1.0+index*.15)
@@ -279,7 +293,15 @@ func advance(delta: float) -> void:
 				for i in weak_slots.size():
 					var choices := _neighbors(weak_slots[i],6)
 					for slot in choices:
-						if not weak_slots.has(slot): weak_slots[i] = slot; break
+						if not weak_slots.has(slot):
+							# Damage travels with the moving weakness; stronger bosses
+							# must not erase progress every time the marker moves.
+							var previous := _body(weak_slots[i])
+							var remaining: float = previous.health
+							previous.health = previous.max_health
+							weak_slots[i] = slot
+							_body(slot).health = remaining
+							break
 				_refresh_weaknesses()
 				audio.play(stage,"ability")
 		3: _advance_bomb(delta)
@@ -347,7 +369,14 @@ func _stock() -> Array[StaticBody3D]:
 func _throw_stone() -> void:
 	var stock := _stock()
 	if stock.is_empty(): return
-	var chunk: StaticBody3D = stock[random.randi_range(0,stock.size()-1)]
+	var source: StaticBody3D = stock[random.randi_range(0,stock.size()-1)]
+	var record: Dictionary = cells[int(source.get_meta("boss_slot"))]
+	# Parries protect the player. Projectiles are separate from the boss's
+	# armor, so weak gear cannot win simply by waiting for it to throw itself away.
+	game._add_ore_cell(record.data.duplicate(),int(record.layer))
+	var chunk: StaticBody3D = game.chunks.back()
+	chunk.position = source.position
+	chunk.scale = source.scale*.55
 	chunk.set_meta("boss_projectile",true)
 	chunk.reparent(self)
 	# Incoming stones take at most two ordinary strikes at the equipped power.
@@ -372,7 +401,7 @@ func _fatal_hit(chunk: StaticBody3D) -> void:
 func check_victory() -> void:
 	if not active or building: return
 	if stage == 2 and weak_destroyed >= 5: _finish(true); return
-	if not game.chunks.is_empty(): return
+	if not (_stock().is_empty() if stage == 5 else game.chunks.is_empty()): return
 	for record in cells:
 		if float(record.regen_at) >= 0: return
 	_finish(true)
@@ -433,7 +462,7 @@ func _refresh_hud() -> void:
 		0: status += " · 재생 %d" % regen_count
 		1: status += " · 보호석 %d" % guards.size()
 		2: status = "약점 %d / 5" % weak_destroyed
-		3: status = "폭발까지 %.1f초 · %s" % [bomb_remaining,"정지" if bomb_pause > 0 else "×0.5" if bomb_slow > 0 else "×%.1f" % bomb_speed]
+		3: status = "폭발까지 %.1f초 · %s" % [bomb_remaining,"갑피 %d개 남음" % bomb_armor_remaining() if bomb_armor_remaining() > 0 else "정지" if bomb_pause > 0 else "×0.5" if bomb_slow > 0 else "×%.1f" % bomb_speed]
 		4: status = "가시! 공격을 멈추세요" if spikes_out else "틈이 열렸습니다 · %.1f초" % spike_next
 		5: status = "휴식 · 본체 공격 가능" if volley_rest else "포격 중 · 날아오는 돌을 쳐내세요"
 	game.hud.set_boss_info({"active":true,"title":info.title,"hint":info.hint,"stage":stage,"status":"보스 준비 중" if building else status,"ratio":health/_total_health,"accent":info.accent,"danger":spikes_out or (stage == 3 and bomb_remaining < 10)})

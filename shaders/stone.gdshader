@@ -3,6 +3,7 @@ render_mode specular_disabled;
 
 uniform vec4 base_color : source_color = vec4(0.48, 0.50, 0.51, 1.0);
 uniform float hovered : hint_range(0.0, 1.0) = 0.0;
+uniform float attack_preview : hint_range(0.0, 1.0) = 0.0;
 uniform float hit_flash : hint_range(0.0, 1.0) = 0.0;
 uniform int ore_theme = 0;
 uniform float theme_detail = 1.0;
@@ -48,9 +49,10 @@ void fragment() {
 	}
 	stone = mix(stone, ore_accent.rgb * COLOR.rgb * 1.4, tint * theme_detail);
 	stone = mix(stone, stone * vec3(1.13, 1.10, 1.01), hovered);
+	stone = mix(stone, stone * vec3(1.16, 1.10, 0.94) + vec3(0.025, 0.020, 0.010), attack_preview * 0.60);
 	ALBEDO = mix(stone, vec3(1.0, 0.92, 0.72), hit_flash * 0.83);
 	ROUGHNESS = 1.0;
-	EMISSION = vec3(1.0, 0.60, 0.22) * hit_flash * 0.24 + vec3(0.04, 0.028, 0.012) * hovered;
+	EMISSION = vec3(1.0, 0.60, 0.22) * hit_flash * 0.24 + vec3(0.04, 0.028, 0.012) * hovered + vec3(0.012, 0.010, 0.005) * attack_preview;
 }
 
 void light() {

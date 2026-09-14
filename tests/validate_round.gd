@@ -3,7 +3,7 @@ extends SceneTree
 const Round = preload("res://scripts/mining_round.gd")
 const Main = preload("res://scripts/main.gd")
 const Gem = preload("res://scripts/gem.gd")
-const RATES := [15, 60, 220, 800, 2400, 7200, 22000]
+const RATES := preload("res://scripts/game_balance.gd").GEM_GOLD
 
 var checks := 0
 var failures: Array[String] = []
@@ -121,7 +121,8 @@ func _validate_gameplay() -> void:
 		if not game._mine_at(screen):
 			_check(false, "Subsequent impacts on the visible ordinary stone are accepted")
 			return
-	_check(state.ordinary_stones == 1 and game.hud.displayed_stones == 1 and game.effects.loose_chunks.size() > 1, "One destroyed stone counts once despite producing multiple physical fragments")
+	_check(state.ordinary_stones == 1 and game.hud.displayed_stones == 1, "One destroyed stone counts once in the ledger and HUD")
+	_check(game.effects.loose_chunks.size() > 1, "A primary ordinary break produces physical fragments (pieces=%d, layer=%d, detailed=%d)" % [game.effects.loose_chunks.size(),stone.layer_index,game._fractures_this_frame])
 	_check(state.gem_counts == PackedInt32Array([0, 0, 0, 0, 0, 0, 0]), "Ordinary destruction does not invent a gem reward")
 	game._physics_process(2.0)
 	var before_pause := state.remaining
@@ -227,6 +228,7 @@ func _validate_gameplay() -> void:
 		game._request_swing()
 		_check(state.phase == Round.Phase.MINING, "Releasing and issuing a fresh valid swing starts the next round")
 	await _validate_reset_and_exhaustion()
+	await _validate_fast_transition()
 	await _validate_empty_game_round()
 
 
@@ -283,6 +285,36 @@ func _validate_reset_and_exhaustion() -> void:
 	_check(state.phase == Round.Phase.MINING and state.remaining == deadline_before_spawn and state.gem_counts == cargo and game.hud.displayed_counts == cargo, "Automatic rock regeneration preserves the running deadline and accumulated cargo")
 
 
+func _validate_fast_transition() -> void:
+	await _new_game()
+	game.pickaxe.set_process(false)
+	game.campaign_enabled = false
+	game.remove_with_auxiliary(game.chunks.duplicate())
+	var previous_rock: int = game.rock_number
+	var cargo: PackedInt32Array = game.round_state.gem_counts.duplicate()
+	var flights: Array = game.collecting_gems.duplicate()
+	_check(game.chunks.is_empty() and flights.size() == 4, "A fully excavated ore can still have its four gems emerging")
+	game._process(0.09)
+	_check(game.rock_number == previous_rock, "The short fracture beat precedes the next ore")
+	game._process(0.02)
+	_check(game.rock_number == previous_rock + 1 and not game.chunks.is_empty(), "The next ore appears after only 0.11 seconds")
+	_check(game.collecting_gems.size() == 4 and game.hud.displayed_counts == Gem.Rarity.empty_counts(), "Fast replacement preserves the last gem animations without prematurely counting them")
+	game.aim_position = root.get_visible_rect().size * 0.5
+	game._request_swing()
+	_check(not game.pickaxe.is_swinging, "The brief size transition still blocks premature strikes")
+	await create_timer(0.18).timeout
+	game._process(0.17)
+	await physics_frame
+	var target := _ordinary_target()
+	_check(not target.is_empty() and game._mine_at(target.screen), "Mining is available again within 0.28 seconds of the full clear")
+	await create_timer(0.30).timeout
+	game._update_collections(0.70)
+	_check(game.collecting_gems.is_empty() and game.hud.displayed_counts == cargo and game.round_state.gem_counts == cargo, "Every preserved crystal finishes its flight and counts exactly once on the new ore")
+	for extraction: Dictionary in flights:
+		game._deliver_gem_to_hud(extraction)
+	_check(game.hud.displayed_counts == cargo, "A repeated arrival cannot duplicate a gem across the fast transition")
+
+
 func _validate_empty_game_round() -> void:
 	await _new_game()
 	game._start_round()
@@ -303,16 +335,17 @@ func _new_game() -> void:
 		game.queue_free()
 		await process_frame
 	game = Main.new()
-	# Ledger/input fixture has all ranks unlocked; campaign gates have their own suite.
-	game.campaign.cleared = 6
+	# Isolate ledger/input on starter ore with all ranks available; bosses have their own suite.
+	game.campaign_enabled = false
 	root.add_child(game)
 	game.set_process(false)
 	game.set_physics_process(false)
 	game.set_process_input(false)
 	game.hud.set_process(false)
-	game.spawn_time = 1.0
-	await physics_frame
-	await process_frame
+	# The multi-fragment ledger fixture needs a repeatable broad starter cell;
+	# a randomly selected tiny edge sliver may have only one valid cut region.
+	game._spawn_rock(61477)
+	await _finish_spawn()
 
 
 func _finish_spawn() -> void:
@@ -329,7 +362,10 @@ func _ordinary_target() -> Dictionary:
 		if body.is_gem_cover:
 			continue
 		var screen: Vector2 = game.camera.unproject_position(body.mesh_instance.to_global(body.face_center))
-		if not game.hud.is_pointer_blocked(screen) and game.ray_at(screen).get("collider") == body:
+		var contact: Dictionary = game.ray_at(screen)
+		# This ledger fixture expects one destroyed stone. Random seams can
+		# put another chunk inside even the baseline attack radius.
+		if not game.hud.is_pointer_blocked(screen) and contact.get("collider") == body and game._area_targets(screen, contact).is_empty():
 			return {"body": body, "screen": screen}
 	return {}
 

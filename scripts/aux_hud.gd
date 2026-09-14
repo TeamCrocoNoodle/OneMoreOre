@@ -117,6 +117,9 @@ func _layout() -> void:
 		label.add_theme_font_size_override("font_size",int(11*scale_factor))
 		label.add_theme_color_override("font_color",Color("8b9290") if button.disabled else Color("ecdfc7"))
 	xray_rect = Rect2(24,base_y-56,154,46)
+	if not portrait and view.y < 640:
+		# The left column already holds boss/combo status in short windows.
+		xray_rect = Rect2(view.x-186,game.hud._satchel_rect.position.y-58,166,46)
 	canvas.queue_redraw()
 
 func action_rect(id: String) -> Rect2:

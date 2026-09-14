@@ -31,8 +31,21 @@ func _initialize() -> void:
 	for entry in M.CATALOG.slice(0,5):
 		var dps := float(entry.power)*float(entry.speed)/(.46/3 if entry.id == "jackhammer" else .34)
 		_check(final_dps > dps*1.8,"Gold has a substantial contact DPS advantage over "+entry.id)
-	_check(float(stats.damage) > B.stone_health(6,6,0),"Full-build ordinary strikes one-shot even the toughest final-stage plain stone")
-	_check(B.COVER_HEALTH[6] > float(stats.damage) and B.COVER_HEALTH[6] < float(stats.damage)*3,"Final gem hosts remain briefly readable before breaking")
+	_check(B.STONE_HEALTH[6] > float(stats.damage)*2,"The final ore retains resistance even against a fully upgraded basic strike")
+	_check(B.COVER_HEALTH[6] >= float(stats.damage)*8,"Final gem hosts survive isolated strikes so cracks and rarity light remain readable")
+	var prior_pieces := 0
+	for stage in 7:
+		var profile := O.profile(0,stage)
+		_check(profile.pieces == 74*(1 << stage),"Every ore doubles the actual independent stone count")
+		if stage > 0:
+			_check(B.STONE_HEALTH[stage] >= B.STONE_HEALTH[stage-1]*2.5,"At double the stone count, new-ore total resistance grows at least fivefold")
+		_check(B.BOSS_HEALTH[stage] > B.COVER_HEALTH[stage],"Boss armor exceeds even its stage's gem cover resistance")
+		prior_pieces = profile.pieces
+	_check(prior_pieces == 4736,"The last ore contains thousands of individually mineable stones")
+	var new_ore := O.profile(0,6)
+	var entry_power := 6.0*B.MAIN_POWER[4]
+	_check(B.bulk_damage("detonator",entry_power,new_ore.pieces) < B.STONE_HEALTH[6],"A previous-stage drill cannot instantly bypass new-ore resistance with explosives")
+	_check(B.bulk_damage("detonator",float(stats.damage),new_ore.pieces) > B.bulk_damage("detonator",entry_power,new_ore.pieces),"Auxiliary blasting grows with the equipped main tool")
 	var round_state := R.new()
 	round_state.apply_stats(stats)
 	round_state.start()

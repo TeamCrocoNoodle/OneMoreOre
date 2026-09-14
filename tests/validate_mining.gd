@@ -239,6 +239,7 @@ func _validate_showcase() -> void:
 	# Reset during the awarded gem's emergence after its owner's light is gone.
 	game._spawn_rock(TEST_SEED, false)
 	await _frames(3)
+	_check(await _until(func(): return game._retired_chunks.is_empty()), "Reset drains its hidden old stones through bounded retirement")
 	var all_lights_freed := true
 	var all_gems_freed := true
 	for previous in preview_lights:
@@ -247,7 +248,7 @@ func _validate_showcase() -> void:
 		all_gems_freed = all_gems_freed and previous.get_ref() == null
 	_check(all_lights_freed, "Reset frees the remaining owner lights from the previous rock")
 	_check(all_gems_freed and _count_gems(game) == game.gems.size() and game.collecting_gems.is_empty(), "Reset during automatic collection frees its emerging gem and every old embedded gem")
-	_check(game.effects.loose_chunks.is_empty() and game.effects.get("_fragment_pool").is_empty(), "Reset clears active fracture pieces and their reusable pool")
+	_check(game.effects.loose_chunks.is_empty() and game.effects._fragment_pool.size() <= game.effects.FRAGMENT_CAPACITY and game.effects._fragment_pool.all(func(node):return not node.visible and node.mesh == null and node.material_override == null), "Reset removes active fracture pieces and retains only empty, hidden reusable nodes")
 	owner_releases = 0
 	traversed_layers.clear()
 

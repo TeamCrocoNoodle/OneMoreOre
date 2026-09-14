@@ -62,11 +62,20 @@ class LayerBuilder extends RefCounted:
 			tangent = normal.cross(Vector3.RIGHT).normalized()
 		var bitangent := normal.cross(tangent).normalized()
 		var polygon: Array[Vector2] = [Vector2(-4, -4), Vector2(4, -4), Vector2(4, 4), Vector2(-4, 4)]
+		var bound_squared := 32.0
 		for j in count:
 			if i == j:
 				continue
+			# A plane outside the polygon's bounding circle cannot clip it. Dense
+			# layers still consider every seed, but only allocate polygons for nearby
+			# planes. This preserves the exact Voronoi cells at thousands of pieces.
+			var alignment := normal.dot(directions[j])
+			if 1.0-alignment > (1.0+alignment)*bound_squared+0.00001:
+				continue
 			var plane := normal - directions[j]
 			polygon = RockGeometry._clip_polygon(polygon, tangent.dot(plane), bitangent.dot(plane), normal.dot(plane))
+			bound_squared = 0.0
+			for corner in polygon: bound_squared = maxf(bound_squared,corner.length_squared())
 		if polygon.size() < 3:
 			return {}
 		# Chamfer the silhouette corners as well as the face perimeter. This

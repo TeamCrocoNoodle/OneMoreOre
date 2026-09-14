@@ -259,8 +259,11 @@ func _crusher() -> void:
 	for body in before: _check(body.collision_layer == 0 and not body.visible,"Ground pieces lose collision and crack-light visibility immediately")
 	_check(aux._ghosts.size() == 10 and game._tool_impact_queue.is_empty(),"Whole-ore grinding uses at most ten existing-mesh proxies and cancels stale pickaxe impacts")
 	_check(not aux.activate("crusher"),"An active crusher cannot double-count ore")
-	aux.advance(0.86)
-	_check(game.rock_number == old_rock+1 and game.gems.size() == 4 and game.collecting_gems.is_empty(),"Crusher advances to a new ore and delivers pending gem flights once")
+	aux.advance(0.11)
+	_check(game.rock_number == old_rock+1 and game.gems.size() == 4 and game.collecting_gems.size() == 4,"Crusher quickly advances to a new ore while the recovered gems keep their flights")
+	await create_timer(0.45).timeout
+	game._update_collections(0.70)
+	_check(game.collecting_gems.is_empty(),"Recovered gems complete their normal arrival after the fast transition")
 	_check(aux.crusher_remaining > 0 and not aux.can_activate("crusher"),"Crusher cooldown survives the next ore and prevents continuous free extraction")
 	var cooldown: float = aux.crusher_remaining
 	aux.configure()

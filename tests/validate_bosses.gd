@@ -7,7 +7,7 @@ const BossAudio = preload("res://scripts/boss_audio_bank.gd")
 
 func _initialize() -> void:
 	_run.call_deferred()
-	create_timer(120).timeout.connect(func():
+	create_timer(180).timeout.connect(func():
 		if not ended: push_error("BOSS_VALIDATION_TIMEOUT"); quit(2)
 	)
 
@@ -58,6 +58,12 @@ func _campaign_rules() -> void:
 	_check(campaign.begin(0),"A new successful excavation permits a boss retry")
 	_check(campaign.finish(true) == int(Campaign.BOSSES[0].reward) and campaign.cleared == 1 and campaign.finish(true) == 0,"Victory awards a fixed bounty once and unlocks green")
 	_check(not campaign.eligible(0),"Previously defeated bosses are not offered again")
+	for cleared in 8:
+		var expected := mini(cleared,6)
+		_check(Progress.profile(0,cleared).index == expected,"Boss victories advance the ore even below its former Gold threshold")
+		_check(Progress.profile(999999999,cleared).index == expected,"Gold cannot skip an undefeated boss or overflow the final ore")
+		var progress := Progress.status(0,cleared)
+		_check(progress.index == expected and progress.earned == 0,"Progress display follows the boss unlock without inventing mining income")
 
 func _rarity_gates() -> void:
 	for stage in 7:
@@ -96,7 +102,7 @@ func _campaign_flow() -> void:
 	await _finish_build()
 	game._start_round()
 	game.campaign.ore_clears[0] = int(Campaign.BOSSES[0].goal)-2 # Two real clears exercise the transition after prior progress.
-	game.round_state.lifetime_mining_gold = Progress.STAGES[1].gold
+	# Keep actual earnings below the next ore threshold: the boss unlock is sufficient.
 	for excavation in 2:
 		for chunk in game.chunks.duplicate(): _hit(chunk,chunk.health)
 		await create_timer(.45).timeout
@@ -105,7 +111,7 @@ func _campaign_flow() -> void:
 		game._check_exhausted()
 		_check(game.campaign.ore_clears[0] == int(Campaign.BOSSES[0].goal)-1+excavation,"Repeated exhaustion checks cannot duplicate progress")
 		game.round_state.remaining = 5
-		game.completion_time = 2.39
+		game.completion_time = game.ORE_RESPAWN_DELAY - .01
 		game._process(.02)
 		await _finish_build()
 	_check(game.boss.active and game.boss.stage == 0 and game.round_state.remaining == game.round_state.duration,"The normal completion transition enters the first boss and restores health")
@@ -115,16 +121,38 @@ func _campaign_flow() -> void:
 		game.boss.advance(1.61)
 		for frame in 30: game.boss.advance(.01)
 	_check(game.campaign.cleared == 1 and game.round_state.phase == RoundState.Phase.DRAINING,"A real boss completion leads to settlement without starting another ore")
+	await _settle_and_check_next_ore(1)
+
+func _settle_and_check_next_ore(expected_stage: int, victory: bool = true) -> void:
+	var earned_before: int = game.round_state.lifetime_mining_gold
+	var wallet_before: int = game.round_state.wallet_gold
+	var round_before: int = game.round_state.round_index
+	var expected: Dictionary = Progress.STAGES[expected_stage]
 	game._begin_settlement()
+	var sale: int = game.round_state.last_report.total
 	game.hud.finish_settlement()
 	await process_frame
-	_check(game.skill_ui.is_open and game.round_state.wallet_gold >= int(Campaign.BOSSES[0].reward),"Boss bounty settlement automatically opens the upgrade phase")
-	game.skill_ui.close_tree()
+	_check(game.round_state.phase == RoundState.Phase.COMPLETE and game.skill_ui.is_open == victory,"Boss victory settles and opens upgrades; defeat only settles")
+	_check(game.round_state.lifetime_mining_gold == earned_before+sale and game.round_state.wallet_gold == wallet_before+sale,"Stage advancement pays only the actual sale and bounty")
+	_check(game.round_state.lifetime_mining_gold < int(Progress.STAGES[expected_stage if victory else expected_stage+1].gold),"The transition regression stays below the next ore Gold threshold")
+	var progress: Dictionary = game._progress_status()
+	_check(progress.index == expected_stage and bool(progress.boss_gate) and progress.earned == earned_before+sale,"HUD unlock and boss progress agree before the next ore is built")
+	if game.skill_ui.is_open: game.skill_ui.close_tree()
 	game._next_round()
 	await _finish_build()
-	var green := 0
-	for crystal in game.gems: green += int(crystal.grade == 1)
-	_check(game.ore_profile.index == 1 and green > 0 and game.campaign.round_clears[1] == 0,"The next labor round builds the newly unlocked ore with hidden green gems")
+	_check(game.round_state.round_index == round_before+1 and game.campaign.cleared == expected_stage,"Starting the next round retains exactly the defeated bosses")
+	_check(game.ore_profile.index == expected_stage and game.ore_profile.id == expected.id and game.ore_profile.theme == expected.theme,"The next labor round builds the newly unlocked ore theme")
+	var pieces := 0
+	for count: int in expected.layers: pieces += count
+	_check(is_equal_approx(game.active_rock_radius,float(expected.radius)) and game.chunks.size() == pieces,"The actual ore radius and full stone count advance with its stage")
+	var highest := 0
+	var sealed := true
+	for crystal in game.gems:
+		highest = maxi(highest,crystal.grade)
+		sealed = sealed and crystal.grade <= expected_stage and crystal.is_embedded and not crystal.visible
+	_check(highest == expected_stage and sealed,"The new ore hides its newly unlocked gems without leaking a higher rarity")
+	_check(game.hud._ore_progress.index == expected_stage and bool(game.hud._ore_progress.boss_gate) and game.campaign.round_clears[expected_stage] == 0,"HUD and next-boss counting track the newly spawned ore")
+	print("BOSS_ORE_TRANSITION stage=%d victory=%s gold=%d ore=%s pieces=%d rarity=%d" % [expected_stage+1,victory,game.round_state.lifetime_mining_gold,game.ore_profile.id,game.chunks.size(),highest])
 
 func _fresh_boss(stage: int) -> void:
 	if game.skill_ui.is_open: game.skill_ui.close_tree()
@@ -158,7 +186,8 @@ func _fresh_boss(stage: int) -> void:
 	game.focused = true
 	game._open_upgrades()
 	_check(not game.skill_ui.is_open,"Upgrade purchases cannot bypass boss combat")
-	game.aux_tools.acquire("crusher",999999)
+	game.aux_tools.acquire("crusher",game.aux_tools.definition("crusher").price)
+	_check(game.aux_tools.is_owned("crusher"),"Boss auxiliary rejection uses an actually owned crusher")
 	game.auxiliary.configure()
 	_check(not game.auxiliary.can_activate("crusher"),"Crusher cannot skip a boss or its unlock conditions")
 
@@ -179,6 +208,15 @@ func _hit(chunk: StaticBody3D, damage: float, context: Dictionary = {}) -> void:
 func _regenerator() -> void:
 	await _fresh_boss(0)
 	var slot := 0
+	var armor: StaticBody3D = game.boss._body(slot)
+	var original_stats: Dictionary = game.upgrade_stats.duplicate()
+	game.upgrade_stats.execute = 1.0
+	game.mining_skills.configure(game.upgrade_stats)
+	_hit(armor,-1.0)
+	_check(not armor.destroyed and armor.health > armor.max_health*.8, "Even guaranteed first-hit execution cannot bypass boss armor")
+	game.upgrade_stats = original_stats
+	game.mining_skills.configure(original_stats)
+	armor.health = armor.max_health
 	for generation in 3:
 		var chunk: StaticBody3D = game.boss._body(slot)
 		_check(is_equal_approx(chunk.max_health,float(Campaign.BOSSES[0].health)*pow(.5,generation)),"Each regeneration halves maximum health")
@@ -211,12 +249,19 @@ func _guards() -> void:
 	_check(not protected.get_meta("boss_protected",true),"Destroying the guard stones removes immunity")
 	_hit(protected,1)
 	_check(protected.health == health-1,"Previously protected stones become mineable")
+	for chunk in game.chunks.duplicate():
+		if game.boss.active: _hit(chunk,chunk.health)
+	await _settle_and_check_next_ore(2)
 
 func _weaknesses() -> void:
 	await _fresh_boss(2)
 	var old: Array = game.boss.weak_slots.duplicate()
+	var wounded: StaticBody3D = game.boss._body(old[0])
+	_hit(wounded,wounded.max_health*.25)
+	var remaining: float = wounded.health
 	game.boss.advance(2.7)
 	_check(game.boss.weak_slots.size() == 5 and game.boss.weak_slots != old,"Five weaknesses move to neighboring intact stones")
+	_check(is_equal_approx(game.boss._body(game.boss.weak_slots[0]).health,remaining),"Moving a weakness preserves the damage already dealt to it")
 	var guard := 0
 	while game.boss.active and guard < 10:
 		guard += 1
@@ -224,6 +269,7 @@ func _weaknesses() -> void:
 		_hit(target,target.health)
 		game.boss.advance(.02)
 	_check(game.campaign.cleared == 3 and game.chunks.is_empty(),"Destroying all five moving weaknesses collapses the entire boss")
+	await _settle_and_check_next_ore(3)
 
 func _wires() -> void:
 	await _fresh_boss(3)
@@ -233,11 +279,16 @@ func _wires() -> void:
 	var fast: int = game.boss.wire_effects.find("accelerate")
 	var slow: int = game.boss.wire_effects.find("slow")
 	var stop: int = game.boss.wire_effects.find("defuse")
+	_check(not game.boss.cut_wire(stop) and game.boss.active,"The winning wire cannot bypass the boss's intact armor")
+	for chunk in game.chunks.duplicate():
+		if game.boss.bomb_armor_remaining() <= 0: break
+		_hit(chunk,chunk.health)
+	_check(game.boss.bomb_armor_remaining() == 0,"Breaking the required armor releases the defusal wires")
 	# Dig through the covering stone, then strike the real wire with the same input ray.
 	var wire: StaticBody3D = game.boss.visual.wires[fast]
 	var point: Vector3 = wire.get_child(6).global_position
 	var screen: Vector2 = game.camera.unproject_position(point)
-	_check(game.ray_at(screen).get("collider") != wire,"Defusal wires begin buried and cannot be cut through intact stone")
+	# Remaining covering stones still obstruct the physical wire after its seal releases.
 	for excavation in 6:
 		var contact: Dictionary = game.ray_at(screen)
 		if contact.get("collider") == wire: break
@@ -257,9 +308,11 @@ func _wires() -> void:
 	_check(is_equal_approx(game.boss.bomb_remaining,56),"The slow wire temporarily changes the rate to one half")
 	game.boss.cut_wire(stop)
 	_check(game.campaign.cleared == 4 and not game.boss.active,"The correct wire immediately defuses the boss")
+	await _settle_and_check_next_ore(4)
 	await _fresh_boss(3)
 	game.boss.advance(61)
 	_check(not game.boss.active and game.campaign.cleared == 3 and game.round_state.boss_reward == 0,"Deadline expiry is a defeat without unlock or bounty")
+	await _settle_and_check_next_ore(3,false)
 
 func _thorns() -> void:
 	await _fresh_boss(4)
@@ -275,6 +328,9 @@ func _thorns() -> void:
 	health = game.round_state.remaining
 	_hit(game.chunks[0],.1)
 	_check(game.round_state.remaining == health,"Safe-window attacks do not damage the player")
+	for chunk in game.chunks.duplicate():
+		if game.boss.active: _hit(chunk,chunk.health)
+	await _settle_and_check_next_ore(5)
 
 func _artillery() -> void:
 	await _fresh_boss(5)
@@ -284,6 +340,7 @@ func _artillery() -> void:
 	_check(stone.health == health,"Artillery body is immune while throwing")
 	game.boss._throw_stone()
 	var projectile: StaticBody3D = game.boss.projectiles[0].node
+	_check(game.boss._stock().size() == game.boss.cells.size() and not projectile.has_meta("boss_slot"),"Projectiles are separate stones and cannot reduce the boss body to parry strength")
 	game.boss.volley_timer = 99
 	game.boss._advance_artillery(1.65)
 	await physics_frame
@@ -304,6 +361,12 @@ func _artillery() -> void:
 	_check(stone.health == health-1,"Body stones are vulnerable during the rest phase")
 	game.boss.defeat()
 	_check(game.campaign.cleared == 5,"An artillery defeat cannot unlock Exotic")
+	await _settle_and_check_next_ore(5,false)
+	await _fresh_boss(5)
+	game.boss.volley_rest = true
+	for chunk in game.chunks.duplicate():
+		if game.boss.active: _hit(chunk,chunk.health)
+	await _settle_and_check_next_ore(6)
 
 func _final_victory() -> void:
 	await _fresh_boss(6)

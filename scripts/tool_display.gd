@@ -7,6 +7,7 @@ const Cabinet = preload("res://scripts/tool_cabinet.gd")
 const ModelGallery = preload("res://scripts/ui_model_gallery.gd")
 const MainTools = preload("res://scripts/main_tools.gd")
 const AuxTools = preload("res://scripts/aux_tools.gd")
+const ResponsiveUI = preload("res://scripts/responsive_ui.gd")
 const GOLD := Color("dca75c")
 const TEXT := Color("eee4d3")
 
@@ -19,6 +20,9 @@ var cabinet_viewport: SubViewport
 var _cabinet_camera: Camera3D
 var _cabinet_render_rect := Rect2()
 var _cabinet_signature := ""
+var _geometry_signature := ""
+var _model_width := 1120.0
+var _model_row_height := 202.0
 var _cabinet_rendered := false
 var _items: Array[Rect2] = []
 var _tags: Array[Rect2] = []
@@ -51,6 +55,7 @@ var _confirm: Button
 var _detail_rect := Rect2()
 var _hero_rect := Rect2()
 var _text_origin := Vector2.ZERO
+var _description: RichTextLabel
 var _preview_viewport: SubViewport
 var _preview_model: Node3D
 var _preview_index := -1
@@ -81,6 +86,14 @@ func _ready() -> void:
 			cancel_selection()
 	)
 	add_child(_inspector)
+	_description = RichTextLabel.new()
+	_description.name = "ToolDescription"
+	_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_description.add_theme_font_override("normal_font", _font)
+	_description.add_theme_color_override("default_color", Color("adb9ba"))
+	_description.scroll_active = true
+	_description.mouse_filter = Control.MOUSE_FILTER_STOP
+	_inspector.add_child(_description)
 	_confirm = Button.new()
 	_confirm.name = "ConfirmToolAction"
 	_confirm.text = "✓"
@@ -262,10 +275,18 @@ func _arrange() -> void:
 		_kind_buttons.aux.focus_neighbor_left = _kind_buttons.main.get_path()
 	_columns = 2
 	var rows := ceili(float(_catalog.size()) / float(_columns))
-	var width := minf(1120.0, _view.x - 32.0)
-	var desired_height := minf(width / 1.88, _view.y - 28.0) if _view.x >= 680 else _view.y - 28.0
-	_row_height = clampf((desired_height - Cabinet.HEIGHT_PAD) / rows, 160.0 if _view.x >= 680 else 190.0, 202.0 if _view.x >= 680 else 235.0)
-	var height := _row_height * rows + Cabinet.HEIGHT_PAD
+	# Cabinet profiles are authored proportions. Only a uniform fit changes
+	# with the available space; resizing pixels never stretches the meshes.
+	_model_width = 420.0 if _view.x < 660 else (760.0 if _view.x < 1000 else 1120.0)
+	_model_row_height = 235.0 if _view.x < 660 else (220.0 if _view.x < 1000 else 202.0)
+	var model_height := _model_row_height * rows + Cabinet.HEIGHT_PAD
+	var width_fit := maxf(1, _view.x - 32) / _model_width
+	var height_fit := maxf(1, _view.y - 76) / model_height
+	# Keep the price tags and tools legible; overflow is browsed by scrolling.
+	var fit := minf(width_fit, maxf(0.85, height_fit))
+	var width := _model_width * fit
+	var height := model_height * fit
+	_row_height = _model_row_height * fit
 	_scroll_limit = maxf(0.0, height + 76.0 - _view.y)
 	_scroll = clampf(_scroll, 0.0, _scroll_limit)
 	_cabinet = Rect2((_view.x - width) * 0.5, 40.0 - _scroll, width, height)
@@ -286,7 +307,7 @@ func _arrange() -> void:
 		button.focus_neighbor_right = _buttons[mini(_buttons.size() - 1, index + 1)].get_path()
 		button.focus_neighbor_top = _kind_buttons[selected_kind].get_path() if index < _columns else _buttons[index - _columns].get_path()
 		button.focus_neighbor_bottom = _buttons[mini(_buttons.size() - 1, index + _columns)].get_path()
-	_cabinet_render_rect = _cabinet.grow_individual(12, 20, 12, 12)
+	_cabinet_render_rect = _cabinet.grow_individual(12 * fit, 20 * fit, 12 * fit, 12 * fit)
 	if _open:
 		_refresh_cabinet()
 	_update_projected_tags()
@@ -343,16 +364,15 @@ func _build_cabinet_renderer() -> void:
 func _refresh_cabinet() -> void:
 	if not is_instance_valid(cabinet_viewport):
 		_build_cabinet_renderer()
-	var screen_transform := get_viewport().get_final_transform()
-	var physical_scale := _scale * minf(screen_transform.x.length(), screen_transform.y.length())
-	var target_pixels := _cabinet_render_rect.size * physical_scale
-	var resolution_scale := minf(1.2, 1536.0 / maxf(target_pixels.x, target_pixels.y))
-	var pixels := Vector2i((target_pixels * resolution_scale).ceil())
-	var signature := selected_kind+str(_cabinet.size) + ":" + str(_row_height) + ":" + str(_columns) + ":" + str(pixels)
+	var geometry := selected_kind + ":" + str(_model_width) + ":" + str(_model_row_height)
+	var pixels := ResponsiveUI.render_size(get_viewport(), _cabinet_render_rect.size, _scale)
+	var signature := geometry + ":" + str(pixels)
 	if signature == _cabinet_signature:
 		return
 	_cabinet_signature = signature
-	cabinet_model.build(_cabinet.size.x, _row_height, _columns,selected_kind)
+	if geometry != _geometry_signature:
+		_geometry_signature = geometry
+		cabinet_model.build(_model_width, _model_row_height, _columns, selected_kind)
 	cabinet_viewport.size = pixels
 	_frame_cabinet_camera()
 	_cabinet_rendered = false
@@ -390,7 +410,7 @@ func _frame_cabinet_camera() -> void:
 		var projected := Rect2(_cabinet_camera.unproject_position(bounds.get_endpoint(0)), Vector2.ZERO)
 		for point in range(1, 8):
 			projected = projected.expand(_cabinet_camera.unproject_position(bounds.get_endpoint(point)))
-		var ratio := maxf(projected.size.x / (viewport_size.x - 12), projected.size.y / (viewport_size.y - 12))
+		var ratio := maxf(projected.size.x / (viewport_size.x * 0.985), projected.size.y / (viewport_size.y * 0.985))
 		var dy := projected.get_center().y - viewport_size.y * 0.5
 		target -= _cabinet_camera.basis.y * dy * (2.0 * distance * tangent / viewport_size.y)
 		distance *= ratio
@@ -432,8 +452,8 @@ func _focus_item(index: int) -> void:
 	_hovered = index
 	if index < _items.size():
 		var item := _items[index].merge(_tags[index])
-		if item.position.y < 8.0:
-			scroll_by(item.position.y - 8.0)
+		if item.position.y < 42.0:
+			scroll_by(item.position.y - 42.0)
 		elif item.end.y > _view.y - 10.0:
 			scroll_by(item.end.y - _view.y + 10.0)
 	queue_redraw()
@@ -492,8 +512,8 @@ func _layout_inspector() -> void:
 	_inspector.size = size
 	var narrow := _view.x < 660
 	var width := minf(_view.x-28, 820)
-	var height := minf(_view.y-24, 570 if narrow else 350)
-	_detail_rect = Rect2((_view.x-width)*0.5,(_view.y-height)*0.5,width,height)
+	var height := minf(_view.y-66, 570 if narrow else 350)
+	_detail_rect = Rect2((_view.x-width)*0.5,42+(_view.y-42-height)*0.5,width,height)
 	var r := _detail_rect
 	if narrow:
 		var hero_height := clampf(height-292, 126, 220)
@@ -506,21 +526,29 @@ func _layout_inspector() -> void:
 	_confirm.add_theme_font_size_override("font_size",int(29*_scale))
 	_confirm.position = Vector2(r.end.x-78,r.end.y-64)*_scale
 	_confirm.size = Vector2(62,56)*_scale
+	var description_top := _text_origin + Vector2(0, 47)
+	_description.position = description_top * _scale
+	_description.size = Vector2(r.end.x - description_top.x - 18, maxf(24, r.end.y - 78 - description_top.y)) * _scale
+	_description.add_theme_font_size_override("normal_font_size", maxi(1, roundi(15 * _scale)))
 	if selected_index >= 0:
 		var data: Dictionary = _catalog[selected_index]
+		if _description.text != str(data.description):
+			_description.text = str(data.description)
+			_description.scroll_to_line(0)
 		_confirm.disabled = _pending or bool(data.equipped) or (not bool(data.owned) and _wallet < int(data.price))
 		_confirm.text = "✓"
 		_confirm.focus_neighbor_left = _confirm.get_path()
 		_confirm.focus_neighbor_right = _confirm.get_path()
 		_confirm.focus_neighbor_top = _confirm.get_path()
 		_confirm.focus_neighbor_bottom = _confirm.get_path()
+		if _open:
+			_refresh_preview(selected_index)
 
 
 func _refresh_preview(index: int) -> void:
 	if not is_instance_valid(_preview_viewport):
 		_preview_viewport = SubViewport.new()
 		_preview_viewport.name = "InspectedToolViewport"
-		_preview_viewport.size = Vector2i(512,512)
 		_preview_viewport.transparent_bg = true
 		_preview_viewport.msaa_3d = Viewport.MSAA_4X
 		_preview_viewport.world_3d = World3D.new()
@@ -551,6 +579,7 @@ func _refresh_preview(index: int) -> void:
 		fill.light_color = Color("a8c8e0")
 		fill.light_energy = 0.45
 		_preview_viewport.add_child(fill)
+	_preview_viewport.size = ResponsiveUI.render_size(get_viewport(), _hero_rect.size, _scale, 1536)
 	if _preview_index == index:
 		_preview_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 		return
@@ -575,6 +604,11 @@ func _input(event: InputEvent) -> void:
 			if event.pressed: cancel_selection()
 			return
 	if selected_index >= 0:
+		var scroll_bar := _description.get_v_scroll_bar()
+		if scroll_bar.max_value > scroll_bar.page and (event.is_action_pressed("ui_up") or event.is_action_pressed("ui_down")):
+			scroll_bar.value += (-42 if event.is_action_pressed("ui_up") else 42) * _scale
+			get_viewport().set_input_as_handled()
+			return
 		var pointer_press: bool = (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT) or (event is InputEventScreenTouch and event.pressed)
 		if pointer_press and not get_global_rect().has_point(event.position):
 			# Leave header tabs / Close available to both mouse and touch.
@@ -604,6 +638,8 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		elif event is InputEventScreenDrag and event.index == _touch_index:
 			_touch_dragged = _touch_dragged or event.position.distance_to(_touch_start) > 8.0
+			if _description.get_global_rect().has_point(_touch_start):
+				_description.get_v_scroll_bar().value -= event.relative.y
 			get_viewport().set_input_as_handled()
 		return
 	if event is InputEventScreenTouch:
@@ -676,13 +712,16 @@ func _draw_item(index: int) -> void:
 	var active := index == _hovered or index == selected_index
 	# The backing and bolts are real iron meshes. Project only their lettering.
 	var text_scale := clampf(tag.size.y / 43.0, 0.70, 1.10)
-	var title_size := _fit_label(str(data.title), roundi(13 * text_scale), tag.size.x - 16)
+	var transform := get_viewport().get_final_transform()
+	var pixels_per_unit := maxf(0.01, _scale * minf(transform.x.length(), transform.y.length()))
+	var title_size := _fit_label(str(data.title), maxi(roundi(13 * text_scale), ceili(9 / pixels_per_unit)), tag.size.x - 10)
 	_text(str(data.title), Vector2(tag.get_center().x, tag.position.y + tag.size.y * 0.40), title_size, Color("c7cdd0"))
 	if bool(data.owned):
-		_text("✓ 사용 중" if bool(data.equipped) else "보유 중", Vector2(tag.get_center().x, tag.position.y + tag.size.y * 0.85), roundi(17 * text_scale), Color("d4d9d5"))
+		var title := "✓ 사용 중" if bool(data.equipped) else "보유 중"
+		_text(title, Vector2(tag.get_center().x, tag.position.y + tag.size.y * 0.85), _fit_label(title,maxi(roundi(17 * text_scale),ceili(11 / pixels_per_unit)),tag.size.x-10), Color("d4d9d5"))
 	else:
 		var price := preload("res://scripts/game_balance.gd").gold_label(int(data.price))
-		var price_size := _fit_label(price,roundi(18*text_scale),tag.size.x-34*text_scale)
+		var price_size := _fit_label(price,maxi(roundi(18*text_scale),ceili(11 / pixels_per_unit)),tag.size.x-28*text_scale)
 		var price_width := _bold.get_string_size(price, HORIZONTAL_ALIGNMENT_LEFT, -1, price_size).x
 		var center := tag.get_center().x + 3 * text_scale
 		var baseline := tag.position.y + tag.size.y * 0.85
@@ -696,27 +735,15 @@ func _draw_inspector() -> void:
 	draw_rect(Rect2(Vector2.ZERO,_view),Color(0.02,0.03,0.03,0.95))
 	var data: Dictionary = _catalog[selected_index]
 	var r := _detail_rect
-	_text(str(data.title),Vector2(r.get_center().x,r.position.y+27),26,GOLD)
+	_text(str(data.title),Vector2(r.get_center().x,r.position.y+27),_fit_label(str(data.title),26,r.size.x-32),GOLD)
 	if is_instance_valid(_preview_viewport):
 		draw_texture_rect(_preview_viewport.get_texture(),_hero_rect,false)
 	var p := _text_origin
 	var headline: String = data.headline if selected_kind == "aux" else "공격력 ×%s" % data.power
 	var subtitle: String = data.subtitle if selected_kind == "aux" else "공격 속도 ×%s" % data.speed
-	draw_string(_bold,p,headline,HORIZONTAL_ALIGNMENT_LEFT,-1,19 if selected_kind == "aux" else 22,TEXT)
-	draw_string(_font,p+Vector2(0,30),subtitle,HORIZONTAL_ALIGNMENT_LEFT,-1,14 if selected_kind == "aux" else 17,Color("c2ccd0"))
 	var text_width := r.end.x-p.x-16
-	var lines: Array[String] = []
-	for paragraph: String in str(data.description).split("\n"):
-		var line := ""
-		for word: String in paragraph.split(" "):
-			var next := word if line.is_empty() else line+" "+word
-			if not line.is_empty() and _font.get_string_size(next,HORIZONTAL_ALIGNMENT_LEFT,-1,15).x > text_width:
-				lines.append(line)
-				line = word
-			else: line = next
-		lines.append(line)
-	for i in lines.size():
-		draw_string(_font,p+Vector2(0,64+i*21),lines[i],HORIZONTAL_ALIGNMENT_LEFT,-1,15,Color("adb9ba"))
+	draw_string(_bold,p,headline,HORIZONTAL_ALIGNMENT_LEFT,-1,_fit_label(headline,19 if selected_kind == "aux" else 22,text_width),TEXT)
+	draw_string(_font,p+Vector2(0,30),subtitle,HORIZONTAL_ALIGNMENT_LEFT,-1,_fit_label(subtitle,14 if selected_kind == "aux" else 17,text_width),Color("c2ccd0"))
 	var footer := Vector2(p.x,r.end.y-30)
 	if bool(data.equipped):
 		draw_string(_bold,footer,"사용 중",HORIZONTAL_ALIGNMENT_LEFT,-1,19,GOLD)
