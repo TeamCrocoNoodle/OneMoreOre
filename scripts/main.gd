@@ -9,6 +9,7 @@ const Effects = preload("res://scripts/mining_effects.gd")
 const Gem = preload("res://scripts/gem.gd")
 const GemLight = preload("res://scripts/gem_light.gd")
 const RoundModel = preload("res://scripts/mining_round.gd")
+const Stamina = preload("res://scripts/stamina_display.gd")
 const MiningHud = preload("res://scripts/mining_hud.gd")
 const RewardAudio = preload("res://scripts/reward_audio.gd")
 const GemFlightOverlay = preload("res://scripts/gem_flight_overlay.gd")
@@ -80,6 +81,11 @@ var camera_shake := 0.0
 var hit_stop := 0.0
 var wobble := Vector3.ZERO
 var wobble_velocity := Vector3.ZERO
+const WOBBLE_STIFFNESS := 170.0
+const WOBBLE_DAMPING := 15.0
+const WOBBLE_MAX_ANGLE := 0.104719755 # Six degrees of total recoil, separate from player orbit.
+const WOBBLE_MAX_SPEED := 2.4
+const WOBBLE_MIN_CHANGE := 0.0005 # Subpixel motion on the framed ore; about 0.03 degrees.
 var squash := 0.0
 var completion_time := -1.0
 var rock_number := 0
@@ -972,6 +978,7 @@ func _resize() -> void:
 	var framing := 12.0 if showcase_mode else maxf(9.2,active_rock_radius*2.74)
 	var width := 11.6 if showcase_mode else maxf(7.0,active_rock_radius*2.43)
 	camera.size = maxf(framing, width / aspect)
+	pickaxe.set_ore_bounds(shell.global_position, active_rock_radius)
 	if aim_position != Vector2.ZERO:
 		aim_position = aim_position.clamp(Vector2.ZERO, viewport_size)
 
@@ -1156,10 +1163,8 @@ func _process(delta: float) -> void:
 			_request_swing()
 	pickaxe.set_target(aim_position)
 	hit_stop = maxf(0.0, hit_stop - delta)
+	_advance_rock_wobble(delta)
 	if hit_stop <= 0.0:
-		wobble_velocity += (-wobble * 170.0 - wobble_velocity * 15.0) * delta
-		wobble += wobble_velocity * delta
-		rock_motion.rotation = wobble
 		if completion_time < 0.0:
 			rock_motion.position.y = sin(elapsed * 1.2) * 0.055
 			if idle_time > 3.0 and _round_allows_mining():
@@ -1176,13 +1181,50 @@ func _process(delta: float) -> void:
 			_spawn_rock()
 	if round_enabled and is_instance_valid(hud):
 		hud.set_skill_status(mining_skills.combo, mining_skills.combo_remaining, mining_skills.extra_charges, mining_skills.buff, mining_skills.buff_remaining, round_state.bonus_gold)
-		hud.set_timer(round_state.seconds_remaining(), round_state.seconds_capacity(), round_state.phase != RoundModel.Phase.READY and focused and not ore_building)
+		hud.set_timer(round_state.remaining, round_state.duration, round_state.phase != RoundModel.Phase.READY and focused and not ore_building, round_state.drain_rate)
 		hud.set_upgrades_available(round_state.phase in [RoundModel.Phase.READY, RoundModel.Phase.COMPLETE] and not campaign.won and not _upgrade_window_open() and not hud.auction_ui.is_open)
 		hud.set_auction_available(round_state.can_auction() and not _upgrade_window_open())
 		if round_state.phase == RoundModel.Phase.DRAINING and collecting_gems.is_empty():
 			_begin_settlement()
 	if capture_mode:
 		_capture_tick(delta)
+
+func _add_rock_wobble(normal: Vector3) -> void:
+	# All contacts share one bounded angular impulse. AoE and resonance must
+	# never store thousands of kicks while another hit refreshes hit_stop.
+	var impulse := Vector3(normal.y*0.8,-normal.x*0.7,-normal.x*0.6)+Vector3(0.3,0.1,-0.12)
+	wobble_velocity = (wobble_velocity+impulse).limit_length(WOBBLE_MAX_SPEED)
+
+func _advance_rock_wobble(delta: float) -> void:
+	if delta <= 0.0 or not is_finite(delta): return
+	var previous := wobble
+	if not wobble.is_finite() or not wobble_velocity.is_finite() or delta >= 2.0:
+		wobble = Vector3.ZERO
+		wobble_velocity = Vector3.ZERO
+	elif wobble != Vector3.ZERO or wobble_velocity != Vector3.ZERO:
+		# Exact damped-spring integration: the old Euler step injected energy
+		# during long frames. One constant-cost step is stable at any frame rate.
+		var decay_rate := WOBBLE_DAMPING*0.5
+		var frequency := sqrt(WOBBLE_STIFFNESS-decay_rate*decay_rate)
+		var fade := exp(-decay_rate*delta)
+		var cosine := cos(frequency*delta)
+		var sine := sin(frequency*delta)/frequency
+		var velocity := wobble_velocity.limit_length(WOBBLE_MAX_SPEED)
+		wobble = (previous*(cosine+decay_rate*sine)+velocity*sine)*fade
+		wobble_velocity = (velocity*(cosine-decay_rate*sine)-previous*(WOBBLE_STIFFNESS*sine))*fade
+		if wobble.length_squared() > WOBBLE_MAX_ANGLE*WOBBLE_MAX_ANGLE:
+			var outward := wobble.normalized()
+			wobble = outward*WOBBLE_MAX_ANGLE
+			wobble_velocity -= outward*maxf(0.0,wobble_velocity.dot(outward))
+		if wobble.length_squared() < 0.00000001 and wobble_velocity.length_squared() < 0.000001:
+			wobble = Vector3.ZERO
+			wobble_velocity = Vector3.ZERO
+	# Ignore subpixel changes instead of invalidating thousands of child
+	# transforms. Always finish at exactly zero, with no residual visual tilt.
+	if wobble == Vector3.ZERO:
+		if rock_motion.rotation != Vector3.ZERO: rock_motion.rotation = Vector3.ZERO
+	elif rock_motion.rotation.distance_squared_to(wobble) >= WOBBLE_MIN_CHANGE*WOBBLE_MIN_CHANGE:
+		rock_motion.rotation = wobble
 
 func _physics_process(_delta: float) -> void:
 	_advance_round(_delta)
@@ -1454,7 +1496,7 @@ func _damage_chunk(result: Dictionary, screen_position: Vector2, context: Dictio
 	camera_shake = maxf(camera_shake, 0.075 if broken else 0.035)
 	hit_stop = 0.055 if broken else 0.025
 	squash = 0.045 if broken else 0.022
-	wobble_velocity += Vector3(normal.y * 0.8, -normal.x * 0.7, -normal.x * 0.6) + Vector3(0.3, 0.1, -0.12)
+	_add_rock_wobble(normal)
 	if controller_id >= 0 and using_controller and not auto_collected:
 		Input.start_joy_vibration(controller_id, 0.28 if broken else 0.1, 0.52 if broken else 0.25, 0.10 if broken else 0.055)
 
@@ -1531,7 +1573,7 @@ func _apply_skill_reward(reward: Dictionary, screen: Vector2) -> void:
 		reward_audio.play_cue("tick", 0)
 	var restored := round_state.recover(float(reward.get("heal", 0.0)))
 	if restored > 0:
-		_skill_notice(screen + Vector2(0, 23), "+%s 체력" % snappedf(restored, 0.1), Color("a7efc0"))
+		_skill_notice(screen + Vector2(0, 23), "+%s 스태미나" % Stamina.amount(restored), Color("a7efc0"))
 		if round_state.seconds_remaining() > 5.0:
 			_last_warning_second = 6
 		reward_audio.play_cue("confirm", 0)
@@ -1718,7 +1760,7 @@ func _apply_upgrade_stats() -> void:
 	pickaxe.speed_multiplier = float(upgrade_stats.attack_speed)
 	if is_instance_valid(auxiliary): auxiliary.configure()
 	if is_instance_valid(hud):
-		hud.set_timer(round_state.seconds_remaining(), round_state.seconds_capacity(), round_state.phase != RoundModel.Phase.READY and focused and not ore_building)
+		hud.set_timer(round_state.remaining, round_state.duration, round_state.phase != RoundModel.Phase.READY and focused and not ore_building, round_state.drain_rate)
 
 func _tool_action(id: String) -> bool:
 	if not round_enabled or not _upgrade_window_open() or skill_ui.selected_tab != "tools" or round_state.phase not in [RoundModel.Phase.READY, RoundModel.Phase.COMPLETE]:
@@ -1875,7 +1917,7 @@ func _next_round() -> void:
 	_spawn_rock()
 	pickaxe.show()
 	hud.begin_round(round_state.round_index, round_state.wallet_gold)
-	hud.set_timer(round_state.seconds_remaining(), round_state.seconds_capacity(), false)
+	hud.set_timer(round_state.remaining, round_state.duration, false, round_state.drain_rate)
 	hud.set_ore_progress(_progress_status())
 
 func _capture_tick(delta: float) -> void:

@@ -12,7 +12,7 @@ function Invoke-PerformanceCheck([string]$Script) {
     }
 }
 if ($Suite -ne 'Capture') {
-    foreach ($PerformanceTest in @('validate_extreme_mining','validate_ore_preparation','validate_ore_progression','validate_mining','validate_skills','validate_aux_tools','validate_bosses','validate_round','validate_attack_range','validate_crack_wrap','validate_gems')) {
+    foreach ($PerformanceTest in @('validate_rock_wobble','validate_extreme_mining','validate_ore_preparation','validate_ore_progression','validate_mining','validate_skills','validate_aux_tools','validate_bosses','validate_round','validate_attack_range','validate_crack_wrap','validate_gems')) {
         Invoke-PerformanceCheck $PerformanceTest
     }
 }

@@ -57,15 +57,19 @@ func _validate_camera_motion() -> void:
 			camera.keep_aspect = keep_aspect
 			await process_frame
 			var a := Vector2(dimensions) * Vector2(0.30, 0.42)
+			# Both axes now turn the pose. Returning to an earlier target must
+			# restore the same pose at unchanged animation time, without drift.
 			var b := Vector2(dimensions) * Vector2(0.57, 0.30)
 			var c := Vector2(dimensions) * Vector2(0.72, 0.62)
 			pick.set_target(a)
 			pick._process(0.0)
-			var idle_a := camera.unproject_position(pick.global_position)
+			var idle_a := pick.transform
 			pick.set_target(b)
 			pick._process(0.0)
-			var idle_b := camera.unproject_position(pick.global_position)
-			_check((idle_b - idle_a).distance_to(b - a) < 0.2, "Idle tool translation matches cursor movement at %s / aspect %d" % [dimensions, keep_aspect])
+			_check(not pick.transform.is_equal_approx(idle_a), "Idle tool follows the moved cursor at %s / aspect %d" % [dimensions, keep_aspect])
+			pick.set_target(a)
+			pick._process(0.0)
+			_check(pick.transform.is_equal_approx(idle_a), "Returning the cursor restores the idle pose immediately")
 			var impacts_before := impact_count
 			var starts_before := start_count
 			pick.set_target(a)
@@ -79,12 +83,18 @@ func _validate_camera_motion() -> void:
 				pick.set_contact_point(camera.project_position(a, 9.3))
 				pick._process(phase - time)
 				time = phase
-				var screen_a := camera.unproject_position(pick.global_position)
+				var pose_a := pick.transform
 				pick.set_target(b)
 				pick.set_contact_point(camera.project_position(b, 9.3))
 				pick._process(0.0)
-				var screen_b := camera.unproject_position(pick.global_position)
-				_check((screen_b - screen_a).distance_to(b - a) < 0.2, "Wind-up, strike and recoil follow a newly moved cursor at unchanged animation time")
+				_check(not pick.transform.is_equal_approx(pose_a) and is_equal_approx(pick._elapsed, phase), "Wind-up, strike and recoil follow a newly moved cursor without restarting")
+				pick.set_target(a)
+				pick.set_contact_point(camera.project_position(a, 9.3))
+				pick._process(0.0)
+				_check(pick.transform.is_equal_approx(pose_a), "Aim changes during a swing cannot accumulate rotation or position drift")
+				pick.set_target(b)
+				pick.set_contact_point(camera.project_position(b, 9.3))
+				pick._process(0.0)
 				if is_equal_approx(phase, Pickaxe.STRIKE_TIME):
 					var tip := camera.unproject_position(pick.to_global(Pickaxe.PICK_TIP))
 					_check(tip.distance_to(b) < 0.2, "The rendered pick tip reaches the latest cursor at the exact strike pose")
@@ -93,10 +103,13 @@ func _validate_camera_motion() -> void:
 			pick._process(Pickaxe.SWING_DURATION - time + 0.01)
 			pick._process(0.1)
 			_check(impact_count == impacts_before + 1 and not pick.is_swinging, "A complete moving swing emits exactly one impact")
-			var final_c := camera.unproject_position(pick.global_position)
+			var final_c := pick.transform
 			pick.set_target(a)
 			pick._process(0.0)
-			_check((camera.unproject_position(pick.global_position) - final_c).distance_to(a - c) < 0.2, "Recovery returns to the current cursor's idle pose")
+			_check(not pick.transform.is_equal_approx(final_c), "Recovery returns to the current cursor's idle pose")
+			pick.set_target(c)
+			pick._process(0.0)
+			_check(pick.transform.is_equal_approx(final_c), "Recovered pose stays attached to its target without drift")
 	# A large frame delta still crosses the strike exactly once.
 	var impacts_before := impact_count
 	pick.swing()
@@ -120,6 +133,7 @@ func _validate_main_impacts() -> void:
 		game.spawn_tween.kill()
 	game.spawn_time = 1.0
 	game.rock_motion.scale = Vector3.ONE
+	_check(is_equal_approx(game.pickaxe._ore_radius, game.active_rock_radius), "Facing uses the actual ore radius after spawning")
 	await physics_frame
 	await process_frame
 	var targets := _visible_targets()

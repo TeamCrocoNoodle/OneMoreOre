@@ -4,6 +4,7 @@ const Campaign = preload("res://scripts/boss_campaign.gd")
 const Geometry = preload("res://scripts/rock_geometry.gd")
 const Visual = preload("res://scripts/boss_visual.gd")
 const Audio = preload("res://scripts/boss_audio.gd")
+const Stamina = preload("res://scripts/stamina_display.gd")
 var game: Node3D
 var audio := Audio.new()
 var visual: Node3D
@@ -390,7 +391,7 @@ func _hurt_player(amount: float) -> void:
 	# Damage uses the existing health/revival rules, independent of drain speed.
 	var expired: bool = game.round_state.advance(amount/game.round_state.drain_rate)
 	game.camera_shake = maxf(game.camera_shake,.18)
-	game._skill_notice(game.get_viewport().get_visible_rect().size*Vector2(.5,.70),"−%d 체력" % ceili(amount),Color("ff947e"))
+	game._skill_notice(game.get_viewport().get_visible_rect().size*Vector2(.5,.70),"−%s 스태미나" % Stamina.amount(amount),Color("ff947e"))
 	audio.play(stage,"break",.65)
 	if expired: _finish(false)
 

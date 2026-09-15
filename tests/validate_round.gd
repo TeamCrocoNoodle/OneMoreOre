@@ -289,6 +289,11 @@ func _validate_fast_transition() -> void:
 	await _new_game()
 	game.pickaxe.set_process(false)
 	game.campaign_enabled = false
+	# This test holds normal processing. Explicitly finish the same background
+	# preparation that runs during mining before measuring its fast adoption.
+	while not game._ore_preparation.complete:
+		game._advance_ore_preparation()
+		await process_frame
 	game.remove_with_auxiliary(game.chunks.duplicate())
 	var previous_rock: int = game.rock_number
 	var cargo: PackedInt32Array = game.round_state.gem_counts.duplicate()
@@ -301,7 +306,8 @@ func _validate_fast_transition() -> void:
 	_check(game.collecting_gems.size() == 4 and game.hud.displayed_counts == Gem.Rarity.empty_counts(), "Fast replacement preserves the last gem animations without prematurely counting them")
 	game.aim_position = root.get_visible_rect().size * 0.5
 	game._request_swing()
-	_check(not game.pickaxe.is_swinging, "The brief size transition still blocks premature strikes")
+	_check(game.pickaxe.is_swinging and game.spawn_time >= game.ORE_SPAWN_DURATION, "A prepared ore is immediately mineable without another size-transition wait")
+	game._clear_upgrade_input()
 	await create_timer(0.18).timeout
 	game._process(0.17)
 	await physics_frame
@@ -349,6 +355,9 @@ func _new_game() -> void:
 
 
 func _finish_spawn() -> void:
+	while game.ore_building:
+		game._advance_ore_build()
+		await process_frame
 	if game.spawn_tween != null and game.spawn_tween.is_valid():
 		game.spawn_tween.kill()
 	game.rock_motion.scale = Vector3.ONE

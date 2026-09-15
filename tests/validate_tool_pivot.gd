@@ -69,19 +69,22 @@ func _run() -> void:
 					recoil_error = maxf(recoil_error,grip.distance_to(pick.to_global(pick.get_grip_local())))
 				_check(recoil_error < 0.20*pick.scale.x,id+" recovery gives the grip only a small recoil")
 				_check(not pick.is_swinging,id+" recovery finishes on schedule")
-				# Moving aim translates the whole swing, retaining the hand/head pose.
+				# Both aim axes turn the whole swing without stretching the tool
+				# or changing its phase. The stationary grip checks above still hold.
 				pick.swing()
 				pick._process(0.09)
-				var before_grip := camera.unproject_position(pick.to_global(pick.get_grip_local()))
-				var before_tip := camera.unproject_position(pick.to_global(pick.get_tip_local()))
+				var before_pose := pick.transform
+				var before_length := pick.to_global(pick.get_grip_local()).distance_to(pick.to_global(pick.get_tip_local()))
 				var offset := Vector2(dimensions)*Vector2(0.10,0.08)
 				pick.set_target(target+offset)
 				pick.set_contact_point(camera.project_position(target+offset,5.7))
 				pick._process(0)
-				var after_grip := camera.unproject_position(pick.to_global(pick.get_grip_local()))
-				var after_tip := camera.unproject_position(pick.to_global(pick.get_tip_local()))
-				if projection == Camera3D.PROJECTION_ORTHOGONAL:
-					_check((after_grip-before_grip).distance_to(offset) < 0.2 and (after_tip-before_tip).distance_to(offset) < 0.2,id+" cursor motion translates the entire swing")
+				var after_length := pick.to_global(pick.get_grip_local()).distance_to(pick.to_global(pick.get_tip_local()))
+				_check(absf(after_length-before_length) < 0.001 and not pick.transform.is_equal_approx(before_pose),id+" diagonal aim turns the rigid tool around its grip")
+				pick.set_target(target)
+				pick.set_contact_point(camera.project_position(target,5.7))
+				pick._process(0)
+				_check(pick.transform.is_equal_approx(before_pose),id+" returning aim restores the same swing pose")
 				pick.cancel_swing()
 	# High attack speeds and frame stalls cannot skip or misplace a contact.
 	for entry: Dictionary in Tools.CATALOG:

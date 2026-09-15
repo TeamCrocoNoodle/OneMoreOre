@@ -18,6 +18,7 @@ const BAR_COLOR := Color("df9b41")
 const ModelGallery = preload("res://scripts/ui_model_gallery.gd")
 const AuctionUI = preload("res://scripts/auction_ui.gd")
 const ResponsiveUI = preload("res://scripts/responsive_ui.gd")
+const Stamina = preload("res://scripts/stamina_display.gd")
 
 class HudCanvas extends Control:
 	var presenter: Node
@@ -53,6 +54,7 @@ var _hero_radius := 68.0
 var _hero_caption_y := 0.0
 var _remaining := 30.0
 var _duration := 30.0
+var _drain_rate := 1.0
 var _active := true
 var _wallet := 0
 var _stones := 0
@@ -94,6 +96,12 @@ var displayed_stones: int:
 var displayed_gold: int:
 	get:
 		return _shown_total
+var displayed_stamina: int:
+	get:
+		return Stamina.counter(_remaining)
+var displayed_stamina_capacity: int:
+	get:
+		return Stamina.counter(_duration)
 var settlement_visible: bool:
 	get:
 		return _modal
@@ -330,11 +338,13 @@ func begin_round(round_index: int, wallet: int) -> void:
 		_canvas.queue_redraw()
 
 
-func set_timer(remaining: float, duration: float, active: bool) -> void:
-	_remaining = maxf(remaining, 0)
+func set_timer(remaining: float, duration: float, active: bool, drain_rate: float = 1.0) -> void:
+	# Inputs are the round's health points, not seconds divided by drain rate.
 	_duration = maxf(duration, 0.001)
+	_remaining = clampf(remaining, 0, _duration)
+	_drain_rate = maxf(drain_rate, 0.001)
 	_active = active
-	var second := int(ceil(_remaining))
+	var second := ceili(_remaining / _drain_rate)
 	if active and second > 0 and second <= 5 and second != _countdown_second:
 		_countdown_second = second
 		_countdown_pulse = 1
@@ -656,24 +666,31 @@ func _ore_progress_width() -> float:
 
 
 func _draw_timer(c: Control) -> void:
-	var urgent := _remaining <= 5 and _active
+	var urgent := _remaining <= 5 * _drain_rate and _active
 	var accent := Color("ed865f") if urgent else BAR_COLOR
 	var r := _timer_rect
 	var bar := Rect2(r.position, Vector2(r.size.x, 6))
 	c.draw_rect(bar, Color(0, 0, 0, 0.33))
 	var ratio := clampf(_remaining / _duration, 0, 1)
 	c.draw_rect(Rect2(bar.position, Vector2(bar.size.x * ratio, bar.size.y)), accent)
-	var title := "남은 시간"
-	if not _active and not _modal:
-		title = "채굴하면 시작" if _remaining >= _duration - 0.01 else ("정산 준비 중" if _remaining <= 0 else "잠시 쉬는 중")
-	if _ore_building: title = "원석 준비 중"
-	elif not _boss_info.is_empty(): title = "체력"
+	var title := "스태미나"
 	var title_size := 23 if r.size.x > 280 else 19
 	_text(c, title, r.position + Vector2(0, 41), title_size, TEXT)
 	var label_width := _bold.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, title_size).x
-	var time_text := "%02d초" % int(ceil(_remaining))
-	if not _boss_info.is_empty(): time_text = "%d%%" % ceili(ratio*100)
-	_text(c, time_text, r.position + Vector2(label_width + 14, 41), title_size + 2 + int(_countdown_pulse * 2), GOLD if not urgent else accent)
+	var value_text := stamina_text()
+	var value_size := _fit_text(value_text, title_size + 2 + int(_countdown_pulse * 2), r.size.x - label_width - 14)
+	_text(c, value_text, r.position + Vector2(r.size.x, 41), value_size, GOLD if not urgent else accent, true, HORIZONTAL_ALIGNMENT_RIGHT)
+	var status := ""
+	if _ore_building:
+		status = "원석 준비 중"
+	elif not _active and not _modal:
+		status = "채굴하면 소모 시작" if _remaining >= _duration - 0.01 else ("소진 · 정산 준비" if _remaining <= 0 else "잠시 쉬는 중")
+	if not status.is_empty():
+		_text(c, status, r.position + Vector2(0, 56), 11, MUTED, false)
+
+
+func stamina_text() -> String:
+	return "%d / %d" % [displayed_stamina, displayed_stamina_capacity]
 
 
 func _draw_satchel(c: Control) -> void:

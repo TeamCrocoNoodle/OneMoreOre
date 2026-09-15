@@ -12,11 +12,23 @@ func _initialize() -> void:
 
 func _run() -> void:
 	_validate_graph()
+	_validate_stamina_descriptions()
 	_validate_combat()
 	_validate_stamina_and_rewards()
 	await _validate_game()
 	print("SKILL_VALIDATION checks=%d failures=%d" % [checks, failures])
 	quit(0 if failures == 0 else 1)
+
+func _validate_stamina_descriptions() -> void:
+	var model := Skills.new()
+	_check(model.get_node("vitality").description == "최대 스태미나 +40" and model.get_node("vitality").effects.duration == 4.0, "Capacity tooltip scales presentation without changing its effect")
+	_check(model.get_node("drain_1").description == "초당 스태미나 소모 -0.6" and model.get_node("drain_1").effects.drain_reduction == 0.06, "Drain reduction uses the same stamina scale")
+	_check(model.get_node("spent_range").description.contains("스태미나가 120") and model.get_node("spent_threshold").description.ends_with("-40"), "Spent-stamina thresholds match the HUD units")
+	_check(model.get_node("break_heal").description.contains("스태미나 3.5 회복") and model.get_node("break_heal_amount").description.ends_with("+3.5"), "Break-healing amounts retain their fraction")
+	_check(model.get_node("recovery").description.contains("스태미나 5 회복") and model.get_node("recovery_more").description.ends_with("+5"), "Gem-healing amounts share the HUD scale")
+	var healing_step: String = model.get_node("healing_amount_1").description
+	_check(model.get_node("healing").description.contains("스태미나를 10") and healing_step.ends_with("%") and healing_step.get_slice("+", 1).trim_suffix("%").to_float() == 25.0, "Healing-stone amounts scale while percent upgrades remain percentages")
+	_check(Main.AuxTools.definition("beer").headline == "최대 스태미나 +60", "Beer capacity display matches its unchanged six-point effect")
 
 func _validate_graph() -> void:
 	var model := Skills.new()
@@ -200,7 +212,7 @@ func _validate_game() -> void:
 	game.skill_ui.close_tree()
 	game.round_state.apply_stats({"drain_rate": 0.5})
 	game._process(0.0)
-	_check(game.round_state.remaining == 30.0 and game.hud._remaining == 60.0, "Slower stamina drain displays actual remaining seconds on the existing countdown")
+	_check(game.round_state.remaining == 30.0 and game.round_state.seconds_remaining() == 60.0 and game.hud.stamina_text() == "300 / 300", "Slower drain extends mining time without inflating the displayed stamina capacity")
 	# Isolate deterministic world reactions from independently tested chance rolls.
 	game.upgrade_stats = Skills.new().stats()
 	game.mining_skills.configure(game.upgrade_stats)

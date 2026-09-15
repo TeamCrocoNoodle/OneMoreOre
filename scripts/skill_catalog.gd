@@ -1,6 +1,7 @@
 extends RefCounted
 ## Reference topology, expressed on integer grid cells. Every box is a node.
 const B = preload("res://scripts/skill_balance.gd")
+const Stamina = preload("res://scripts/stamina_display.gd")
 var nodes: Array[Dictionary] = []
 var edges: Array = []
 var _positions: Dictionary = {}
@@ -20,7 +21,7 @@ func _init() -> void:
 	_price_by_distance()
 	for node in nodes:
 		if node.id in ["break_heal","recovery","healing"]:
-			node.description += "\n채굴당 회복 한도: 최대 체력의 80%. 부활과 보스 입장 회복은 별도입니다."
+			node.description += "\n채굴당 회복 한도: 최대 스태미나의 80%. 부활과 보스 입장 회복은 별도입니다."
 
 func _add(id: String, title: String, description: String, icon: String, category: String, grid: Vector2i, effects: Dictionary, parent: String = "", rank: int = 0) -> void:
 	assert(not _positions.has(id), "Duplicate skill id: " + id)
@@ -34,7 +35,8 @@ func _link(a: String, b: String) -> void:
 	edges.append([a, b])
 
 func _step(id: String, title: String, key: String, effect: String, icon: String, category: String, grid: Vector2i, parent: String, rank: int = 0, percentage: bool = true) -> void:
-	_add(id, title, title + " +" + (B.percent(key) if percentage else "%s" % B.value(key)), icon, category, grid, {effect: B.value(key)}, parent, rank)
+	var display_value := B.percent(key) if percentage else (Stamina.amount(B.value(key)) if effect in ["duration", "break_heal_bonus", "recovery_per_gem"] else "%s" % B.value(key))
+	_add(id, title, title + " +" + display_value, icon, category, grid, {effect: B.value(key)}, parent, rank)
 
 func _chain(prefix: String, title: String, key: String, effect: String, icon: String, category: String, count: int, start: Vector2i, direction: Vector2i, parent: String, percentage: bool = true) -> void:
 	for i in count:
@@ -91,26 +93,26 @@ func _attack() -> void:
 
 func _health() -> void:
 	var c := "health"
-	_step("vitality", "최대 체력", "health", "duration", "vitality", c, Vector2i(-2, -2), "", 1, false)
+	_step("vitality", "최대 스태미나", "health", "duration", "vitality", c, Vector2i(-2, -2), "", 1, false)
 	for i in range(2, 5):
-		_step("health_%d" % i, "최대 체력", "health", "duration", "vitality", c, Vector2i(-2, -i - 1), "vitality" if i == 2 else "health_%d" % (i - 1), i, false)
+		_step("health_%d" % i, "최대 스태미나", "health", "duration", "vitality", c, Vector2i(-2, -i - 1), "vitality" if i == 2 else "health_%d" % (i - 1), i, false)
 	for i in 3:
-		_add("drain_%d" % (i + 1), "느린 체력 소모", "초당 체력 소모 -%s" % B.value("drain_reduction"), "drain", c, Vector2i(-4, -3 - i), {"drain_reduction": B.value("drain_reduction")}, "health_2" if i == 0 else "drain_%d" % i, i + 1)
-	_add("spent_range", "깊어지는 호흡", "이번 채굴에서 소모한 체력이 %s 이상이면 공격 범위 +" % B.value("spent_threshold") + B.percent("spent_range") + "\n회복해도 누적 소모량은 유지됩니다.", "drain/reach", c, Vector2i(-6, -3), {"spent_range": 1.0}, "drain_1")
+		_add("drain_%d" % (i + 1), "느린 스태미나 소모", "초당 스태미나 소모 -%s" % Stamina.amount(B.value("drain_reduction")), "drain", c, Vector2i(-4, -3 - i), {"drain_reduction": B.value("drain_reduction")}, "health_2" if i == 0 else "drain_%d" % i, i + 1)
+	_add("spent_range", "깊어지는 호흡", "이번 채굴에서 소모한 스태미나가 %s 이상이면 공격 범위 +" % Stamina.amount(B.value("spent_threshold")) + B.percent("spent_range") + "\n회복해도 누적 소모량은 유지됩니다.", "drain/reach", c, Vector2i(-6, -3), {"spent_range": 1.0}, "drain_1")
 	_step("spent_range_more", "조건부 공격 범위", "spent_range_step", "spent_range_bonus", "drain/reach", c, Vector2i(-6, -4), "spent_range")
-	_add("spent_threshold", "빠른 적응", "조건에 필요한 체력 소모량 -%s" % B.value("spent_threshold_reduction"), "drain/down", c, Vector2i(-6, -5), {"spent_threshold_reduction": B.value("spent_threshold_reduction")}, "spent_range_more")
-	_add("low_health", "마지막 집중", "남은 체력이 " + B.percent("low_health_threshold") + " 이하이면 공격 속도 +" + B.percent("low_health_speed"), "low_health/speed", c, Vector2i(-6, -7), {"low_health": 1.0}, "spent_threshold")
+	_add("spent_threshold", "빠른 적응", "조건에 필요한 스태미나 소모량 -%s" % Stamina.amount(B.value("spent_threshold_reduction")), "drain/down", c, Vector2i(-6, -5), {"spent_threshold_reduction": B.value("spent_threshold_reduction")}, "spent_range_more")
+	_add("low_health", "마지막 집중", "남은 스태미나가 " + B.percent("low_health_threshold") + " 이하이면 공격 속도 +" + B.percent("low_health_speed"), "low_health/speed", c, Vector2i(-6, -7), {"low_health": 1.0}, "spent_threshold")
 	_link("drain_3", "low_health")
 	_step("low_health_speed", "위기의 가속", "low_health_speed_step", "low_health_speed_bonus", "low_health/speed", c, Vector2i(-6, -8), "low_health")
 	_step("low_health_threshold", "더 이른 집중", "low_health_threshold_step", "low_health_threshold_bonus", "low_health/chance", c, Vector2i(-6, -9), "low_health_speed")
-	_add("revive", "다시 한 번", "체력이 소진되면 채굴당 1회, 최대 체력의 " + B.percent("revive_fraction") + "를 회복하고 계속 채굴합니다.", "revive", c, Vector2i(-3, -7), {"revive": 1.0}, "drain_3")
+	_add("revive", "다시 한 번", "스태미나가 소진되면 채굴당 1회, 최대 스태미나의 " + B.percent("revive_fraction") + "를 회복하고 계속 채굴합니다.", "revive", c, Vector2i(-3, -7), {"revive": 1.0}, "drain_3")
 	_link("revive", "health_4")
 	_step("revive_heal", "부활 회복량", "revive_fraction_step", "revive_fraction_bonus", "revive/heal", c, Vector2i(-3, -8), "revive")
 	_add("revive_count", "두 번째 기회", "채굴당 부활 횟수 +1", "revive/count", c, Vector2i(-3, -9), {"revive_count_bonus": 1.0}, "revive_heal")
-	_add("break_heal", "부수며 회복", "돌조각을 부술 때 " + B.percent("break_heal_chance") + " 확률로 체력 %s 회복" % B.value("break_heal"), "stone/heal", c, Vector2i(0, -3), {"break_heal": 1.0}, "health_2")
+	_add("break_heal", "부수며 회복", "돌조각을 부술 때 " + B.percent("break_heal_chance") + " 확률로 스태미나 %s 회복" % Stamina.amount(B.value("break_heal")), "stone/heal", c, Vector2i(0, -3), {"break_heal": 1.0}, "health_2")
 	_step("break_heal_chance", "파괴 회복 확률", "break_heal_chance_step", "break_heal_chance_bonus", "stone/chance", c, Vector2i(0, -4), "break_heal")
 	_step("break_heal_amount", "파괴 회복량", "break_heal_step", "break_heal_bonus", "stone/heal", c, Vector2i(0, -5), "break_heal_chance", 0, false)
-	_add("recovery", "광물의 활력", "광물을 획득할 때마다 체력 %s 회복" % B.value("gem_heal"), "recovery", c, Vector2i(0, -7), {"recovery_per_gem": B.value("gem_heal")}, "health_4")
+	_add("recovery", "광물의 활력", "광물을 획득할 때마다 스태미나 %s 회복" % Stamina.amount(B.value("gem_heal")), "recovery", c, Vector2i(0, -7), {"recovery_per_gem": B.value("gem_heal")}, "health_4")
 	_link("recovery", "break_heal_amount")
 	_step("recovery_more", "광물 회복량", "gem_heal_step", "recovery_per_gem", "recovery/heal", c, Vector2i(0, -8), "recovery", 0, false)
 
@@ -142,7 +144,7 @@ func _ore() -> void:
 	_step("rare_2", "희귀한 광물 등장 확률", "rare_spawn", "rare_spawn_bonus", "rare/chance", c, Vector2i(5, -3), "rare_1", 2)
 	_step("rare_3", "희귀한 광물 등장 확률", "rare_spawn", "rare_spawn_bonus", "rare/chance", c, Vector2i(5, -4), "rare_2", 3)
 	_special("resonance", "공명", "피해를 받을 때마다 인접한 돌조각에 받은 피해량의 " + B.percent("resonance_damage") + "만큼 피해를 줍니다.", Vector2i(4, -5), "ore_spawn_2", 3, "resonance_damage_step", "resonance_damage_bonus", "피해량")
-	_special("healing", "회복", "파괴될 때 체력을 %s 회복합니다." % B.value("healing_amount"), Vector2i(6, -5), "ore_spawn_3", 2, "healing_amount_step", "healing_amount_bonus", "회복량")
+	_special("healing", "회복", "파괴될 때 스태미나를 %s 회복합니다." % Stamina.amount(B.value("healing_amount")), Vector2i(6, -5), "ore_spawn_3", 2, "healing_amount_step", "healing_amount_bonus", "회복량")
 	_special("bomb", "폭탄", "파괴될 때 인접한 돌조각에 피해를 줍니다.\n기본 %s 또는 주 도구 공격력의 %s 중 큰 값을 사용합니다." % [B.value("bomb_damage"),B.percent("bomb_attack_ratio")], Vector2i(8, -5), "ore_spawn_4", 3, "bomb_damage_step", "bomb_damage_bonus", "피해량")
 	_special("gold_stone", "황금", "파괴될 때 %d Gold를 얻습니다." % int(B.value("gold_stone_amount")), Vector2i(10, -5), "ore_spawn_5", 2, "gold_stone_step", "gold_stone_bonus", "Gold량")
 
